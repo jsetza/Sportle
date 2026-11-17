@@ -577,7 +577,7 @@ function display() {
   }
 }
 function phone() {
-  app.innerHTML = `<div class="phone"><div class="row"><div class="logo">Visual</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone securely. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div class="card"><div class="number" id="stage">02 / ENABLE MOTION</div><h2 id="instruction">Let’s find your feel.</h2><p id="guidance">Allow motion sensors, then hold your phone in a comfortable neutral paddle position.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary" id="calibrate" disabled>Set neutral position</button><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Gentle motion. No full-force swings needed.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div><p class="fine">Thumb up = run to the net · down = back · sideways = slide</p></div><div class="telemetry"><span>Sensor availability<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Swing direction<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><div class="row"><button class="full secondary" id="phonePause">Pause</button><button class="full secondary" id="reconnect">Reconnect</button></div><p class="fine" id="matchStatus">Your display will start the game.</p></div></div><div id="error" role="alert"></div><p class="screen-note">Keep this page visible during play.<br>Sensor motion estimates intent, not physical position.</p></div>`;
+  app.innerHTML = `<div class="phone"><div class="row"><div class="logo">Visual</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone securely. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div class="card"><div class="number" id="stage">02 / ENABLE MOTION</div><h2 id="instruction">Let’s find your feel.</h2><p id="guidance">Allow motion sensors, then hold your phone in a comfortable neutral paddle position.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary" id="calibrate" disabled>Set neutral position</button><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Gentle motion. No full-force swings needed.</p><label class="swap"><input type="checkbox" id="swapSides"> Swap left / right <small>Turn on if a swing toward your right is shown as ←</small></label><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div><p class="fine">Thumb up = run to the net · down = back · sideways = slide</p></div><div class="telemetry"><span>Sensor availability<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Swing direction<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><div class="row"><button class="full secondary" id="phonePause">Pause</button><button class="full secondary" id="reconnect">Reconnect</button></div><p class="fine" id="matchStatus">Your display will start the game.</p></div></div><div id="error" role="alert"></div><p class="screen-note">Keep this page visible during play.<br>Sensor motion estimates intent, not physical position.</p></div>`;
   $<HTMLInputElement>("code").value = params.get("room") || "";
   const filter = new MotionFilter();
   let orientationAt = 0,
@@ -594,7 +594,8 @@ function phone() {
     lastOrientation = screen.orientation?.angle || 0;
   let swingDue = 0,
     swingPeak = 0,
-    swingDirection = 0;
+    swingDirection = 0,
+    swingSide = 0;
   let enabledAt = 0;
   let wake: any = null;
   const screenAngle = () =>
@@ -631,11 +632,13 @@ function phone() {
       swingDue = motionAt + 65;
       swingPeak = filter.strength;
       swingDirection = filter.direction;
+      swingSide = filter.side;
     }
     if (pendingSwing) {
       swingPeak = Math.max(swingPeak, filter.strength);
       if (Math.abs(filter.direction) > Math.abs(swingDirection))
         swingDirection = filter.direction;
+      if (Math.abs(filter.side) > Math.abs(swingSide)) swingSide = filter.side;
     }
   }
   const sensorLive = () =>
@@ -725,6 +728,23 @@ function phone() {
     ready = !ready;
   });
   action("phonePause", () => net.api("pause", {}));
+  try {
+    if (localStorage.getItem("visual-swap") === "1") {
+      $<HTMLInputElement>("swapSides").checked = true;
+      filter.flip = -1;
+    }
+  } catch {
+    /* default orientation */
+  }
+  $<HTMLInputElement>("swapSides").onchange = () => {
+    const on = $<HTMLInputElement>("swapSides").checked;
+    filter.flip = on ? -1 : 1;
+    try {
+      localStorage.setItem("visual-swap", on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
   $<HTMLInputElement>("sensitivity").oninput = () => {
     filter.sensitivity = Number($<HTMLInputElement>("sensitivity").value);
   };
@@ -824,11 +844,12 @@ function phone() {
     $("direction").textContent =
       filter.strength < 0.1
         ? "Neutral"
-        : filter.direction > 0.25
-          ? "Upward"
-          : filter.direction < -0.25
-            ? "Downward"
-            : "Across";
+        : (filter.direction > 0.25
+            ? "Up"
+            : filter.direction < -0.25
+              ? "Down"
+              : "Level") +
+          (filter.side > 0.2 ? " · →" : filter.side < -0.2 ? " · ←" : "");
     $("strength").style.width = Math.round(filter.strength * 100) + "%";
     $("paddle").style.transform =
       `perspective(400px) rotateX(${filter.angle.pitch}deg) rotateZ(${-filter.angle.roll}deg)`;
@@ -857,7 +878,14 @@ function phone() {
         $("stage").textContent = "03 / READY TO RALLY";
       }
       $("swingHint").textContent =
-        "Swing detected · " + Math.round(swingPeak * 100) + "% intent";
+        "Swing detected · " +
+        Math.round(swingPeak * 100) +
+        "% · " +
+        (swingSide > 0.2
+          ? "toward your right →"
+          : swingSide < -0.2
+            ? "← toward your left"
+            : "straight");
     }
     const live = sensorLive();
     const input: Input = {
@@ -868,6 +896,7 @@ function phone() {
       yaw: wrap(filter.angle.yaw * filter.hand),
       strength: swing ? swingPeak : filter.strength,
       direction: swing ? swingDirection : filter.direction,
+      side: swing ? swingSide : filter.side,
       swing: swing && live,
       sensors: live,
       calibrated: filter.calibrated && live,

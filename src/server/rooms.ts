@@ -220,7 +220,7 @@ export function acceptInput(
     typeof a.calibrated !== "boolean"
   )
     return false;
-  for (const k of ["mx", "mz"] as const)
+  for (const k of ["mx", "mz", "side"] as const)
     if (
       a[k] !== undefined &&
       (typeof a[k] !== "number" ||

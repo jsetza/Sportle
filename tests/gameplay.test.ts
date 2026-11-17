@@ -504,3 +504,107 @@ test("play again: rematch resets score with the same players after a finished ga
   assert.throws(() => rematch(r), /connected/);
   rooms.delete(r.code);
 });
+
+test("swing path steers the ball: left-to-right goes right, right-to-left goes left (both teams)", () => {
+  for (const team of [0, 1]) {
+    const results: number[] = [];
+    for (const side of [1, -1, 0]) {
+      const m = singles(),
+        p = m.players[team];
+      rally(m, 1 - team);
+      m.bounces = 1;
+      p.pos = { x: 0, y: 0, z: team ? -4 : 4 };
+      m.ball = { x: forehandSide(p) * FOREHAND_OFFSET, y: 0.8, z: p.pos.z };
+      p.lastHit = -10;
+      assert.ok(hit(m, p, { ...ZERO_INPUT, strength: 0.5, side }));
+      // Convert the world-space sideways velocity into the player's own left/right.
+      results.push(m.velocity.x * (team ? -1 : 1));
+    }
+    const [right, left, straight] = results;
+    assert.ok(right > 0.8, `team ${team} right ${right}`);
+    assert.ok(left < -0.8, `team ${team} left ${left}`);
+    assert.ok(
+      Math.abs(straight) < Math.abs(right) / 2,
+      `team ${team} straight ${straight}`,
+    );
+  }
+});
+
+test("shots are named forehand or backhand from the contact side and paddle hand", async () => {
+  const { strokeSide } = await import("../src/server/engine.ts");
+  const m = singles(),
+    p = m.players[0];
+  p.pos = { x: 0, y: 0, z: 4 };
+  m.ball = { x: 0.5, y: 0.9, z: 4 }; // right of a right-hander facing the net
+  assert.equal(strokeSide(m, p), "Forehand");
+  m.ball.x = -0.5;
+  assert.equal(strokeSide(m, p), "Backhand");
+  p.hand = "left";
+  assert.equal(strokeSide(m, p), "Forehand");
+  // Central ball: the swing path decides (a right-hander's forehand swings toward the left).
+  p.hand = "right";
+  m.ball.x = 0;
+  assert.equal(strokeSide(m, p, -1), "Forehand");
+  assert.equal(strokeSide(m, p, 1), "Backhand");
+  // The far team's right is world -x.
+  const q = m.players[1];
+  q.pos = { x: 0, y: 0, z: -4 };
+  m.ball = { x: -0.5, y: 0.9, z: -4 };
+  assert.equal(strokeSide(m, q), "Forehand");
+  // Announcements carry the stroke.
+  rally(m, 0);
+  m.bounces = 1;
+  q.lastHit = -10;
+  assert.ok(hit(m, q, { ...ZERO_INPUT, strength: 0.6 }));
+  assert.match(m.shot, /^Forehand drive$/);
+});
+
+test("auto positioning stands a step behind the bounce, not on top of the ball", () => {
+  const m = singles(),
+    p = m.players[0];
+  rally(m, 1);
+  m.bounces = 0;
+  m.ball = { x: 0, y: 1.2, z: -2 };
+  m.velocity = { x: 0, y: 2, z: 7 };
+  const land = (() => {
+    const g = 9.81,
+      y = m.ball.y - COURT.radius,
+      vy = m.velocity.y;
+    const t = (vy + Math.sqrt(vy * vy + 2 * g * y)) / g;
+    return m.ball.z + m.velocity.z * t;
+  })();
+  const t = movementTarget(m, p);
+  assert.ok(t.z - land >= 0.9, `behind by ${t.z - land}`);
+  assert.ok(
+    Math.abs(t.x - m.ball.x) >= FOREHAND_OFFSET - 0.05,
+    "beside the ball's path",
+  );
+});
+
+test("players get half the error spread of bots for the same mistimed contact", () => {
+  // Same off-centre contact, many trials: compare how far shots stray from the aim point.
+  const spread = (bot: boolean) => {
+    let sum = 0;
+    for (let i = 0; i < 200; i++) {
+      const m = singles();
+      m.seed = 1000 + i;
+      const p = m.players[0];
+      p.bot = bot;
+      rally(m, 1);
+      m.bounces = 1;
+      p.pos = { x: 0, y: 0, z: 4 };
+      m.ball = { x: 0.95, y: 2.3, z: 3.5 }; // in reach, but late and high: poor contact
+      p.lastHit = -10;
+      assert.ok(hit(m, p, { ...ZERO_INPUT, strength: 0.7 }));
+      const t = 1;
+      sum += Math.abs(m.ball.x + m.velocity.x * t);
+    }
+    return sum / 200;
+  };
+  const human = spread(false),
+    bot = spread(true);
+  assert.ok(
+    human < bot * 0.7,
+    `human ${human.toFixed(2)} vs bot ${bot.toFixed(2)}`,
+  );
+});

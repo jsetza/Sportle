@@ -7,6 +7,14 @@ export class MotionFilter {
   raw = { pitch: 0, roll: 0, yaw: 0 };
   strength = 0;
   direction = 0;
+  /**
+   * Sideways swing direction in the player's own frame: +1 = moving toward their right,
+   * -1 = toward their left. From the rotation rate about the phone's long axis while it is
+   * held like a paddle (screen = paddle face). `flip` lets a player swap it if their grip
+   * reports it reversed. An intent estimate, not a measured paddle path.
+   */
+  side = 0;
+  flip = 1;
   lastSwing = -1000;
   armed = true;
   calibrated = false;
@@ -45,6 +53,12 @@ export class MotionFilter {
     this.strength = this.strength * 0.35 + energy * 0.65;
     this.direction = clamp(
       (rotation.beta * Math.cos(a) + rotation.gamma * Math.sin(a)) / 130,
+      -1,
+      1,
+    );
+    this.side = clamp(
+      (-(rotation.gamma * Math.cos(a) - rotation.beta * Math.sin(a)) / 150) *
+        this.flip,
       -1,
       1,
     );

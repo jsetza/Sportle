@@ -119,9 +119,33 @@ export function setMove(m: Match, p: Player, x: number, z: number) {
 }
 const SPEED = { easy: 3.3, medium: 3.8, hard: 4.3 };
 /** Characters stand beside the ball's path on their forehand side, so the paddle, not the torso, meets it. */
-export const FOREHAND_OFFSET = 0.45;
+export const FOREHAND_OFFSET = 0.6;
 export const forehandSide = (p: Player) =>
   (p.hand === "right" ? 1 : -1) * (p.team ? -1 : 1);
+/**
+ * Where an incoming ball will be at a comfortable hitting height (~0.8 m) on the way down
+ * after its bounce (ballistic, no drag; movement anticipation only, never used for scoring).
+ */
+export function intercept(m: Match) {
+  const g = 9.81 + m.spin,
+    H = 0.8;
+  let { x, y, z } = m.ball,
+    vx = m.velocity.x,
+    vy = m.velocity.y,
+    vz = m.velocity.z;
+  if (m.bounces === 0) {
+    const l = landing(m);
+    x = l.x;
+    z = l.z;
+    y = C.radius;
+    vy = Math.abs(vy - g * l.t) * 0.76;
+    vx *= 0.86;
+    vz *= 0.86;
+  }
+  const disc = vy * vy - 2 * g * (H - y);
+  const t = disc > 0 ? (vy + Math.sqrt(disc)) / g : Math.max(0, vy / g);
+  return { x: x + vx * t, z: z + vz * t, t };
+}
 /** Ballistic landing estimate (no drag) used for movement anticipation only, never for scoring. */
 export function landing(m: Match) {
   const g = 9.81 + m.spin,
@@ -279,12 +303,14 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   // the far team faces +z, so its left/right is mirrored in world X.
   // Off-centre or badly timed contact spreads the shot; big swings magnify the error.
   // This is how shots go wide or long: comfortable compact swings stay reliable.
-  const miss = (1 - quality) * (0.45 + power);
-  const x =
-    clamp((input.roll + input.yaw * 0.25) / 35, -1, 1) *
-      2.8 *
-      (p.team ? -1 : 1) +
-    (rand(m) * 2 - 1) * miss * 2.8;
+  // Players get half the error spread of earlier builds; bots keep theirs so matches end.
+  const miss = (1 - quality) * (0.45 + power) * (p.bot ? 1 : 0.5);
+  // Aim in the player's own frame: the swing path (left→right sends it right) leads,
+  // the paddle-face angle fine-tunes. The far team faces +z, so its frame is mirrored in X.
+  const side = clamp(input.side ?? 0, -1, 1);
+  const face = clamp((input.roll + input.yaw * 0.25) / 35, -1, 1);
+  const aim = clamp(side * 1.9 + face * 0.9, -2.7, 2.7);
+  const x = aim * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * miss * 2.8;
   const flight = smash ? 0.58 : lob ? 1.95 : dink ? 1.05 : 1.5 - power * 0.55;
   p.volleyMomentum = m.bounces === 0;
   if (p.volleyMomentum) p.momentumAt = m.time;
@@ -300,15 +326,10 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   );
   m.quality = quality;
   m.hits++;
-  m.shot = smash
-    ? "Smash"
-    : lob
-      ? "Lob"
-      : roll
-        ? "Roll"
-        : dink
-          ? "Dink / drop"
-          : "Drive";
+  m.shot =
+    strokeSide(m, p, side) +
+    " " +
+    (smash ? "smash" : lob ? "lob" : roll ? "roll" : dink ? "dink" : "drive");
   announce(
     m,
     m.shot +
@@ -335,10 +356,23 @@ function botExecution(m: Match, q: number) {
  */
 export function contactQuality(m: Match, p: Player) {
   const b = m.ball,
-    px = p.pos.x + forehandSide(p) * FOREHAND_OFFSET;
-  const d = Math.hypot(b.x - px, (b.z - p.pos.z) * 1.2);
+    side = forehandSide(p) * FOREHAND_OFFSET;
+  // Clean contact on either side of the body: forehand, or a slightly less forgiving backhand.
+  const at = (px: number) => Math.hypot(b.x - px, (b.z - p.pos.z) * 1.2);
+  const d = Math.min(at(p.pos.x + side), at(p.pos.x - side) * 1.08);
   const h = b.y < 0.35 ? 0.35 - b.y : b.y > 1.5 ? (b.y - 1.5) * 0.4 : 0;
   return clamp(1 - (d / 1.3) ** 2 * 0.75 - h, 0.15, 1);
+}
+/**
+ * Forehand or backhand: which side of the body the ball is on at contact (relative to the
+ * paddle hand). When the ball is nearly central, the swing path decides — a forehand swings
+ * across toward the non-paddle side.
+ */
+export function strokeSide(m: Match, p: Player, swingSide = 0) {
+  const lateral = (m.ball.x - p.pos.x) * forehandSide(p);
+  if (Math.abs(lateral) > 0.12) return lateral > 0 ? "Forehand" : "Backhand";
+  const hand = p.hand === "left" ? -1 : 1;
+  return swingSide * hand > 0 ? "Backhand" : "Forehand";
 }
 export function feed(m: Match) {
   const p = m.players.find((p) => !p.bot)!;
@@ -369,8 +403,6 @@ export function movementTarget(m: Match, p: Player): Vec {
   const side = forehandSide(p) * FOREHAND_OFFSET;
   if (incoming && p.id === owner.id) {
     const land = landing(m);
-    const look = m.bounces === 0 ? land.t : 0.15;
-    const ahead = Math.abs(b.z + m.velocity.z * look);
     // Entering the NVZ is legal to play a ball that has bounced (or will bounce) there.
     // While volley momentum is active, or when the ball will land deep, stay outside the line.
     const bouncesInKitchen =
@@ -380,10 +412,14 @@ export function movementTarget(m: Match, p: Player): Vec {
         Math.abs(land.z) < C.kitchen);
     const minZ =
       bouncesInKitchen && !p.volleyMomentum ? 0.55 : C.kitchen + 0.42;
+    // Stand behind the ball, not inside it: go to where it comes back down to waist height
+    // after its bounce, on the forehand side. That point does not drift as the ball travels,
+    // so the player settles early and the ball comes to them.
+    const ic = intercept(m);
     return vec(
-      clamp(b.x + m.velocity.x * look - side, -3.65, 3.65),
+      clamp(ic.x - side, -3.65, 3.65),
       0,
-      sign * clamp(ahead + 0.4, minZ, 7.5),
+      sign * clamp(Math.abs(ic.z) + 0.15, minZ, 7.5),
     );
   }
   // Recovery: get out of the kitchen first, then return to the base position.
@@ -569,8 +605,16 @@ export function botShot(m: Match, p: Player): Input {
       : (r() < 0.5 ? -1 : 1) * 0.4;
   const noise = { easy: 0.9, medium: 0.55, hard: 0.3 }[d] * (r() * 2 - 1);
   const aimX = clamp((d === "easy" ? 0 : gap) + noise, -2.5, 2.5);
-  const roll = (aimX / 2.8) * 35 * (p.team ? -1 : 1);
-  const base = { ...ZERO_INPUT, roll, yaw: 0, sensors: true, calibrated: true };
+  // Same aiming path as a phone: a sideways swing in the bot's own frame.
+  const side = clamp((aimX * (p.team ? -1 : 1)) / 1.9, -1, 1);
+  const base = {
+    ...ZERO_INPUT,
+    side,
+    roll: 0,
+    yaw: 0,
+    sensors: true,
+    calibrated: true,
+  };
   const pick = r();
   if (b.y > 1.85 && m.bounces === 0)
     return {

@@ -45,6 +45,9 @@ Run on **iPhone Safari** and **Android Chrome**, with both left/right hand selec
 - [ ] First-person and third-person views are comfortable (no motion sickness) on a TV and a laptop.
 - [ ] Music is pleasant and balanced against hit sounds; Music toggle is remembered.
 - [ ] Play again starts a rematch with the same phones; Change mode returns to the menu.
+- [ ] Swinging left→right shows “→” on the phone and sends the ball to the player's right; right→left goes left. If reversed, Swap left / right fixes it. Record which grip (screen facing net / facing you).
+- [ ] Shots are announced as Forehand/Backhand correctly for right- and left-handed players.
+- [ ] Auto positioning: the character waits beside and slightly behind the ball's path, not on top of it.
 - [ ] A soft dink lands in the opponent's kitchen; the opponent's character steps in to play it after the bounce.
 - [ ] Invalid/stale inputs cannot move the score or impersonate another player's slot.
 

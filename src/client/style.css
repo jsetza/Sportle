@@ -955,3 +955,21 @@ kbd {
 .gameover .link {
   margin-top: 14px;
 }
+.swap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.swap input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ball);
+}
+.swap small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 12px;
+}

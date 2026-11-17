@@ -228,9 +228,9 @@ export class Scene {
     if (state.event !== this.lastEvent) {
       this.lastEvent = state.event;
       const msg = state.message;
-      if (/Drive|Dink|Roll|Lob|Smash/.test(msg))
+      if (/drive|dink|roll|lob|smash/i.test(msg))
         this.tone(
-          /Smash/.test(msg) ? 760 : /Dink/.test(msg) ? 420 : 560,
+          /smash/i.test(msg) ? 760 : /dink/i.test(msg) ? 420 : 560,
           170,
           0.1,
         );
