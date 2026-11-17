@@ -64,7 +64,8 @@ tunnel.on("error", () =>
 );
 
 console.log("Connecting the tunnel to Cloudflare…");
-let log = "";
+let log = "",
+  connected = false;
 const url = await new Promise((resolve) => {
   let found = null,
     registered = false;
@@ -74,11 +75,20 @@ const url = await new Promise((resolve) => {
     for (const m of log.matchAll(/https:\/\/([a-z0-9-]+)\.trycloudflare\.com/g))
       if (m[1] !== "api") found ||= m[0];
     registered ||= /Registered tunnel connection/i.test(log);
-    if (found && registered) resolve(found);
+    if (found && registered) {
+      connected = true;
+      resolve(found);
+    }
   };
   tunnel.stdout.on("data", onData);
   tunnel.stderr.on("data", onData);
-  tunnel.on("exit", (c) =>
+  tunnel.on("exit", (c) => {
+    if (connected)
+      fail(
+        "The Cloudflare tunnel closed (free quick tunnels can drop at any time).\n" +
+          "Run the same command again and use the NEW link it prints.\n\n" +
+          tail(log),
+      );
     fail(
       "cloudflared stopped (code " +
         c +
@@ -88,9 +98,10 @@ const url = await new Promise((resolve) => {
           : "") +
         "\n" +
         tail(log),
-    ),
-  );
+    );
+  });
   setTimeout(() => {
+    if (connected) return;
     const blocked = /quic|7844|dial|timeout|refused|failed/i.test(log);
     fail(
       "The tunnel did not connect within 45 seconds." +

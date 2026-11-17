@@ -314,6 +314,23 @@ const server = createServer(async (req, res) => {
     );
   }
 });
+/**
+ * One room's bug must never take down the server (and every other room and the tunnel with it).
+ * Pause that match with a visible message and log the error for diagnosis.
+ */
+function safely(r: Room, fn: () => void) {
+  try {
+    fn();
+  } catch (e) {
+    console.error(`[room ${r.code}] simulation error:`, e);
+    if (!r.state.paused) {
+      r.state.paused = true;
+      r.state.message =
+        "Something went wrong in this match. Host: press Resume.";
+      r.state.event++;
+    }
+  }
+}
 let last = performance.now(),
   acc = 0,
   tick = 0;
@@ -322,11 +339,11 @@ const interval = setInterval(() => {
   acc += Math.min(0.1, (now - last) / 1000);
   last = now;
   while (acc >= 1 / 120) {
-    for (const r of rooms.values()) step(r.state);
+    for (const r of rooms.values()) safely(r, () => step(r.state));
     acc -= 1 / 120;
   }
   if (++tick % 4 === 0) {
-    for (const r of rooms.values()) housekeeping(r);
+    for (const r of rooms.values()) safely(r, () => housekeeping(r));
     for (const [res, { room, session }] of streams) {
       if (!rooms.has(room.code) || session.expires < Date.now()) {
         res.end();
