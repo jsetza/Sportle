@@ -1,0 +1,161 @@
+/** Real browser and HTTP, synthetic sensor events. NOT a physical phone test. */
+import { chromium } from "playwright";
+import { spawn } from "node:child_process";
+import assert from "node:assert/strict";
+const child = spawn(process.execPath, ["src/server/index.ts"], {
+  env: { ...process.env, HOST: "127.0.0.1", PORT: "31492" },
+  stdio: ["ignore", "pipe", "pipe"],
+});
+let browser;
+try {
+  await new Promise((ok, no) => {
+    child.stdout.once("data", ok);
+    child.once("error", no);
+    child.once("exit", (c) => no(Error("Server exited " + c)));
+    setTimeout(() => no(Error("Server startup timeout")), 5000).unref();
+  });
+  browser = await chromium.launch({
+    headless: true,
+    ...(process.env.CHROME_PATH
+      ? { executablePath: process.env.CHROME_PATH }
+      : {}),
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
+    ],
+  });
+  const display = await browser.newPage({
+      viewport: { width: 1440, height: 1000 },
+    }),
+    phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errors = [];
+  for (const p of [display, phone])
+    p.on("pageerror", (e) => errors.push(e.message));
+  await display.goto("http://127.0.0.1:31492");
+  await display.locator("#create").click();
+  await display.locator("#lobby").waitFor({ state: "visible" });
+  const room = await display.locator("#roomcode").textContent();
+  assert.match(await display.locator("#pairHint").textContent(), /HTTPS/);
+  await phone.goto("http://127.0.0.1:31492/controller?room=" + room);
+  await phone.locator("#nickname").fill("Test phone");
+  await phone.locator("#connect").click();
+  await phone.locator("#enable").click();
+  await phone.evaluate(() => {
+    window.testSensors = setInterval(() => {
+      window.dispatchEvent(
+        new DeviceOrientationEvent("deviceorientation", {
+          alpha: 0,
+          beta: 35,
+          gamma: 0,
+        }),
+      );
+      window.dispatchEvent(
+        new DeviceMotionEvent("devicemotion", {
+          acceleration: { x: 0, y: 0, z: 0 },
+          rotationRate: { alpha: 0, beta: 0, gamma: 0 },
+        }),
+      );
+    }, 16);
+  });
+  await phone.locator("#calibrate").click();
+  await phone.waitForTimeout(150);
+  const swing = async (rate) => {
+    await phone.evaluate(
+      (value) =>
+        window.dispatchEvent(
+          new DeviceMotionEvent("devicemotion", {
+            acceleration: { x: 0, y: 0, z: 0 },
+            rotationRate: { alpha: 0, beta: value, gamma: 0 },
+          }),
+        ),
+      rate,
+    );
+  };
+  await swing(120);
+  await phone.waitForTimeout(500);
+  await swing(320);
+  await phone.locator("#ready").click();
+  await display.locator("#start").click();
+  const host = JSON.parse(
+      await display.evaluate(() => sessionStorage.getItem("visual-host")),
+    ),
+    abort = new AbortController();
+  const res = await fetch("http://127.0.0.1:31492/api/events?room=" + room, {
+    headers: { authorization: "Bearer " + host.credential },
+    signal: abort.signal,
+  });
+  const reader = res.body.getReader();
+  let buffer = "",
+    fired = false,
+    contacts = 0;
+  const results = [];
+  const timer = setTimeout(() => abort.abort(), 20000);
+  try {
+    while (results.length < 2) {
+      const chunk = await reader.read();
+      if (chunk.done) throw Error("Stream closed");
+      buffer += new TextDecoder().decode(chunk.value);
+      let end;
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        const { state: m } = JSON.parse(buffer.slice(6, end));
+        buffer = buffer.slice(end + 2);
+        const p = m.players.find((p) => !p.bot);
+        if (fired && m.contacts > contacts) {
+          results.push({
+            shot: m.shot,
+            message: m.message,
+            velocity: m.velocity,
+          });
+          fired = false;
+        }
+        if (
+          !fired &&
+          results.length < 2 &&
+          m.phase === "rally" &&
+          m.lastTeam === 1 &&
+          m.bounces === 1 &&
+          Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) < 0.85 &&
+          m.ball.y > 0.25
+        ) {
+          contacts = m.contacts;
+          fired = true;
+          await swing(results.length ? 320 : 120);
+        }
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+    await reader.cancel();
+    abort.abort();
+  }
+  assert.equal(results.length, 2);
+  assert.notDeepEqual(results[0].velocity, results[1].velocity);
+  assert.notEqual(results[0].message, results[1].message);
+  const qr = await display.evaluate(async () => {
+    const { drawQR } = await import("/qr.js");
+    const c = document.createElement("canvas"),
+      value =
+        "https://visual.example.com/controller?room=ABC123#pair=abcdefghijklmnopqrstuv";
+    drawQR(c, value);
+    if (typeof BarcodeDetector === "undefined") return { supported: false };
+    const r = await new BarcodeDetector({ formats: ["qr_code"] }).detect(c);
+    return { supported: true, value, decoded: r[0]?.rawValue };
+  });
+  if (qr.supported) assert.equal(qr.decoded, qr.value);
+  assert.deepEqual(errors, []);
+  console.log(
+    "PASS: display → phone join → synthetic sensors → calibration → ready → practice → 2 distinct shots",
+  );
+  console.log(JSON.stringify({ results, qr }, null, 2));
+  await phone.evaluate(() => {
+    clearInterval(window.testSensors);
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+} finally {
+  await browser?.close();
+  if (child.exitCode === null) {
+    child.kill("SIGTERM");
+    await new Promise((r) => child.once("exit", r));
+  }
+}
