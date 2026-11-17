@@ -17,6 +17,7 @@
 - **Music (user request):** procedural Web Audio loop (no files); on by default after first gesture, toggle remembered; intensity rises in play.
 - **Removed (user request):** ball-striking-player fault.
 - Verified in headless Chrome (synthetic sensors, not a real phone): thumb pad shows during play; full solo match to 11–0; Play again resets to 0:0; first/third/broadcast views render; no page errors. Music output itself was not listened to (headless).
+- **Tunnel fix (found during the owner's first real-phone attempt):** Cloudflare quick tunnels don't support SSE and cap in-flight requests at 200; stalled streams led to Cloudflare error pages that iPhone Safari reported as “The string did not match the expected pattern” when tapping Ready. The client now polls `/api/state` on trycloudflare hosts (or when SSE stalls), and non-JSON proxy replies produce a readable error. Verified with a full headless-Chrome match forced onto polling. `npm run tunnel` now waits for a registered connection, picks a free port, and ignores Cloudflare's API hostname.
 - Mode paths for singles vs bot, human singles, co-op doubles, and four-human doubles.
 - `npm run tunnel`: Cloudflare quick tunnel + server with PUBLIC_ORIGIN set, for no-account phone testing.
 - Rate limiting: per-IP only for unauthenticated traffic (strict for manual code joins, looser for QR-token joins); per-session budget for authenticated traffic, so households behind one NAT are not throttled together.

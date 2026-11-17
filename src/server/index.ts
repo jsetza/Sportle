@@ -186,9 +186,14 @@ const server = createServer(async (req, res) => {
       const sbucket =
         sb && Date.now() - sb.t <= 60000 ? sb : { t: Date.now(), n: 0 };
       rate.set("s:" + key, sbucket);
-      // ~30 Hz input plus clock/control calls fits comfortably; 4800/min ≈ 80 req/s.
-      if (++sbucket.n > 4800)
+      // ~30 Hz input + ~25 Hz state polling + control calls fit; 7200/min = 120 req/s.
+      if (++sbucket.n > 7200)
         return json(res, { error: "Too many requests" }, 429);
+      // Polling fallback for paths that cannot stream SSE (e.g. Cloudflare quick tunnels).
+      if (path === "/api/state" && req.method === "GET") {
+        r.updated = Date.now();
+        return json(res, view(r));
+      }
       if (path === "/api/events" && req.method === "GET") {
         res.writeHead(200, {
           "Content-Type": "text/event-stream",

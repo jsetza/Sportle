@@ -53,6 +53,8 @@ With the official `cloudflared` binary installed (`brew install cloudflared`, `w
 
 Status: the script's missing-binary path was exercised; an end-to-end tunnel could not be opened from the development sandbox (no route to Cloudflare's edge), so the first real run will be on your machine. If phones load the page but the display stops updating, check that the tunnel is not buffering `/api/events`.
 
+Cloudflare quick tunnels do not support Server-Sent Events and cap in-flight requests at 200, so on `*.trycloudflare.com` the client automatically switches from the SSE stream to short polling of `/api/state` (~25 snapshots/s). Any page can force this with `?transport=poll`; it also kicks in automatically if the stream delivers nothing for 4 s. Proper hosting (or a named Cloudflare tunnel) keeps the lower-latency SSE stream.
+
 Any other trusted HTTPS tunnel works the same way: set its real public URL as `PUBLIC_ORIGIN`, then restart. Never instruct a player to bypass a certificate warning.
 
 ## Validate the deployment

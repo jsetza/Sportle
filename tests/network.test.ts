@@ -82,6 +82,19 @@ test("real HTTP room flow, SSE snapshots, authority and reconnect", async () => 
     assert.match(text, /"phase":"serve"/);
     assert.ok(!text.includes(host));
     controller.abort();
+    // Polling fallback (for tunnels without SSE) returns the same snapshot, authenticated.
+    const polled = await call(
+      "state?room=" + room,
+      undefined,
+      d.data.credential,
+    );
+    assert.equal(polled.status, 200);
+    assert.equal(polled.data.code, room);
+    assert.ok(["serve", "rally"].includes(polled.data.state.phase));
+    assert.equal(
+      (await call("state?room=" + room, undefined, "nope")).status,
+      401,
+    );
     const again = await call("join?room=" + room, {
       credential: players[0].credential,
     });
