@@ -5,7 +5,7 @@
 - Real HTTP pairing/join with QR/manual room code, separate host/display/controller sessions, expiring pairing, reconnect tokens, and abandoned-room cleanup.
 - **Per-display pairing:** every display (host or another household) gets its own pairing QR; a display can direct its phones to Team 1 or Team 2; the host can switch teams in the lobby; the start gate requires even teams.
 - Phone permission UI, neutral orientation, two-swing calibration, live diagnostics, sensitivity, left-hand/screen orientation handling, and background/disconnect pause.
-- Sports UI, 3D WebGL court, low-poly avatars, paddle orientation mirror, interpolated state, opt-in contact sound.
+- **Arena redesign (user-directed, inspired by a reference menu style; original branding):** full-screen dark arena with tiered crowd, ad boards with original pixel lettering, spotlight pools and depth fog (static geometry cached in its own GPU buffer); capsule mascots with face plates, shades, jersey stripes, team rings (white ring marks the covering player in doubles), bot antennae; contact bursts (extra flash on sweet-spot hits) and ball trail; cinematic menu camera with a cosmetic attract-mode rally (shown only on the menu, never as a match), lobby camera, broadcast match camera with lens shift beside the panel. Left-panel menu: wordmark, grouped On this screen / Online lists, bot level pills, Create game, keyboard/TV-remote arrows + Enter; lobby pairing card; collapsible panel during play; How to play dialog; fullscreen. Teams are now Blue and Red. Phone controller restyled to match.
 - Practice feeds and swing-dependent contact; fixed-step authoritative physics and scoring.
 - **Contact quality:** timing/position relative to the forehand side and contact height set shot accuracy; mishits go wide/long or into the net, amplified by hard swings. Human swing windows meet the ball at the best point within 120 ms.
 - **Rules additions:** kitchen entry to play bounced balls; volley before both feet re-established outside the NVZ is a fault; time-bounded volley momentum; net-post strikes; ball striking a player. Far-team aim mirroring bug fixed (team 2's left/right was inverted; its paddle was drawn behind the character).
@@ -32,7 +32,7 @@
 4. Remaining rule limits are listed in RULES.md (serve assist, partner contact, tournament procedures, ball footprint).
 5. Rooms are memory-only; a server restart drops matches.
 6. Docker and GitHub Actions recipes have not been executed here.
-7. Visual redesign requested by the user (dark arena, menu-list layout) is in progress.
+7. Browser smoke test passed 3 of 4 consecutive runs after the redesign; the one failure was an aborted request under software (SwiftShader) rendering. Watch for flakiness in CI.
 
 ## Environment notes
 
