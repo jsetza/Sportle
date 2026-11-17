@@ -40,6 +40,7 @@ Run on **iPhone Safari** and **Android Chrome**, with both left/right hand selec
 - [ ] Host **→ Team** buttons move players; Start stays disabled while teams are uneven.
 - [ ] A far-team (team 2) player tilting the paddle right sends the ball to their own right.
 - [ ] Well-timed compact swings show `sweet spot`; early/late swings show `off-centre` and stray more.
+- [ ] On one screen, WASD moves player 1 and arrow keys move player 2 while both phones swing; a remote display's keys move only its own phones' players.
 - [ ] A soft dink lands in the opponent's kitchen; the opponent's character steps in to play it after the bounce.
 - [ ] Invalid/stale inputs cannot move the score or impersonate another player's slot.
 

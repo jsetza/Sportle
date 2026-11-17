@@ -11,6 +11,7 @@ import {
   issuePair,
   checkPair,
   setTeam,
+  acceptMove,
   begin,
   acceptInput,
   housekeeping,
@@ -112,6 +113,7 @@ const server = createServer(async (req, res) => {
         return json(res, {
           ...view(r),
           credential: r.host,
+          displayId: "host",
           pair: r.pair,
           pairExpires: r.pairExpires,
           publicOrigin: publicURL,
@@ -137,10 +139,12 @@ const server = createServer(async (req, res) => {
             ...view(r),
             credential,
             ...issuePair(r, s),
+            displayId: s.displayId,
             publicOrigin: publicURL,
           });
         }
-        let preferTeam: number | null = null;
+        let preferTeam: number | null = null,
+          display = "";
         if (!a.credential) {
           // Rate limit unauthenticated pairing separately, including short-code joins.
           // Manual room-code joins are guessable, so they get a strict per-IP limit.
@@ -158,7 +162,7 @@ const server = createServer(async (req, res) => {
               { error: "Pairing rate limit; wait a minute" },
               429,
             );
-          preferTeam = checkPair(r, a.pair);
+          ({ team: preferTeam, display } = checkPair(r, a.pair));
         }
         const name =
           typeof a.name === "string" ? a.name.trim().slice(0, 20) : "Player";
@@ -168,6 +172,7 @@ const server = createServer(async (req, res) => {
           a.hand === "left" ? "left" : "right",
           a.credential,
           preferTeam,
+          display,
         );
         r.updated = Date.now();
         return json(res, { ...view(r), ...result });
@@ -200,6 +205,8 @@ const server = createServer(async (req, res) => {
       r.updated = Date.now();
       if (path === "/api/input")
         return json(res, { accepted: acceptInput(r, session, a) });
+      if (path === "/api/move")
+        return json(res, { accepted: acceptMove(r, session, a) });
       const p = r.state.players.find((p) => p.id === session.playerId);
       if (path === "/api/ready" && p) {
         if (

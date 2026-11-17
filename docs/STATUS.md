@@ -10,6 +10,7 @@
 - **Contact quality:** timing/position relative to the forehand side and contact height set shot accuracy; mishits go wide/long or into the net, amplified by hard swings. Human swing windows meet the ball at the best point within 120 ms.
 - **Rules additions:** kitchen entry to play bounced balls; volley before both feet re-established outside the NVZ is a fault; time-bounded volley momentum; net-post strikes; ball striking a player. Far-team aim mirroring bug fixed (team 2's left/right was inverted; its paddle was drawn behind the character).
 - **Bots:** same Input shape and rule path as phones; drives, rolls, third-shot drops, dinks, lobs, smashes; medium/hard move to the NVZ line; difficulty-scaled accuracy, patience and unforced errors; seeded deterministic RNG. Matches now finish (previously bot rallies never ended because shots could not land out).
+- **Keyboard movement (user request):** WASD = this display's player 1, arrow keys = player 2; phones stay the paddle. Server-authoritative (`/api/move`, sequence-checked, host/display sessions only, mapped to phones paired by that display); manual mode starts on first key press; speed limit, own-side clamp, kitchen/momentum rules apply. Verified in unit tests and a headless-Chrome run with real key presses on the display page (D moved player 1 right, ← moved player 2 left).
 - Mode paths for singles vs bot, human singles, co-op doubles, and four-human doubles.
 - `npm run tunnel`: Cloudflare quick tunnel + server with PUBLIC_ORIGIN set, for no-account phone testing.
 - Rate limiting: per-IP only for unauthenticated traffic (strict for manual code joins, looser for QR-token joins); per-session budget for authenticated traffic, so households behind one NAT are not throttled together.
@@ -17,7 +18,7 @@
 
 ## Actual verification (this session, Linux sandbox, Node 22.23)
 
-- `npm run check`: **PASS** — strict typecheck, production build, **36 tests**.
+- `npm run check`: **PASS** — strict typecheck, production build, **40 tests**.
 - `npm run test:browser` with `CHROME_PATH=/usr/bin/google-chrome`: **PASS** — synthetic sensors, shots at 37% and 65%, both `sweet spot`. (BarcodeDetector unavailable in headless Linux Chrome, so QR decode was skipped there; it was verified by Codex earlier on desktop Chrome.)
 - `tests/multiplayer.test.ts`: real Node HTTP/SSE with **two household displays and four controller sessions**: per-display QR tokens, team preference, host team swap, 5th phone refused, host-only actions enforced, both displays receive identical rally state, out-of-order / duplicate / 5 s-stale / out-of-range inputs rejected, silent phone pauses the match, reconnect restores slot and team, resume refused until ready.
 - Load probe (`node scripts/load.mjs`, loopback, load generator on the same machine): 10 / 25 / 50 doubles rooms (40 / 100 / 200 controllers at 30 Hz) → 0 rejected inputs; input RTT p50 1.4 / 3.0 / 6.8 ms, p95 8.4 / 17.0 / 39.6 ms; ~30 snapshots/s per display.

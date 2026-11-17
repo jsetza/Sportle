@@ -43,6 +43,11 @@ export function player(
     volleyMomentum: false,
     kitchenClearAt: -10,
     momentumAt: -10,
+    moveX: 0,
+    moveZ: 0,
+    moveUntil: 0,
+    manual: false,
+    display: "",
     reactionAt: 0,
     target: vec(),
   };
@@ -91,6 +96,16 @@ export function rand(m: Match) {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 const REACTION = { easy: 0.22, medium: 0.16, hard: 0.1 };
+export const HUMAN_SPEED = 4.3;
+const ACCEL = 14;
+/** Apply a keyboard movement message to a human player (validated by the caller). */
+export function setMove(m: Match, p: Player, x: number, z: number) {
+  if (p.bot) return;
+  p.moveX = clamp(x, -1, 1);
+  p.moveZ = clamp(z, -1, 1);
+  p.moveUntil = m.time + 0.35;
+  if (x || z) p.manual = true;
+}
 const SPEED = { easy: 3.3, medium: 3.8, hard: 4.3 };
 /** Body column used for ball-strikes-player faults (rule 11.A). */
 const BODY_RADIUS = 0.2,
@@ -134,6 +149,7 @@ export function prepare(m: Match) {
     p.volleyMomentum = false;
     p.kitchenClearAt = -10;
     p.swingUntil = 0;
+    p.moveUntil = 0;
   }
   const s = m.players.find((p) => p.id === m.serverId)!;
   m.serveX = s.pos.x;
@@ -379,23 +395,47 @@ export function step(m: Match, dt = 1 / 120) {
     return;
   }
   for (const p of m.players) {
-    if (m.time >= p.reactionAt) {
-      p.target = movementTarget(m, p);
-      p.reactionAt = m.time + (p.bot ? REACTION[m.difficulty] : 0.05);
+    let len: number;
+    if (!p.bot && p.manual) {
+      // Keyboard movement (WASD / arrows on the display): screen-relative, same speed limit as auto.
+      const held = m.time < p.moveUntil;
+      const ix = held ? p.moveX : 0,
+        iz = held ? p.moveZ : 0;
+      const mag = Math.min(1, Math.hypot(ix, iz)) || 0;
+      const nx = mag ? ix / Math.hypot(ix, iz) : 0,
+        nz = mag ? iz / Math.hypot(ix, iz) : 0;
+      const want = vec(nx * HUMAN_SPEED * mag, 0, nz * HUMAN_SPEED * mag);
+      // Short acceleration ramp so taps feel controllable rather than teleporty.
+      const k = Math.min(1, ACCEL * dt);
+      p.velocity = vec(
+        p.velocity.x + (want.x - p.velocity.x) * k,
+        0,
+        p.velocity.z + (want.z - p.velocity.z) * k,
+      );
+      len = Math.hypot(p.velocity.x, p.velocity.z) < 0.05 ? 0 : 1;
+    } else {
+      if (m.time >= p.reactionAt) {
+        p.target = movementTarget(m, p);
+        p.reactionAt = m.time + (p.bot ? REACTION[m.difficulty] : 0.05);
+      }
+      const dx = p.target.x - p.pos.x,
+        dz = p.target.z - p.pos.z,
+        speed = p.bot ? SPEED[m.difficulty] : HUMAN_SPEED;
+      len = Math.hypot(dx, dz);
+      const rate = Math.min(speed, len / dt);
+      p.velocity = vec(
+        len ? (dx / len) * rate : 0,
+        0,
+        len ? (dz / len) * rate : 0,
+      );
     }
-    const dx = p.target.x - p.pos.x,
-      dz = p.target.z - p.pos.z,
-      len = Math.hypot(dx, dz),
-      speed = p.bot ? SPEED[m.difficulty] : 4.3;
-    const rate = Math.min(speed, len / dt);
-    p.velocity = vec(
-      len ? (dx / len) * rate : 0,
-      0,
-      len ? (dz / len) * rate : 0,
-    );
     const wasIn = inKitchen(p);
     p.pos.x += p.velocity.x * dt;
     p.pos.z += p.velocity.z * dt;
+    // Stay on your own side of the net and within the run-off area.
+    const sideSign = p.team ? -1 : 1;
+    p.pos.x = clamp(p.pos.x, -4.6, 4.6);
+    p.pos.z = sideSign * clamp(sideSign * p.pos.z, 0.35, 9.2);
     const nowIn = inKitchen(p);
     if (wasIn && !nowIn) p.kitchenClearAt = m.time;
     if (nowIn) p.kitchenClearAt = m.time;

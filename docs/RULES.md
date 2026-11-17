@@ -22,7 +22,7 @@ Implementation mapping:
 Known simplifications and remaining work:
 
 - Serve motion is an assist, not fully player-controlled. No release/feet/waist position is inferred from phone sensors. The two-second generated serve replaces the real player’s service procedure.
-- Kitchen entry is automatic (movement policy), not player-controlled. "Both feet re-established" is modelled as 0.2 s outside the NVZ, not as individual feet.
+- With keyboard movement, players control their own position, so kitchen entry, volley-in-NVZ and momentum faults arise from player choices. Without keys, kitchen entry is automatic (movement policy). "Both feet re-established" is modelled as 0.2 s outside the NVZ, not as individual feet.
 - Momentum ends 0.6 s after the volley or when the player stops; it does not model partner contact, stumbling, or the full post-dead-ball follow-through lifecycle.
 - Carried/double contacts, net-touching player bodies, around-the-post recovery, replay/hinder disputes, and tournament procedures are not fully simulated.
 - Line calls use a point of ground contact rather than a deforming ball footprint. Ball mesh is enlarged for readability; collision radius is independent.

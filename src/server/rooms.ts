@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { match, player, start, queueSwing } from "./engine.ts";
+import { match, player, start, queueSwing, setMove } from "./engine.ts";
 import { slots, teamFor } from "../shared/types.ts";
 import type { Mode, Difficulty, Match, Input } from "../shared/types.ts";
 export const token = () => randomBytes(24).toString("base64url");
@@ -7,6 +7,8 @@ export type Session = {
   role: "host" | "display" | "controller";
   /** Pairing token currently shown by this host/display, if any. */
   pair?: string;
+  /** Public (non-secret) id of a host/display session, used to attribute paired phones. */
+  displayId?: string;
   playerId?: string;
   expires: number;
   lastSeq: number;
@@ -19,7 +21,7 @@ export type Room = {
   pair: string;
   pairExpires: number;
   /** Every live pairing token (one per display), with an optional team for phones it pairs. */
-  pairs: Map<string, { expires: number; team: number | null }>;
+  pairs: Map<string, { expires: number; team: number | null; display: string }>;
   sessions: Map<string, Session>;
   updated: number;
 };
@@ -32,7 +34,9 @@ export function issuePair(r: Room, s: Session, team: number | null = null) {
   if (s.pair) r.pairs.delete(s.pair);
   const pair = token(),
     expires = Date.now() + PAIR_TTL;
+  s.displayId ||= token().slice(0, 8);
   r.pairs.set(pair, {
+    display: s.displayId,
     expires,
     team: teamChoice(r.state.mode) && (team === 0 || team === 1) ? team : null,
   });
@@ -49,11 +53,11 @@ export function checkPair(r: Room, pair: unknown, now = Date.now()) {
   if (typeof pair === "string" && pair) {
     const p = r.pairs.get(pair);
     if (!p) throw Error("Pairing link expired. Rescan the QR on your display.");
-    return p.team;
+    return { team: p.team, display: p.display };
   }
   if (!r.pairs.size)
     throw Error("Pairing expired. Ask the host to refresh the QR code.");
-  return null;
+  return { team: null, display: "" };
 }
 const capacity = (m: Mode, team: number) =>
   m === "doubles" ? 2 : m === "singles" ? 1 : team === 0 ? slots(m) : 0;
@@ -89,9 +93,10 @@ export function createRoom(mode: Mode, difficulty: Difficulty): Room {
     sessions: new Map(),
     updated: Date.now(),
   };
-  r.pairs.set(r.pair, { expires: r.pairExpires, team: null });
+  r.pairs.set(r.pair, { expires: r.pairExpires, team: null, display: "host" });
   r.sessions.set(r.host, {
     role: "host",
+    displayId: "host",
     pair: r.pair,
     expires: Date.now() + 86400000,
     lastSeq: -1,
@@ -106,6 +111,7 @@ export function joinController(
   hand: "left" | "right",
   credential?: string,
   preferTeam: number | null = null,
+  display = "",
 ) {
   if (credential) {
     const session = r.sessions.get(credential);
@@ -140,6 +146,7 @@ export function joinController(
     else if (count(team) >= capacity(r.state.mode, team)) team = 1 - team;
   }
   const p = player(token().slice(0, 10), name, team);
+  p.display = display;
   p.hand = hand;
   r.state.players.push(p);
   const key = token();
@@ -239,4 +246,50 @@ export function housekeeping(r: Room, now = Date.now()) {
   }
   for (const [k, s] of r.sessions) if (s.expires < now) r.sessions.delete(k);
   if (now - r.updated > 3600000) rooms.delete(r.code);
+}
+
+/**
+ * Humans this display controls with its keyboard: phones it paired, in join order.
+ * The host also controls phones that joined by manual room code.
+ */
+export function localPlayers(r: Room, s: Session) {
+  return r.state.players.filter(
+    (p) =>
+      !p.bot &&
+      (p.display === s.displayId || (s.role === "host" && p.display === "")),
+  );
+}
+/** Keyboard movement from a display: slot 0 = WASD, slot 1 = arrow keys. */
+export function acceptMove(
+  r: Room,
+  s: Session,
+  a: { seq?: unknown; keys?: unknown },
+): boolean {
+  if (s.role !== "host" && s.role !== "display") return false;
+  if (!Number.isSafeInteger(a.seq) || (a.seq as number) <= s.lastSeq)
+    return false;
+  if (!Array.isArray(a.keys) || a.keys.length > 2) return false;
+  const local = localPlayers(r, s);
+  for (const k of a.keys) {
+    if (!k || typeof k !== "object") return false;
+    const { slot, x, z } = k as Record<string, unknown>;
+    if (
+      (slot !== 0 && slot !== 1) ||
+      typeof x !== "number" ||
+      typeof z !== "number" ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(z) ||
+      Math.abs(x) > 1 ||
+      Math.abs(z) > 1
+    )
+      return false;
+  }
+  s.lastSeq = a.seq as number;
+  r.updated = Date.now();
+  if (r.state.paused || r.state.phase === "lobby") return true;
+  for (const k of a.keys as { slot: number; x: number; z: number }[]) {
+    const p = local[k.slot];
+    if (p) setMove(r.state, p, k.x, k.z);
+  }
+  return true;
 }

@@ -226,3 +226,177 @@ test("bot shots use the same input ranges a phone may send", () => {
     assert.ok(Math.abs(s.roll) <= 180 && Math.abs(s.pitch) <= 180);
   }
 });
+
+test("keyboard movement: manual after first key press, speed-limited, own side only", async () => {
+  const { setMove, HUMAN_SPEED } = await import("../src/server/engine.ts");
+  const m = singles(),
+    p = m.players[0];
+  rally(m, 0);
+  m.ball = { x: 3, y: 2, z: -5 };
+  m.velocity = { x: 0, y: 0, z: 0 };
+  p.pos = { x: 0, y: 0, z: 5 };
+  m.players[1].target = { ...m.players[1].pos };
+  m.players[1].reactionAt = 1e9;
+  assert.equal(p.manual, false);
+  // D = +x (screen right). One second of holding, refreshed like the display does.
+  for (let i = 0; i < 120; i++) {
+    if (i % 18 === 0) setMove(m, p, 1, 0);
+    step(m);
+  }
+  assert.equal(p.manual, true);
+  assert.ok(p.pos.x > 2.5, `moved ${p.pos.x}`);
+  assert.ok(p.pos.x <= HUMAN_SPEED * 1.0 + 0.01);
+  // Releasing keys: intent expires and the player stops (no auto-positioning any more).
+  setMove(m, p, 0, 0);
+  for (let i = 0; i < 120; i++) step(m);
+  const x = p.pos.x;
+  for (let i = 0; i < 60; i++) step(m);
+  assert.ok(Math.abs(p.pos.x - x) < 1e-6);
+  // W toward the net cannot cross it.
+  for (let i = 0; i < 600; i++) {
+    if (i % 18 === 0) setMove(m, p, 0, -1);
+    step(m);
+    if (m.phase !== "rally") break;
+  }
+  assert.ok(p.pos.z > 0, "stayed on own side");
+});
+
+test("keyboard: walking into the kitchen right after a volley is a momentum fault", async () => {
+  const { setMove } = await import("../src/server/engine.ts");
+  const m = singles(),
+    p = m.players[0];
+  rally(m, 1);
+  freeze(m);
+  p.manual = true;
+  p.pos = { x: 0, y: 0, z: COURT.kitchen + 0.35 };
+  p.volleyMomentum = true;
+  p.momentumAt = m.time;
+  m.ball = { x: 0, y: 3, z: -3 };
+  m.velocity = { x: 0, y: 0, z: -1 };
+  for (let i = 0; i < 40 && m.phase === "rally"; i++) {
+    setMove(m, p, 0, -1);
+    step(m);
+  }
+  assert.match(m.message, /Kitchen momentum/);
+});
+
+test("bots and untouched humans keep auto-positioning", () => {
+  const m = singles(),
+    p = m.players[0];
+  rally(m, 1);
+  m.bounces = 0;
+  m.ball = { x: 1.5, y: 1.2, z: -3 };
+  m.velocity = { x: 0.5, y: 2, z: 8 };
+  p.pos = { x: -1, y: 0, z: 5 };
+  const before = p.pos.x;
+  for (let i = 0; i < 30; i++) step(m);
+  assert.equal(p.manual, false);
+  assert.ok(p.pos.x > before, "auto movement chased the ball");
+});
+
+test("display keyboard maps WASD/arrows to its own paired players only", async () => {
+  const {
+    createRoom,
+    joinController,
+    begin,
+    issuePair,
+    checkPair,
+    acceptMove,
+    localPlayers,
+    rooms,
+  } = await import("../src/server/rooms.ts");
+  const r = createRoom("doubles", "easy");
+  const host = r.sessions.get(r.host)!;
+  const remote = {
+    role: "display" as const,
+    expires: Date.now() + 1e6,
+    lastSeq: -1,
+    lastInput: 0,
+  };
+  r.sessions.set("remote", remote);
+  const hp = checkPair(r, issuePair(r, host, 0).pair);
+  const rp = checkPair(r, issuePair(r, remote, 1).pair);
+  const a1 = joinController(
+    r,
+    "A1",
+    "right",
+    undefined,
+    hp.team,
+    hp.display,
+  ).player;
+  const a2 = joinController(
+    r,
+    "A2",
+    "right",
+    undefined,
+    hp.team,
+    hp.display,
+  ).player;
+  const b1 = joinController(
+    r,
+    "B1",
+    "right",
+    undefined,
+    rp.team,
+    rp.display,
+  ).player;
+  const b2 = joinController(r, "B2", "left", undefined, null, "").player; // manual code
+  assert.deepEqual(
+    localPlayers(r, host).map((p) => p.name),
+    ["A1", "A2", "B2"],
+  );
+  assert.deepEqual(
+    localPlayers(r, remote).map((p) => p.name),
+    ["B1"],
+  );
+  for (const p of r.state.players) {
+    p.ready = true;
+    p.lastSeen = Date.now();
+  }
+  begin(r);
+  r.state.phase = "rally";
+  // Host: WASD → A1, arrows → A2.
+  assert.ok(
+    acceptMove(r, host, {
+      seq: 1,
+      keys: [
+        { slot: 0, x: 1, z: 0 },
+        { slot: 1, x: 0, z: -1 },
+      ],
+    }),
+  );
+  assert.equal(a1.moveX, 1);
+  assert.equal(a2.moveZ, -1);
+  // Remote display: WASD → B1 only; its arrows map to nobody.
+  assert.ok(
+    acceptMove(r, remote, {
+      seq: 1,
+      keys: [
+        { slot: 0, x: -1, z: 0 },
+        { slot: 1, x: 1, z: 0 },
+      ],
+    }),
+  );
+  assert.equal(b1.moveX, -1);
+  assert.equal(b2.moveX, 0);
+  // Stale, malformed and out-of-range messages are rejected.
+  assert.equal(acceptMove(r, host, { seq: 1, keys: [] }), false);
+  assert.equal(
+    acceptMove(r, host, { seq: 2, keys: [{ slot: 0, x: 5, z: 0 }] }),
+    false,
+  );
+  assert.equal(
+    acceptMove(r, host, { seq: 3, keys: [{ slot: 2, x: 0, z: 0 }] }),
+    false,
+  );
+  const phone = r.sessions.get(
+    [...r.sessions.keys()].find(
+      (k) => r.sessions.get(k)!.role === "controller",
+    )!,
+  )!;
+  assert.equal(
+    acceptMove(r, phone, { seq: 9, keys: [{ slot: 0, x: 1, z: 0 }] }),
+    false,
+  );
+  rooms.delete(r.code);
+});

@@ -289,7 +289,7 @@ test("singles respects household team choice; teams lock at start; pairing expir
   const r = createRoom("singles", "easy");
   const host = r.sessions.get(r.host)!;
   const { pair } = issuePair(r, host, 1);
-  const team = checkPair(r, pair);
+  const { team } = checkPair(r, pair);
   assert.equal(team, 1);
   const a = joinController(r, "A", "right", undefined, team).player;
   assert.equal(a.team, 1);

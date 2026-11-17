@@ -25,7 +25,7 @@ Node 24+, TypeScript, native DOM/WebGL, HTTP POST input + persistent SSE snapsho
 1. Deploy this server at a real trusted HTTPS origin and set PUBLIC_ORIGIN (`npm run tunnel` is the no-account dev path). Do not generate localhost pairing QR codes or claim local loopback is remote hosting.
 2. Complete docs/DEVICE_TESTS.md on real iPhone Safari and Android Chrome. Tune compact-swing feel using real measurements.
 3. Measure wide-area/cellular latency and jitter with real phones (loopback load + four-phone/two-household HTTP tests exist).
-4. Remaining rule limits in docs/RULES.md, manual movement option, visual/contact effects and audio polish.
+4. Remaining rule limits in docs/RULES.md, phone-based movement option (keyboard movement exists), visual/contact effects and audio polish.
 
 ## Guardrails
 

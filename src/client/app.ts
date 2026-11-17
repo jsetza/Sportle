@@ -70,7 +70,7 @@ function display() {
     <div class="telemetry" id="telemetry"></div>
     <button id="start" class="cta">Start practice <span>→</span></button>
     <div class="row"><button id="pause" class="ghost">Pause</button><button id="resume" class="ghost">Resume</button></div>
-    <p class="fine">Characters move for you. Compact swings control timing, angle and power. Serves are assisted.</p>
+    <p class="fine">Move with <kbd>WASD</kbd> (player 1) and the <kbd>arrow keys</kbd> (player 2), or let characters position themselves. Compact phone swings control timing, angle and power. Serves are assisted.</p>
     <button id="new" class="link">← Leave court</button>
   </div>
   <div id="error" role="alert"></div>
@@ -78,7 +78,8 @@ function display() {
 <button class="paneltab" id="panelToggle" aria-controls="panel">Room</button>
 <div class="hud"><span class="courtlabel" id="courtLabel">VISUAL ARENA</span><div class="score" id="score">0 : 0</div></div>
 <div class="message" id="message" aria-live="polite">Pick a mode to start.</div>
-<dialog id="howto"><h2>How to play</h2><ol><li><b>Create a game</b> on this screen. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your hand and nickname.</li><li><b>Enable motion</b>, hold the phone like a paddle and set your neutral position.</li><li>Make one <b>gentle</b> swing and one <b>slightly quicker</b> swing to calibrate. Then tap Ready.</li><li>Your character moves for you. <b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li></ol><p class="fine">Serves are assisted. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
+<div class="keys" id="keys" aria-live="polite"></div>
+<dialog id="howto"><h2>How to play</h2><ol><li><b>Create a game</b> on this screen. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your hand and nickname.</li><li><b>Enable motion</b>, hold the phone like a paddle and set your neutral position.</li><li>Make one <b>gentle</b> swing and one <b>slightly quicker</b> swing to calibrate. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li></ol><p class="fine">Serves are assisted. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
     "here-practice": "Practice feeds and a live paddle mirror. Start here.",
     "here-solo": "One phone. Choose the bot level below.",
@@ -164,6 +165,7 @@ function display() {
     $("sound").textContent = scene.sound() ? "Sound on" : "Sound off";
   });
   let host = false,
+    displayId = "",
     pair = "",
     publicOrigin: string | null = null,
     pairExpires = 0;
@@ -210,6 +212,7 @@ function display() {
   net.onState = ({ state }: { state: Match }) => {
     current = state;
     scene.update(state);
+    keyHints(state);
     const playing = state.phase !== "lobby";
     if (playing !== document.body.classList.contains("playing")) {
       document.body.classList.toggle("playing", playing);
@@ -272,6 +275,90 @@ function display() {
       (state.mode === "practice" ? "Start practice" : "Start match") +
       " <span>→</span>";
   };
+  // ——— Keyboard movement: WASD moves this screen's player 1, arrow keys move player 2 ———
+  const KEYMAP: Record<string, [number, number, number]> = {
+    KeyW: [0, 0, -1],
+    KeyS: [0, 0, 1],
+    KeyA: [0, -1, 0],
+    KeyD: [0, 1, 0],
+    ArrowUp: [1, 0, -1],
+    ArrowDown: [1, 0, 1],
+    ArrowLeft: [1, -1, 0],
+    ArrowRight: [1, 1, 0],
+  };
+  const held = new Set<string>();
+  let moveSeq = 0,
+    lastSent = "";
+  const localPlayers = (state: Match) =>
+    state.players.filter(
+      (p) => !p.bot && (p.display === displayId || (host && p.display === "")),
+    );
+  const sendMove = (force = false) => {
+    if (
+      !net.credential ||
+      !current ||
+      current.phase === "lobby" ||
+      current.phase === "over"
+    )
+      return;
+    const keys = [0, 1].map((slot) => {
+      let x = 0,
+        z = 0;
+      for (const code of held) {
+        const k = KEYMAP[code];
+        if (k[0] === slot) {
+          x += k[1];
+          z += k[2];
+        }
+      }
+      return { slot, x, z };
+    });
+    const sig = JSON.stringify(keys);
+    if (!force && sig === lastSent) return;
+    lastSent = sig;
+    net.api("move", { seq: moveSeq++, keys }).catch(() => {});
+  };
+  const typing = (e: KeyboardEvent) => {
+    const t = e.target as HTMLElement;
+    return (
+      t.tagName === "SELECT" ||
+      (t.tagName === "INPUT" && (t as HTMLInputElement).type !== "radio")
+    );
+  };
+  addEventListener("keydown", (e) => {
+    if (
+      !KEYMAP[e.code] ||
+      typing(e) ||
+      !document.body.classList.contains("playing")
+    )
+      return;
+    e.preventDefault();
+    held.add(e.code);
+    sendMove();
+  });
+  addEventListener("keyup", (e) => {
+    if (!KEYMAP[e.code]) return;
+    held.delete(e.code);
+    sendMove();
+  });
+  addEventListener("blur", () => {
+    held.clear();
+    sendMove();
+  });
+  // While keys are held, refresh so the server keeps honouring them (it expires intent after 350 ms).
+  setInterval(() => {
+    if (held.size) sendMove(true);
+  }, 150);
+  const keyHints = (state: Match) => {
+    const local = localPlayers(state);
+    $("keys").innerHTML = local
+      .slice(0, 2)
+      .map(
+        (p, i) =>
+          `<span class="team${p.team}"><kbd>${i ? "← ↑ ↓ →" : "W A S D"}</kbd>${escape(p.name)}${p.manual ? "" : " · auto until you move"}</span>`,
+      )
+      .join("");
+  };
   action("create", async () => {
     const mode = document.querySelector<HTMLInputElement>(
       "input[name=mode]:checked",
@@ -288,6 +375,7 @@ function display() {
     pairExpires = r.pairExpires;
     publicOrigin = r.publicOrigin;
     host = true;
+    displayId = "host";
     sessionStorage.setItem(
       "visual-host",
       JSON.stringify({
@@ -308,6 +396,7 @@ function display() {
     pairExpires = r.pairExpires;
     publicOrigin = r.publicOrigin;
     host = false;
+    displayId = r.displayId;
     entered();
   });
   $("players").addEventListener("click", (e) => {
@@ -354,6 +443,7 @@ function display() {
       pairExpires = s.pairExpires;
       publicOrigin = s.publicOrigin;
       host = true;
+      displayId = "host";
       entered();
     } catch {
       sessionStorage.removeItem("visual-host");

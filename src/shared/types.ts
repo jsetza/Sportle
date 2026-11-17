@@ -38,6 +38,15 @@ export type Player = {
   momentumAt: number;
   reactionAt: number;
   target: Vec;
+  /** Keyboard movement intent from this player's display (-1..1, screen-relative). */
+  moveX: number;
+  moveZ: number;
+  /** Sim time until which the last movement message is honoured (keys held = refreshed). */
+  moveUntil: number;
+  /** True once the player has used keyboard movement this match; auto-positioning then stops. */
+  manual: boolean;
+  /** Public id of the display that paired this phone ("" = unknown / manual code). */
+  display: string;
 };
 export type Match = {
   mode: Mode;
