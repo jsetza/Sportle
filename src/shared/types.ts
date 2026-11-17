@@ -1,5 +1,7 @@
 export type Mode = "practice" | "solo" | "singles" | "coop" | "doubles";
 export type Difficulty = "easy" | "medium" | "hard";
+export type MoveStyle = "auto" | "keys" | "phone";
+export const MOVE_STYLES: MoveStyle[] = ["auto", "keys", "phone"];
 export type Vec = { x: number; y: number; z: number };
 export type Input = {
   seq: number;
@@ -12,6 +14,11 @@ export type Input = {
   swing: boolean;
   sensors: boolean;
   calibrated: boolean;
+  /** Movement style chosen on the phone: 0 automatic, 1 keyboard on the display, 2 phone thumb pad. */
+  ctl?: number;
+  /** Thumb-pad movement, player-relative: mx = right(+)/left(-), mz = forward toward the net (+). */
+  mx?: number;
+  mz?: number;
 };
 export type Player = {
   id: string;
@@ -47,6 +54,8 @@ export type Player = {
   manual: boolean;
   /** Public id of the display that paired this phone ("" = unknown / manual code). */
   display: string;
+  /** How this player moves: automatic positioning, display keyboard, or the phone's thumb pad. */
+  moveStyle: MoveStyle;
 };
 export type Match = {
   mode: Mode;

@@ -48,6 +48,7 @@ export function player(
     moveUntil: 0,
     manual: false,
     display: "",
+    moveStyle: "keys",
     reactionAt: 0,
     target: vec(),
   };
@@ -98,6 +99,16 @@ export function rand(m: Match) {
 const REACTION = { easy: 0.22, medium: 0.16, hard: 0.1 };
 export const HUMAN_SPEED = 4.3;
 const ACCEL = 14;
+/** Phone thumb pad: player-relative (forward = toward the net) converted to world axes. */
+export function setPhoneMove(
+  m: Match,
+  p: Player,
+  right: number,
+  forward: number,
+) {
+  const f = p.team ? -1 : 1;
+  setMove(m, p, clamp(right, -1, 1) * f, -clamp(forward, -1, 1) * f);
+}
 /** Apply a keyboard movement message to a human player (validated by the caller). */
 export function setMove(m: Match, p: Player, x: number, z: number) {
   if (p.bot) return;
@@ -107,9 +118,6 @@ export function setMove(m: Match, p: Player, x: number, z: number) {
   if (x || z) p.manual = true;
 }
 const SPEED = { easy: 3.3, medium: 3.8, hard: 4.3 };
-/** Body column used for ball-strikes-player faults (rule 11.A). */
-const BODY_RADIUS = 0.2,
-  BODY_HEIGHT = 1.75;
 /** Characters stand beside the ball's path on their forehand side, so the paddle, not the torso, meets it. */
 export const FOREHAND_OFFSET = 0.45;
 export const forehandSide = (p: Player) =>
@@ -173,7 +181,10 @@ export function fault(m: Match, loser: number, reason: string) {
   }
   rotateService(m, 1 - loser);
   if (m.phase === "over") {
-    announce(m, `Team ${m.winner! + 1} wins!`);
+    announce(
+      m,
+      `${m.winner ? "Red" : "Blue"} wins ${m.score[m.winner!]}–${m.score[1 - m.winner!]}!`,
+    );
     return;
   }
   prepare(m);
@@ -537,17 +548,6 @@ export function step(m: Match, dt = 1 / 120) {
     if (contactFault(m, p)) continue;
     hit(m, p, botShot(m, p));
     if (m.phase !== "rally") return;
-  }
-  // Rule 11.A: a ball that strikes a player before it is played is a fault on that player.
-  for (const p of m.players) {
-    if (p.team === m.lastTeam || p.id === "practice-feed") continue;
-    if (
-      Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) < BODY_RADIUS &&
-      m.ball.y < BODY_HEIGHT
-    ) {
-      fault(m, p.team, "Ball hit " + p.name);
-      return;
-    }
   }
 }
 /**

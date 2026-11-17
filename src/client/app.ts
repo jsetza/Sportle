@@ -2,8 +2,10 @@ import { Connection } from "./net.ts";
 import { MotionFilter, wrap } from "../shared/motion.ts";
 import { slots } from "../shared/types.ts";
 import type { Match, Input } from "../shared/types.ts";
-import { Scene } from "./scene.ts";
+import { Scene, VIEW_LABELS } from "./scene.ts";
+import type { ViewMode } from "./scene.ts";
 import { drawQR } from "./qr.ts";
+import { Music } from "./music.ts";
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -40,7 +42,7 @@ function display() {
   ) =>
     `<input type="radio" name="mode" id="m-${group}-${mode}" value="${mode}" data-group="${group}" ${checked ? "checked" : ""}><label class="item" for="m-${group}-${mode}"><span class="ball"></span><b>${name}</b><small>${hint}</small></label>`;
   app.innerHTML = `<canvas id="court" aria-label="3D pickleball arena"></canvas><div class="beams" aria-hidden="true"></div>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music">Music on</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="visual"><span>VISUAL</span><i></i></div>
   <p class="tagline">Pickleball. <b>Your phone is the paddle.</b></p>
@@ -66,6 +68,7 @@ function display() {
   <div id="lobby" class="hidden">
     <div class="eyebrow" id="connection">Connecting</div>
     <div id="pairing" class="pairing"><div class="qrtile"><canvas id="qr" class="qr"></canvas></div><div><small>Room code</small><div class="roomcode" id="roomcode"></div><p class="fine" id="pairHint">Scan with your phone camera.</p><div id="teamPick" class="hidden"><label for="pairTeam">Phones paired here join</label><select id="pairTeam"><option value="">Any open team</option><option value="0">Team blue</option><option value="1">Team red</option></select></div><button class="link" id="refreshPair">Refresh pairing link</button></div></div>
+    <div class="difficulty viewpick" role="radiogroup" aria-label="Camera"><span>Camera · <kbd>V</kbd></span>${(["third", "first", "broadcast"] as const).map((v) => `<input type="radio" name="view" id="v-${v}" value="${v}"><label for="v-${v}">${{ third: "3rd person", first: "1st person", broadcast: "Broadcast" }[v]}</label>`).join("")}</div>
     <div id="players"></div>
     <div class="telemetry" id="telemetry"></div>
     <button id="start" class="cta">Start practice <span>→</span></button>
@@ -79,6 +82,7 @@ function display() {
 <div class="hud"><span class="courtlabel" id="courtLabel">VISUAL ARENA</span><div class="score" id="score">0 : 0</div></div>
 <div class="message" id="message" aria-live="polite">Pick a mode to start.</div>
 <div class="keys" id="keys" aria-live="polite"></div>
+<div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small id="goMode">MATCH</small><h2 id="goTitle">Blue wins</h2><div class="goscore" id="goScore">11 : 7</div><p id="goNames"></p><button class="cta" id="again">Play again <span>↻</span></button><button class="link" id="goMenu">Change mode</button><p class="fine" id="goWait"></p></div>
 <dialog id="howto"><h2>How to play</h2><ol><li><b>Create a game</b> on this screen. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your hand and nickname.</li><li><b>Enable motion</b>, hold the phone like a paddle and set your neutral position.</li><li>Make one <b>gentle</b> swing and one <b>slightly quicker</b> swing to calibrate. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li></ol><p class="fine">Serves are assisted. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
     "here-practice": "Practice feeds and a live paddle mirror. Start here.",
@@ -213,6 +217,7 @@ function display() {
     current = state;
     scene.update(state);
     keyHints(state);
+    gameOver(state);
     const playing = state.phase !== "lobby";
     if (playing !== document.body.classList.contains("playing")) {
       document.body.classList.toggle("playing", playing);
@@ -311,7 +316,13 @@ function display() {
           z += k[2];
         }
       }
-      return { slot, x, z };
+      // Keys are camera-relative: when the camera looks from the far side (following a
+      // red-team player in a player view), "up" on screen is +z in the world.
+      const flip =
+        scene.viewMode !== "broadcast" &&
+        current &&
+        localPlayers(current)[0]?.team === 1;
+      return flip ? { slot, x: -x || 0, z: -z || 0 } : { slot, x, z };
     });
     const sig = JSON.stringify(keys);
     if (!force && sig === lastSent) return;
@@ -349,14 +360,129 @@ function display() {
   setInterval(() => {
     if (held.size) sendMove(true);
   }, 150);
+  // ——— Camera choice: third person (default), first person, broadcast ———
+  const VIEWS: ViewMode[] = ["third", "first", "broadcast"];
+  let view: ViewMode = "third";
+  try {
+    const saved = localStorage.getItem("visual-view") as ViewMode | null;
+    if (saved && VIEWS.includes(saved)) view = saved;
+  } catch {
+    /* storage unavailable: default view */
+  }
+  const setView = (v: ViewMode) => {
+    view = v;
+    scene.viewMode = v;
+    $("view").textContent = "View: " + VIEW_LABELS[v];
+    const r = document.getElementById("v-" + v) as HTMLInputElement | null;
+    if (r) r.checked = true;
+    try {
+      localStorage.setItem("visual-view", v);
+    } catch {
+      /* ignore */
+    }
+    held.clear();
+    sendMove(true);
+  };
+  $("view").onclick = () => setView(VIEWS[(VIEWS.indexOf(view) + 1) % 3]);
+  document
+    .querySelectorAll<HTMLInputElement>("input[name=view]")
+    .forEach((r) =>
+      r.addEventListener("change", () => setView(r.value as ViewMode)),
+    );
+  addEventListener("keydown", (e) => {
+    if (e.code === "KeyV" && !typing(e) && !e.metaKey && !e.ctrlKey)
+      setView(VIEWS[(VIEWS.indexOf(view) + 1) % 3]);
+  });
+  setView(view);
+  // ——— Background music: on by default, starts on the first click/key (browser rule) ———
+  const music = new Music();
+  let musicOn = true;
+  try {
+    musicOn = localStorage.getItem("visual-music") !== "off";
+  } catch {
+    /* default on */
+  }
+  const syncMusic = () => {
+    $("music").textContent = musicOn ? "Music on" : "Music off";
+    if (musicOn && userActed) music.start();
+    else music.stop();
+  };
+  let userActed = false;
+  const firstGesture = () => {
+    if (userActed) return;
+    userActed = true;
+    syncMusic();
+  };
+  addEventListener("pointerdown", firstGesture);
+  addEventListener("keydown", firstGesture);
+  $("music").onclick = () => {
+    musicOn = !musicOn;
+    try {
+      localStorage.setItem("visual-music", musicOn ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    userActed = true;
+    syncMusic();
+  };
+  syncMusic();
+  // ——— Game over: result card with Play again (host) ———
+  const gameOver = (state: Match) => {
+    const over = state.phase === "over" && state.winner !== null;
+    $("gameover").classList.toggle("hidden", !over);
+    music.intensity =
+      state.phase === "rally" || state.phase === "serve" ? 1 : 0;
+    if (!over) return;
+    const w = state.winner!;
+    $("goTitle").textContent = (w ? "Red" : "Blue") + " wins!";
+    $("goTitle").className = "team" + w;
+    $("goScore").textContent = state.score[w] + " : " + state.score[1 - w];
+    $("goNames").textContent = state.players
+      .filter((p) => p.team === w)
+      .map((p) => p.name)
+      .join(" & ");
+    $("goMode").textContent =
+      (
+        {
+          solo: "SOLO",
+          singles: "1 V 1",
+          coop: "TEAM UP",
+          doubles: "2 V 2",
+          practice: "PRACTICE",
+        } as Record<string, string>
+      )[state.mode] + " · FINAL";
+    $("again").classList.toggle("hidden", !host);
+    $("goWait").textContent = host
+      ? "Same players, same mode, fresh score."
+      : "Waiting for the host to start a rematch…";
+  };
+  action("again", () => net.api("rematch", {}));
+  $("goMenu").onclick = () => {
+    sessionStorage.removeItem("visual-host");
+    location.reload();
+  };
   const keyHints = (state: Match) => {
+    const follow = localPlayers(state)[0];
+    scene.follow = follow ? follow.id : null;
     const local = localPlayers(state);
+    const keyed = local.filter((p) => p.moveStyle === "keys").slice(0, 2);
     $("keys").innerHTML = local
-      .slice(0, 2)
-      .map(
-        (p, i) =>
-          `<span class="team${p.team}"><kbd>${i ? "← ↑ ↓ →" : "W A S D"}</kbd>${escape(p.name)}${p.manual ? "" : " · auto until you move"}</span>`,
-      )
+      .map((p) => {
+        const slot = keyed.indexOf(p);
+        const how =
+          p.moveStyle === "phone"
+            ? "<kbd>📱 pad</kbd>"
+            : p.moveStyle === "auto" || slot < 0
+              ? "<kbd>AUTO</kbd>"
+              : `<kbd>${slot ? "← ↑ ↓ →" : "W A S D"}</kbd>`;
+        const note =
+          p.moveStyle !== "auto" && slot !== -1 && !p.manual
+            ? " · auto until you move"
+            : p.moveStyle === "phone" && !p.manual
+              ? " · auto until you use the pad"
+              : "";
+        return `<span class="team${p.team}">${how}${escape(p.name)}${note}</span>`;
+      })
       .join("");
   };
   action("create", async () => {
@@ -451,7 +577,7 @@ function display() {
   }
 }
 function phone() {
-  app.innerHTML = `<div class="phone"><div class="row"><div class="logo">Visual</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone securely. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div class="card"><div class="number" id="stage">02 / ENABLE MOTION</div><h2 id="instruction">Let’s find your feel.</h2><p id="guidance">Allow motion sensors, then hold your phone in a comfortable neutral paddle position.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary" id="calibrate" disabled>Set neutral position</button><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Gentle motion. No full-force swings needed.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="telemetry"><span>Sensor availability<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Swing direction<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><div class="row"><button class="full secondary" id="phonePause">Pause</button><button class="full secondary" id="reconnect">Reconnect</button></div><p class="fine" id="matchStatus">Your display will start the game.</p></div></div><div id="error" role="alert"></div><p class="screen-note">Keep this page visible during play.<br>Sensor motion estimates intent, not physical position.</p></div>`;
+  app.innerHTML = `<div class="phone"><div class="row"><div class="logo">Visual</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone securely. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div class="card"><div class="number" id="stage">02 / ENABLE MOTION</div><h2 id="instruction">Let’s find your feel.</h2><p id="guidance">Allow motion sensors, then hold your phone in a comfortable neutral paddle position.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary" id="calibrate" disabled>Set neutral position</button><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Gentle motion. No full-force swings needed.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div><p class="fine">Thumb up = run to the net · down = back · sideways = slide</p></div><div class="telemetry"><span>Sensor availability<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Swing direction<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><div class="row"><button class="full secondary" id="phonePause">Pause</button><button class="full secondary" id="reconnect">Reconnect</button></div><p class="fine" id="matchStatus">Your display will start the game.</p></div></div><div id="error" role="alert"></div><p class="screen-note">Keep this page visible during play.<br>Sensor motion estimates intent, not physical position.</p></div>`;
   $<HTMLInputElement>("code").value = params.get("room") || "";
   const filter = new MotionFilter();
   let orientationAt = 0,
@@ -605,6 +731,67 @@ function phone() {
   net.onStatus = (s) => {
     $("connection").textContent = s;
   };
+  // ——— Movement style + thumb pad (phone-only movement) ———
+  const moveStyle = () =>
+    Number(
+      document.querySelector<HTMLInputElement>("input[name=ctl]:checked")
+        ?.value ?? 2,
+    );
+  try {
+    const saved = localStorage.getItem("visual-ctl");
+    if (saved !== null)
+      (
+        document.getElementById("ctl-" + saved) as HTMLInputElement | null
+      )?.click();
+  } catch {
+    /* default: phone thumb pad */
+  }
+  document.querySelectorAll<HTMLInputElement>("input[name=ctl]").forEach((r) =>
+    r.addEventListener("change", () => {
+      try {
+        localStorage.setItem("visual-ctl", r.value);
+      } catch {
+        /* ignore */
+      }
+      if (current) net.onState({ state: current });
+    }),
+  );
+  const padVec = { x: 0, z: 0 };
+  const ring = document.querySelector<HTMLElement>(".padring")!;
+  const knob = $("knob");
+  let padTouch: number | null = null;
+  const padMove = (cx: number, cy: number) => {
+    const r = ring.getBoundingClientRect(),
+      rad = r.width / 2;
+    let dx = (cx - r.left - rad) / rad,
+      dy = (cy - r.top - rad) / rad;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) {
+      dx /= len;
+      dy /= len;
+    }
+    // Small dead zone so a resting thumb does not creep.
+    const dead = Math.hypot(dx, dy) < 0.15;
+    padVec.x = dead ? 0 : Math.round(dx * 100) / 100;
+    padVec.z = dead ? 0 : Math.round(-dy * 100) / 100;
+    knob.style.transform = `translate(${dx * 38}px, ${dy * 38}px)`;
+  };
+  const padEnd = () => {
+    padTouch = null;
+    padVec.x = padVec.z = 0;
+    knob.style.transform = "";
+  };
+  ring.addEventListener("pointerdown", (e) => {
+    padTouch = e.pointerId;
+    ring.setPointerCapture(e.pointerId);
+    padMove(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  ring.addEventListener("pointermove", (e) => {
+    if (e.pointerId === padTouch) padMove(e.clientX, e.clientY);
+  });
+  ring.addEventListener("pointerup", padEnd);
+  ring.addEventListener("pointercancel", padEnd);
   net.onState = ({ state }: { state: Match }) => {
     current = state;
     const p = state.players.find((p) => p.id === playerId);
@@ -613,7 +800,11 @@ function phone() {
       ? "Ready ✓ · tap to unready"
       : "Ready to play";
     $("matchStatus").textContent =
-      (state.paused ? "Paused · " : "") + state.message;
+      state.phase === "over"
+        ? "Game over · " + state.message + " The host can tap Play again."
+        : (state.paused ? "Paused · " : "") + state.message;
+    const inPlay = state.phase === "serve" || state.phase === "rally";
+    $("pad").classList.toggle("hidden", !(inPlay && moveStyle() === 2));
   };
   setInterval(() => {
     const live = sensorLive();
@@ -680,6 +871,9 @@ function phone() {
       swing: swing && live,
       sensors: live,
       calibrated: filter.calibrated && live,
+      ctl: moveStyle(),
+      mx: padVec.x,
+      mz: padVec.z,
     };
     try {
       await net.api("input", input);

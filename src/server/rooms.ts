@@ -1,5 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { match, player, start, queueSwing, setMove } from "./engine.ts";
+import {
+  match,
+  player,
+  start,
+  queueSwing,
+  setMove,
+  setPhoneMove,
+} from "./engine.ts";
+import { MOVE_STYLES } from "../shared/types.ts";
 import { slots, teamFor } from "../shared/types.ts";
 import type { Mode, Difficulty, Match, Input } from "../shared/types.ts";
 export const token = () => randomBytes(24).toString("base64url");
@@ -212,6 +220,16 @@ export function acceptInput(
     typeof a.calibrated !== "boolean"
   )
     return false;
+  for (const k of ["mx", "mz"] as const)
+    if (
+      a[k] !== undefined &&
+      (typeof a[k] !== "number" ||
+        !Number.isFinite(a[k]) ||
+        Math.abs(a[k]!) > 1)
+    )
+      return false;
+  if (a.ctl !== undefined && a.ctl !== 0 && a.ctl !== 1 && a.ctl !== 2)
+    return false;
   if (now - s.lastInput < 15) return false;
   s.lastSeq = a.seq;
   s.lastInput = now;
@@ -228,6 +246,12 @@ export function acceptInput(
       r.state.message = p.name + " needs live sensors and calibration";
     }
   }
+  if (a.ctl !== undefined) {
+    p.moveStyle = MOVE_STYLES[a.ctl];
+    if (p.moveStyle === "auto") p.manual = false;
+  }
+  if (p.moveStyle === "phone" && r.state.phase !== "lobby" && !r.state.paused)
+    setPhoneMove(r.state, p, a.mx ?? 0, a.mz ?? 0);
   if (a.swing && a.sensors && a.calibrated) queueSwing(r.state, p, a);
   return true;
 }
@@ -288,8 +312,23 @@ export function acceptMove(
   r.updated = Date.now();
   if (r.state.paused || r.state.phase === "lobby") return true;
   for (const k of a.keys as { slot: number; x: number; z: number }[]) {
-    const p = local[k.slot];
+    const p = local.filter((q) => q.moveStyle === "keys")[k.slot];
     if (p) setMove(r.state, p, k.x, k.z);
   }
   return true;
+}
+
+/** Host action after a finished match: same players, same mode, fresh score. */
+export function rematch(r: Room) {
+  const m = r.state;
+  if (m.phase !== "over") throw Error("The match is still in progress");
+  const humans = m.players.filter((p) => !p.bot);
+  if (humans.some((p) => !p.connected || Date.now() - p.lastSeen > 2500))
+    throw Error("Every phone must be connected to play again");
+  for (const p of m.players) {
+    p.lastHit = -10;
+    p.volleyMomentum = false;
+    if (p.moveStyle !== "keys" && p.moveStyle !== "phone") p.manual = false;
+  }
+  start(m);
 }

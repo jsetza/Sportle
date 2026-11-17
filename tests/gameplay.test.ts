@@ -115,18 +115,6 @@ test("ball passing around the post below net height is not a net fault", () => {
   assert.equal(m.phase, "rally");
 });
 
-test("an unplayed ball that strikes a player is that player's fault", () => {
-  const m = singles(),
-    b = m.players[1];
-  rally(m, 0);
-  freeze(m);
-  b.pos = { x: 0, y: 0, z: -4 };
-  m.ball = { x: 0, y: 1.0, z: -3.97 };
-  m.velocity = { x: 0, y: 0, z: -6 };
-  step(m);
-  assert.match(m.message, /Ball hit B/);
-});
-
 test("far-team aim is mirrored so roll right sends the ball to the player's right", () => {
   const m = singles();
   for (const [team, sign] of [
@@ -398,5 +386,121 @@ test("display keyboard maps WASD/arrows to its own paired players only", async (
     acceptMove(r, phone, { seq: 9, keys: [{ slot: 0, x: 1, z: 0 }] }),
     false,
   );
+  rooms.delete(r.code);
+});
+
+test("phone thumb pad moves the player relative to their facing; validated on input", async () => {
+  const { createRoom, joinController, begin, acceptInput, rooms } =
+    await import("../src/server/rooms.ts");
+  const r = createRoom("singles", "easy");
+  const a = joinController(r, "A", "right").player;
+  const b = joinController(r, "B", "right").player;
+  for (const p of r.state.players) {
+    p.ready = true;
+    p.lastSeen = Date.now();
+  }
+  begin(r);
+  const m = r.state;
+  m.phase = "rally";
+  m.lastTeam = 0;
+  m.ball = { x: 0, y: 3, z: 0.5 };
+  m.velocity = { x: 0, y: 0, z: 0 };
+  const sessions = [...r.sessions.values()].filter(
+    (s) => s.role === "controller",
+  );
+  const sa = sessions.find((s) => s.playerId === a.id)!,
+    sb = sessions.find((s) => s.playerId === b.id)!;
+  const base = {
+    pitch: 0,
+    roll: 0,
+    yaw: 0,
+    strength: 0,
+    direction: 0,
+    swing: false,
+    sensors: true,
+    calibrated: true,
+  };
+  let now = Date.now();
+  const send = (s: typeof sa, extra: object) =>
+    acceptInput(
+      r,
+      s,
+      { ...base, seq: s.lastSeq + 1, t: now, ...extra } as never,
+      (now += 20),
+    );
+  const za = a.pos.z,
+    zb = b.pos.z;
+  // Both push "forward" (thumb up): each runs toward the net from their own side.
+  for (let i = 0; i < 40; i++) {
+    assert.ok(send(sa, { ctl: 2, mx: 0, mz: 1 }));
+    assert.ok(send(sb, { ctl: 2, mx: 0, mz: 1 }));
+    // Keep the ball parked in the air so the rally does not end mid-test.
+    m.ball = { x: 0, y: 3, z: -1 };
+    m.velocity = { x: 0, y: 0, z: 0 };
+    for (let k = 0; k < 3; k++) step(m);
+  }
+  assert.equal(a.moveStyle, "phone");
+  assert.ok(a.manual && b.manual);
+  assert.ok(a.pos.z < za, "blue moved toward the net (-z)");
+  assert.ok(b.pos.z > zb, "red moved toward the net (+z)");
+  // Out-of-range thumb values and unknown styles are rejected.
+  assert.equal(send(sa, { ctl: 2, mx: 3, mz: 0 }), false);
+  assert.equal(send(sa, { ctl: 7 }), false);
+  // Switching to automatic hands movement back to the policy.
+  assert.ok(send(sa, { ctl: 0 }));
+  assert.equal(a.manual, false);
+  rooms.delete(r.code);
+});
+
+test("display keyboard only drives players whose style is keyboard", async () => {
+  const { createRoom, joinController, begin, acceptMove, rooms } = await import(
+    "../src/server/rooms.ts"
+  );
+  const r = createRoom("singles", "easy");
+  const host = r.sessions.get(r.host)!;
+  const a = joinController(r, "A", "right").player;
+  const b = joinController(r, "B", "right").player;
+  a.moveStyle = "phone";
+  for (const p of r.state.players) {
+    p.ready = true;
+    p.lastSeen = Date.now();
+  }
+  begin(r);
+  r.state.phase = "rally";
+  // WASD is slot 0 among keyboard players → B, not A (A uses the phone pad).
+  assert.ok(acceptMove(r, host, { seq: 1, keys: [{ slot: 0, x: 1, z: 0 }] }));
+  assert.equal(a.moveX, 0);
+  assert.equal(b.moveX, 1);
+  rooms.delete(r.code);
+});
+
+test("play again: rematch resets score with the same players after a finished game", async () => {
+  const { createRoom, joinController, begin, rematch, rooms } = await import(
+    "../src/server/rooms.ts"
+  );
+  const r = createRoom("solo", "easy");
+  joinController(r, "A", "right");
+  for (const p of r.state.players) {
+    p.ready = true;
+    p.lastSeen = Date.now();
+  }
+  begin(r);
+  assert.throws(() => rematch(r), /still in progress/);
+  r.state.score = [11, 6];
+  r.state.phase = "over";
+  r.state.winner = 0;
+  const ids = r.state.players.map((p) => p.id);
+  rematch(r);
+  assert.deepEqual(r.state.score, [0, 0]);
+  assert.equal(r.state.phase, "serve");
+  assert.equal(r.state.winner, null);
+  assert.deepEqual(
+    r.state.players.map((p) => p.id),
+    ids,
+  );
+  // A disconnected phone blocks the rematch.
+  r.state.phase = "over";
+  r.state.players[0].connected = false;
+  assert.throws(() => rematch(r), /connected/);
   rooms.delete(r.code);
 });

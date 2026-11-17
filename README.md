@@ -2,7 +2,7 @@
 
 An experimental browser-based 3D pickleball game. A computer renders the court; phones provide paddle orientation and swing intent. No phone app and no runtime packages are required.
 
-**Status:** Working local prototype with a real authoritative server, real controller connections, practice, singles, and doubles mode paths. TypeScript/build and 36 automated tests pass, including a real-HTTP/SSE four-phone, two-household doubles scenario. A Chromium smoke test connects a synthetic phone, calibrates, starts practice, and hits distinct 37% and 65% shots. `npm run tunnel` provides a no-account public HTTPS URL for phone testing. **No physical iPhone/Android testing or permanent public deployment has been completed.** Do not interpret browser sensor simulation as device validation.
+**Status:** Working local prototype with a real authoritative server, real controller connections, practice, singles, and doubles mode paths. TypeScript/build and 42 automated tests pass, including a real-HTTP/SSE four-phone, two-household doubles scenario. A Chromium smoke test connects a synthetic phone, calibrates, starts practice, and hits distinct 37% and 65% shots. `npm run tunnel` provides a no-account public HTTPS URL for phone testing. **No physical iPhone/Android testing or permanent public deployment has been completed.** Do not interpret browser sensor simulation as device validation.
 
 ## Run
 
@@ -66,6 +66,14 @@ Phones must stay visible. Backgrounding, lost sensor data, or a disconnected pho
 - Gentle/stronger swings change shot speed and depth. Face angle changes placement; upward intent produces roll/lob behavior. Downward intent only produces a smash above 1.8 m. Very soft swings are dinks into the opponent's kitchen.
 - A 120 ms server-side swing window still requires valid ball height and reach. It cannot teleport the paddle to the ball. Within that window, contact happens where the ball is closest to the paddle side of the body.
 - **Contact quality** (timing/position of the ball relative to the forehand side, and height) decides how true a shot flies. Off-centre contact spreads the shot wide/long and flattens its arc into the net; hard swings magnify the error. This is what makes compact, well-timed swings the reliable choice. The banner shows `sweet spot` / `off-centre`.
+- **Movement styles (each player picks on their phone under “How you move”):**
+  - **Phone · thumb pad:** a joystick on the phone screen, relative to your facing: thumb up runs toward the net, down backs off, sideways slides. The phone's tilt still aims the paddle, which is why movement is on the thumb instead of tilt.
+  - **Keyboard + phone:** WASD / arrow keys on the display (below).
+  - **Auto:** the character positions itself.
+    In every style, a player stays on auto-positioning until they first move, and the server applies the same speed limit, own-side clamp and kitchen/momentum rules.
+- **Camera views:** Third person (chase camera behind this screen's player 1, default), First person (your eyes, with your paddle in the lower right mirroring the phone), or Broadcast. Pick from **View** in the top bar, the lobby, or press **V**. In player views, movement keys are camera-relative.
+- **Play again:** when a match ends, the display shows the result and the host's **Play again** starts a rematch with the same players and mode (every phone must still be connected). **Change mode** returns to the menu.
+- **Music:** original background music synthesised live in the browser (Web Audio, no audio files), louder drums during play. It starts on your first click/key; toggle with **Music** in the top bar (remembered).
 - **Keyboard movement:** on each display, <kbd>W A S D</kbd> moves that screen's player 1 and the <kbd>arrow keys</kbd> move player 2 (screen-relative: up = away from the camera). "Player 1/2" means the phones paired through that screen's QR, in join order; the host screen also controls phones that joined by typing the room code. The phone remains the paddle. A player switches to manual movement on their first key press and keeps it for the match; the server applies the same speed limit (4.3 m/s), keeps players on their own side, and still enforces kitchen volley and momentum faults. With four phones on one screen, players 3–4 stay on auto-positioning.
 - Without keys, characters auto-position with bounded speed and reaction updates, standing beside the ball's path on their forehand side. They may enter the kitchen to play a ball that bounces there, then recover outside. Doubles chooses one covering player. Movement is isolated in `movementTarget()` for a later manual-movement implementation.
 - 120 Hz physics; gravity, drag, rebound, simple topspin; swept net-plane collision; interpolated display snapshots around 30 Hz. This is intentionally a lightweight sports simulation, not a calibrated equipment simulator.
@@ -79,7 +87,7 @@ Baseline: **2026 USA Pickleball Official Rulebook**, consulted November 17, 2026
 
 Court dimensions, diagonal service, two-bounce restrictions, kitchen volleys/momentum, line calls, traditional side-out scoring, singles/doubles service rotation, and 11 win-by-two are modeled. Opening doubles score is 0–0–2.
 
-**Serving assist:** the server generates the player's legal position and a low underhand serve after the score banner. The phone does not measure feet, waist, release legality, or paddle/wrist relationship. Serve timing and trajectory are automated. Players may enter the kitchen to play bounced balls; volleys inside it, volleys before both feet are re-established outside, and volley momentum carrying into it are faults. Net-post strikes and balls striking a player are faults. See [rules and remaining limits](docs/RULES.md). This is not a tournament-certified or exhaustive rulebook implementation.
+**Serving assist:** the server generates the player's legal position and a low underhand serve after the score banner. The phone does not measure feet, waist, release legality, or paddle/wrist relationship. Serve timing and trajectory are automated. Players may enter the kitchen to play bounced balls; volleys inside it, volleys before both feet are re-established outside, and volley momentum carrying into it are faults. Net-post strikes are faults. A ball striking a player is deliberately _not_ a fault in this game (see docs/RULES.md). See [rules and remaining limits](docs/RULES.md). This is not a tournament-certified or exhaustive rulebook implementation.
 
 ## Architecture
 

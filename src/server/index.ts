@@ -12,6 +12,7 @@ import {
   checkPair,
   setTeam,
   acceptMove,
+  rematch,
   begin,
   acceptInput,
   housekeeping,
@@ -238,6 +239,10 @@ const server = createServer(async (req, res) => {
         return json(res, { error: "Host action only" }, 403);
       if (path === "/api/team") {
         setTeam(r, String(a.playerId || ""), Number(a.team));
+        return json(res, { ok: true });
+      }
+      if (path === "/api/rematch") {
+        rematch(r);
         return json(res, { ok: true });
       }
       if (path === "/api/start") {

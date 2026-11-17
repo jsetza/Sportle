@@ -97,6 +97,12 @@ const GLYPHS: Record<string, string[]> = {
   ">": ["0000", "1100", "0110", "0011", "0110", "1100", "0000"],
 };
 type View = { eye: V; target: V; fov: number; shift: number };
+export type ViewMode = "third" | "first" | "broadcast";
+export const VIEW_LABELS: Record<ViewMode, string> = {
+  third: "Third person",
+  first: "First person",
+  broadcast: "Broadcast",
+};
 const VERTEX = `attribute vec3 position; attribute vec3 color; uniform mat4 camera;
 varying vec3 vColor; varying vec3 vWorld; varying float vDepth;
 void main(){vColor=color;vWorld=position;gl_Position=camera*vec4(position,1.0);vDepth=gl_Position.w;}`;
@@ -138,6 +144,11 @@ export class Scene {
   };
   /** Set by the UI: is the left panel covering part of the screen? */
   panelOpen = true;
+  /** Camera choice during play. Player views follow `follow` (this screen's player 1). */
+  viewMode: ViewMode = "third";
+  follow: string | null = null;
+  followPos: Vec | null = null;
+  followTeam = 0;
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const gl = canvas.getContext("webgl", { antialias: true, alpha: false });
@@ -561,8 +572,11 @@ export class Scene {
       server: boolean;
       owner: boolean;
       label?: number;
+      /** First-person view of this player: draw only the paddle, out in front of the eyes. */
+      firstPerson?: boolean;
     },
   ) {
+    if (opts.firstPerson) return this.fpPaddle(p, pos, opts);
     const col = teamColor(p.team),
       facing = p.team ? -1 : 1,
       hand = (p.hand === "left" ? -1 : 1) * facing,
@@ -736,8 +750,54 @@ export class Scene {
     }
   }
   // ——— camera ———
+  /** The paddle as seen from your own eyes: lower right, mirroring the phone's angle. */
+  fpPaddle(
+    p: Pick<Player, "team" | "hand">,
+    pos: Vec,
+    o: { swing: number; pitch: number; roll: number; yaw: number },
+  ) {
+    const facing = p.team ? -1 : 1,
+      hand = (p.hand === "left" ? -1 : 1) * facing,
+      col = teamColor(p.team);
+    const px = pos.x + hand * (0.44 - o.swing * 0.12),
+      py = 0.98 + o.swing * 0.25,
+      pz = pos.z - (0.85 + o.swing * 0.3) * facing;
+    const rx = facing * ((o.pitch * Math.PI) / 180 + o.swing * 0.9),
+      rz = (-o.roll * facing * Math.PI) / 180,
+      ry = (o.yaw * Math.PI) / 180;
+    this.box(px, py - 0.24, pz, 0.05, 0.22, 0.05, palette.dark, rx, rz, ry);
+    this.box(px, py + 0.06, pz, 0.34, 0.42, 0.035, palette.dark, rx, rz, ry);
+    this.box(px, py + 0.06, pz, 0.3, 0.38, 0.045, col, rx, rz, ry);
+  }
   targetView(m: Match | null, ball: Vec | null): View {
     const t = performance.now() / 1000;
+    const f = this.followPos;
+    if (m && m.phase !== "lobby" && f && this.viewMode !== "broadcast") {
+      const facing = this.followTeam ? -1 : 1,
+        b = ball || { x: 0, y: 1, z: 0 };
+      if (this.viewMode === "first") {
+        // Eyes at head height looking down-court. Only a gentle pull toward the ball, so your
+        // paddle stays put at the lower right instead of swinging around the screen.
+        const ahead = (f.z - b.z) * facing > 0.5;
+        return {
+          eye: [f.x, 1.5, f.z],
+          target: [
+            f.x + (ahead ? (b.x - f.x) * 0.15 : 0),
+            ahead ? lerp(1.0, b.y, 0.25) : 0.95,
+            f.z - 6 * facing,
+          ],
+          fov: 74,
+          shift: 0,
+        };
+      }
+      // Third person: chase camera over the shoulder, nudged toward the ball.
+      return {
+        eye: [f.x * 0.7, 3.4, f.z + 5.4 * facing],
+        target: [lerp(f.x, b.x, 0.35), 0.85, f.z - 5.5 * facing],
+        fov: 56,
+        shift: 0,
+      };
+    }
     if (!m)
       return {
         eye: [
@@ -860,6 +920,7 @@ export class Scene {
       z: v.z + (u.z - v.z) * t,
     });
     let ball: Vec | null = null;
+    this.followPos = null;
     if (m) {
       const owner = m.players
         .filter((p) => p.team !== m.lastTeam)
@@ -874,7 +935,15 @@ export class Scene {
         if (p.id === "practice-feed") continue;
         const previous = a?.state.players.find((q) => q.id === p.id);
         const pos = previous ? mix(previous.pos, p.pos) : p.pos;
+        if (p.id === this.follow) {
+          this.followPos = pos;
+          this.followTeam = p.team;
+        }
         this.mascot(p, pos, {
+          firstPerson:
+            this.viewMode === "first" &&
+            p.id === this.follow &&
+            m.phase !== "lobby",
           swing: Math.max(0, 1 - (m.time - p.lastHit) / 0.28),
           pitch: p.input.pitch,
           roll: p.input.roll,
@@ -967,7 +1036,13 @@ export class Scene {
     }
     // camera easing toward the view for the current phase
     const goal = this.targetView(m, ball);
-    const e = 0.06;
+    // Player cameras track tightly (a lagging first-person view feels sickly).
+    const playerView =
+      m &&
+      m.phase !== "lobby" &&
+      this.followPos &&
+      this.viewMode !== "broadcast";
+    const e = playerView ? (this.viewMode === "first" ? 0.4 : 0.14) : 0.06;
     this.view = {
       eye: this.view.eye.map((v, i) => lerp(v, goal.eye[i], e)),
       target: this.view.target.map((v, i) => lerp(v, goal.target[i], e)),

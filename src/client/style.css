@@ -826,3 +826,132 @@ kbd {
   background: #fff;
   color: #0b0b12;
 }
+.viewpick {
+  margin: 14px 0 0;
+  padding-top: 12px;
+}
+.viewpick kbd {
+  font-size: 10px;
+  padding: 2px 5px;
+}
+/* Phone: movement style picker and thumb pad */
+.movepick {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 16px;
+}
+.movepick span {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--muted);
+}
+.movepick input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.movepick label {
+  margin: 0;
+  padding: 10px 6px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.movepick label small {
+  display: block;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+.movepick input:checked + label {
+  background: #fff;
+  color: #0b0b12;
+}
+.movepick input:checked + label small {
+  color: #555;
+}
+.pad {
+  margin-top: 18px;
+  text-align: center;
+}
+.padring {
+  width: 150px;
+  height: 150px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.08),
+    transparent 70%
+  );
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.knob {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    #fbff9a,
+    var(--ball) 45%,
+    #9aa311
+  );
+  box-shadow: 0 6px 20px rgba(235, 245, 56, 0.35);
+  transition: transform 0.06s linear;
+  pointer-events: none;
+}
+/* Game over card */
+.gameover {
+  position: fixed;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, 90vw);
+  padding: 30px 30px 22px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(10, 10, 20, 0.82);
+  backdrop-filter: blur(14px);
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.gameover small {
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  font-size: 12px;
+}
+.gameover h2 {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 46px;
+  margin: 8px 0 4px;
+}
+.gameover h2.team0 {
+  color: var(--blue);
+}
+.gameover h2.team1 {
+  color: var(--red);
+}
+.goscore {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 64px;
+  line-height: 1;
+}
+.gameover p {
+  color: var(--muted);
+}
+.gameover .link {
+  margin-top: 14px;
+}

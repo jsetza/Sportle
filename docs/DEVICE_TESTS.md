@@ -41,6 +41,10 @@ Run on **iPhone Safari** and **Android Chrome**, with both left/right hand selec
 - [ ] A far-team (team 2) player tilting the paddle right sends the ball to their own right.
 - [ ] Well-timed compact swings show `sweet spot`; early/late swings show `off-centre` and stray more.
 - [ ] On one screen, WASD moves player 1 and arrow keys move player 2 while both phones swing; a remote display's keys move only its own phones' players.
+- [ ] Phone thumb pad: thumb up runs toward the net for both Blue and Red players; holding the pad while swinging is comfortable.
+- [ ] First-person and third-person views are comfortable (no motion sickness) on a TV and a laptop.
+- [ ] Music is pleasant and balanced against hit sounds; Music toggle is remembered.
+- [ ] Play again starts a rematch with the same phones; Change mode returns to the menu.
 - [ ] A soft dink lands in the opponent's kitchen; the opponent's character steps in to play it after the bounce.
 - [ ] Invalid/stale inputs cannot move the score or impersonate another player's slot.
 
