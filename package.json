@@ -14,7 +14,9 @@
     "check": "npm run typecheck && npm run build && npm test",
     "typecheck": "tsc --noEmit",
     "test:browser": "node scripts/browser-smoke.mjs",
-    "format": "prettier --write src tests scripts docs README.md CLAUDE.md package.json tsconfig.json"
+    "format": "prettier --write src tests scripts docs README.md CLAUDE.md package.json tsconfig.json",
+    "test:load": "node scripts/load.mjs",
+    "tunnel": "node scripts/tunnel.mjs"
   },
   "devDependencies": {
     "@types/node": "24.0.0",

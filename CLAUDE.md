@@ -17,15 +17,15 @@ Node 24+, TypeScript, native DOM/WebGL, HTTP POST input + persistent SSE snapsho
 - src/shared/motion.ts: motion filtering/calibration, no physical-position integration.
 - src/shared/rules.ts: scoring, service order and contact/landing faults.
 - src/server/engine.ts: fixed 120 Hz physics, contacts, bots, movement policy.
-- src/server/rooms.ts: assignments, tokens, start gates, stale input and reconnect.
+- src/server/rooms.ts: assignments, per-display pairing tokens with team preference, host team switching, start gates, stale input and reconnect.
 - src/server/index.ts: HTTP/SSE server, static delivery and lifecycle loop.
 
 ## Priorities
 
-1. Deploy this server at a real trusted HTTPS origin and set PUBLIC_ORIGIN. Do not generate localhost pairing QR codes or claim local loopback is remote hosting.
+1. Deploy this server at a real trusted HTTPS origin and set PUBLIC_ORIGIN (`npm run tunnel` is the no-account dev path). Do not generate localhost pairing QR codes or claim local loopback is remote hosting.
 2. Complete docs/DEVICE_TESTS.md on real iPhone Safari and Android Chrome. Tune compact-swing feel using real measurements.
-3. Add repeatable four-controller and cross-household scenarios, packet jitter/delay tests, and load measurements.
-4. Address the explicit rule/movement limitations in docs/RULES.md, then bot shot variety and visual polish.
+3. Measure wide-area/cellular latency and jitter with real phones (loopback load + four-phone/two-household HTTP tests exist).
+4. Remaining rule limits in docs/RULES.md, manual movement option, visual/contact effects and audio polish.
 
 ## Guardrails
 

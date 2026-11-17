@@ -44,7 +44,7 @@ function display() {
     )
     .join(
       "",
-    )}</div><label for="difficulty">Bot level</label><select id="difficulty"><option value="easy">Easy · find your rhythm</option><option value="medium">Medium · keep moving</option><option value="hard">Hard · find the corners</option></select><button class="full" id="create">Create game ↗</button><p class="fine">No app. Just your phone and a little space.</p><details><summary class="fine">Join another household’s display</summary><label for="displayCode">Room code</label><input id="displayCode" maxlength="6" placeholder="ABC123"><button class="secondary full" id="joinDisplay">Join display</button></details></div><div id="lobby" class="hidden"><div class="eyebrow" id="connection">Connecting</div><h2>Your court is ready.</h2><div id="pairing"><canvas id="qr" class="qr"></canvas><div class="roomcode" id="roomcode"></div><p class="fine" id="pairHint">Scan with your camera. Keep this display open.</p><button class="small secondary" id="refreshPair">Refresh pairing link</button></div><div id="players"></div><div class="telemetry" id="telemetry"></div><button id="start" class="full">Start practice</button><div class="row"><button id="pause" class="secondary full">Pause</button><button id="resume" class="secondary full">Resume</button></div><p class="fine">Characters move for you. Use compact swings to control timing, angle, and power. Serves are assisted.</p><button id="new" class="small secondary">New court</button></div><div id="error" role="alert"></div></aside></div><div class="steps"><div class="step"><b>01</b><div><h3>Scan & connect</h3><p>One screen. A phone for each player.</p></div></div><div class="step"><b>02</b><div><h3>Find your angle</h3><p>Enable motion and set your neutral position.</p></div></div><div class="step"><b>03</b><div><h3>Make a little magic</h3><p>A gentle swing is all it takes to start.</p></div></div></div><footer><span>VISUAL / EXPERIMENTAL SPORTS CLUB</span><span>COMPACT SWINGS. BIG RALLIES.</span></footer></main>`;
+    )}</div><label for="difficulty">Bot level</label><select id="difficulty"><option value="easy">Easy · find your rhythm</option><option value="medium">Medium · keep moving</option><option value="hard">Hard · find the corners</option></select><button class="full" id="create">Create game ↗</button><p class="fine">No app. Just your phone and a little space.</p><details><summary class="fine">Join another household’s display</summary><label for="displayCode">Room code</label><input id="displayCode" maxlength="6" placeholder="ABC123"><button class="secondary full" id="joinDisplay">Join display</button></details></div><div id="lobby" class="hidden"><div class="eyebrow" id="connection">Connecting</div><h2>Your court is ready.</h2><div id="pairing"><canvas id="qr" class="qr"></canvas><div class="roomcode" id="roomcode"></div><p class="fine" id="pairHint">Scan with your camera. Keep this display open.</p><div id="teamPick" class="hidden"><label for="pairTeam">Phones paired on this screen join</label><select id="pairTeam"><option value="">Any open team</option><option value="0">Team 1 (blue)</option><option value="1">Team 2 (orange)</option></select></div><button class="small secondary" id="refreshPair">Refresh pairing link</button></div><div id="players"></div><div class="telemetry" id="telemetry"></div><button id="start" class="full">Start practice</button><div class="row"><button id="pause" class="secondary full">Pause</button><button id="resume" class="secondary full">Resume</button></div><p class="fine">Characters move for you. Use compact swings to control timing, angle, and power. Serves are assisted.</p><button id="new" class="small secondary">New court</button></div><div id="error" role="alert"></div></aside></div><div class="steps"><div class="step"><b>01</b><div><h3>Scan & connect</h3><p>One screen. A phone for each player.</p></div></div><div class="step"><b>02</b><div><h3>Find your angle</h3><p>Enable motion and set your neutral position.</p></div></div><div class="step"><b>03</b><div><h3>Make a little magic</h3><p>A gentle swing is all it takes to start.</p></div></div></div><footer><span>VISUAL / EXPERIMENTAL SPORTS CLUB</span><span>COMPACT SWINGS. BIG RALLIES.</span></footer></main>`;
   let scene: Scene;
   try {
     scene = new Scene($<HTMLCanvasElement>("court"));
@@ -63,10 +63,9 @@ function display() {
     $("roomcode").textContent = net.room;
     const qr = $<HTMLCanvasElement>("qr");
     qr.classList.add("hidden");
-    if (!host) {
-      $("pairing").classList.add("hidden");
-      return;
-    }
+    // Every display (host or another household) shows its own pairing QR.
+    $("pairing").classList.toggle("hidden", !pair);
+    if (!pair) return;
     if (publicOrigin) {
       const url =
         publicOrigin + "/controller?room=" + net.room + "#pair=" + pair;
@@ -109,11 +108,20 @@ function display() {
       state.mode === "practice"
         ? "MOTION LAB / LIVE PADDLE"
         : state.mode.toUpperCase() + " / " + state.phase.toUpperCase();
+    const choice = state.mode === "singles" || state.mode === "doubles";
+    $("teamPick").classList.toggle(
+      "hidden",
+      !choice || state.phase !== "lobby",
+    );
     $("players").innerHTML = Array.from(
       { length: slots(state.mode) },
       (_, i) => {
         const p = state.players.filter((p) => !p.bot)[i];
-        return `<div class="player"><span>${p ? escape(p.name) : "Waiting for player " + (i + 1)}<br><small>${p ? "Team " + (p.team + 1) + " · " + p.hand + " handed" : "Scan to claim this slot"}</small></span><span class="status">${p ? (p.connected ? (p.ready ? "Ready ✓" : "Calibrate") : "Offline") : "○"}</span></div>`;
+        const swap =
+          p && host && choice && state.phase === "lobby"
+            ? `<button class="small secondary" data-team="${p.id}:${1 - p.team}">→ Team ${2 - p.team}</button>`
+            : "";
+        return `<div class="player team${p ? p.team : ""}"><span>${p ? escape(p.name) : "Waiting for player " + (i + 1)}<br><small>${p ? "Team " + (p.team + 1) + " · " + p.hand + " handed" : "Scan to claim this slot"}</small></span>${swap}<span class="status">${p ? (p.connected ? (p.ready ? "Ready ✓" : "Calibrate") : "Offline") : "○"}</span></div>`;
       },
     ).join("");
     const p = state.players.find((p) => !p.bot);
@@ -121,7 +129,13 @@ function display() {
       ? `<span>Sensors<strong>${p.input.sensors ? "Live" : "Waiting"}</strong></span><span>Swing intent<strong>${Math.round(p.input.strength * 100)}%</strong></span><span>Pitch / roll<strong>${Math.round(p.input.pitch)}° / ${Math.round(p.input.roll)}°</strong></span><span>Direction<strong>${p.input.strength < 0.1 ? "Neutral" : p.input.direction > 0.25 ? "Upward" : p.input.direction < -0.25 ? "Downward" : "Across"}</strong></span>`
       : "";
     const humans = state.players.filter((p) => !p.bot);
+    const perTeam = state.mode === "doubles" ? 2 : 1;
+    const uneven =
+      choice &&
+      humans.length === slots(state.mode) &&
+      humans.filter((p) => p.team === 0).length !== perTeam;
     $<HTMLButtonElement>("start").disabled =
+      uneven ||
       humans.length !== slots(state.mode) ||
       humans.some((p) => !p.connected || !p.ready) ||
       state.phase !== "lobby";
@@ -158,23 +172,37 @@ function display() {
     net.room = $<HTMLInputElement>("displayCode").value.trim().toUpperCase();
     const r = await net.api("join", { role: "display" });
     net.credential = r.credential;
+    pair = r.pair;
+    pairExpires = r.pairExpires;
+    publicOrigin = r.publicOrigin;
     host = false;
     entered();
   });
+  $("players").addEventListener("click", (e) => {
+    const t = (e.target as HTMLElement).closest<HTMLElement>("[data-team]");
+    if (!t) return;
+    const [playerId, team] = t.dataset.team!.split(":");
+    net.api("team", { playerId, team: Number(team) }).catch(error);
+  });
+  $("pairTeam").addEventListener("change", () => $("refreshPair").click());
   action("refreshPair", async () => {
-    const r = await net.api("pair", {});
+    const team = $<HTMLSelectElement>("pairTeam").value;
+    const r = await net.api("pair", {
+      team: team === "" ? null : Number(team),
+    });
     pair = r.pair;
     pairExpires = r.pairExpires;
-    sessionStorage.setItem(
-      "visual-host",
-      JSON.stringify({
-        room: net.room,
-        credential: net.credential,
-        pair,
-        pairExpires,
-        publicOrigin,
-      }),
-    );
+    if (host)
+      sessionStorage.setItem(
+        "visual-host",
+        JSON.stringify({
+          room: net.room,
+          credential: net.credential,
+          pair,
+          pairExpires,
+          publicOrigin,
+        }),
+      );
     pairing();
   });
   action("start", () => net.api("start", {}));

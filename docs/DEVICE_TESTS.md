@@ -36,6 +36,11 @@ Run on **iPhone Safari** and **Android Chrome**, with both left/right hand selec
 - [ ] All required human slots must ready before singles / co-op / doubles start.
 - [ ] Two phones on one display work. Four-phone doubles has predictable coverage and clear teams.
 - [ ] A second household display sees the same rally and score over a different network.
+- [ ] The second display shows its own QR; with **Team 2** selected there, its phones join team 2.
+- [ ] Host **→ Team** buttons move players; Start stays disabled while teams are uneven.
+- [ ] A far-team (team 2) player tilting the paddle right sends the ball to their own right.
+- [ ] Well-timed compact swings show `sweet spot`; early/late swings show `off-centre` and stray more.
+- [ ] A soft dink lands in the opponent's kitchen; the opponent's character steps in to play it after the bounce.
 - [ ] Invalid/stale inputs cannot move the score or impersonate another player's slot.
 
 ## Lifecycle and performance

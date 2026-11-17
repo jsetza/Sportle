@@ -324,11 +324,13 @@ export class Scene {
             0.21,
             colors.dark,
           );
-        const hand = p.hand === "left" ? -1 : 1,
+        // Far-team characters face +z, so their forehand side and "in front" are mirrored.
+        const facing = p.team ? -1 : 1,
+          hand = (p.hand === "left" ? -1 : 1) * facing,
           swing = Math.max(0, 1 - (m.time - p.lastHit) / 0.28);
         const px = pos.x + hand * 0.47,
           py = 0.87 + swing * 0.24,
-          pz = pos.z - 0.25;
+          pz = pos.z - 0.25 * facing;
         this.box(px, py - 0.18, pz, 0.09, 0.34, 0.08, colors.dark);
         this.box(
           px,
@@ -338,8 +340,8 @@ export class Scene {
           0.43,
           0.07,
           col,
-          (p.input.pitch * Math.PI) / 180 + swing * 0.9,
-          (-p.input.roll * Math.PI) / 180,
+          facing * ((p.input.pitch * Math.PI) / 180 + swing * 0.9),
+          (-p.input.roll * facing * Math.PI) / 180,
           (p.input.yaw * Math.PI) / 180,
         );
         if (m.serverId === p.id && m.phase === "serve")

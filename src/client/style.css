@@ -518,3 +518,22 @@ progress {
     min-height: 550px;
   }
 }
+.player {
+  align-items: center;
+  gap: 10px;
+  border-left: 3px solid transparent;
+  padding-left: 10px;
+}
+.player.team0 {
+  border-left-color: #3d7fd6;
+}
+.player.team1 {
+  border-left-color: #e8873a;
+}
+.player > span:first-child {
+  flex: 1;
+}
+.player button.small {
+  padding: 6px 10px;
+  font-size: 11px;
+}

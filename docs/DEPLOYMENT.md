@@ -47,7 +47,13 @@ location / {
 
 The application does not trust arbitrary forwarded IP headers. Its basic IP limiter may group clients behind one proxy. Before broader release, configure trusted-proxy-aware limits at the ingress and load-test them; do not blindly trust public `X-Forwarded-For` values.
 
-A trusted HTTPS tunnel can be used for a development phone test. Configure its real public URL as `PUBLIC_ORIGIN`, then restart. No tunnel was established in the original session. Never instruct a player to bypass a certificate warning.
+### Development phone test: `npm run tunnel`
+
+With the official `cloudflared` binary installed (`brew install cloudflared`, `winget install --id Cloudflare.cloudflared`, or the Linux packages from Cloudflare), `npm run tunnel` starts a Cloudflare quick tunnel, reads its `https://<random>.trycloudflare.com` URL, and starts the server with `PUBLIC_ORIGIN` set to that URL. Open the printed URL on the display and scan the QR. Quick tunnels need no account, change URL every run, and have no uptime guarantee: use them for testing, not for hosting. The script uses `dist/` if it has been built, otherwise the TypeScript sources.
+
+Status: the script's missing-binary path was exercised; an end-to-end tunnel could not be opened from the development sandbox (no route to Cloudflare's edge), so the first real run will be on your machine. If phones load the page but the display stops updating, check that the tunnel is not buffering `/api/events`.
+
+Any other trusted HTTPS tunnel works the same way: set its real public URL as `PUBLIC_ORIGIN`, then restart. Never instruct a player to bypass a certificate warning.
 
 ## Validate the deployment
 

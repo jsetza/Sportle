@@ -28,8 +28,14 @@ export type Player = {
   swingUntil: number;
   swingAt: number;
   swingInput: Input;
+  /** Best contact quality seen so far in the current swing window. */
+  swingBest: number;
   lastSeen: number;
   volleyMomentum: boolean;
+  /** Sim time when the player's feet were last confirmed outside the NVZ after being inside it. */
+  kitchenClearAt: number;
+  /** Sim time of the volley that started the current momentum window. */
+  momentumAt: number;
   reactionAt: number;
   target: Vec;
 };
@@ -60,6 +66,10 @@ export type Match = {
   shot: string;
   contacts: number;
   shotAt: number;
+  /** Deterministic bot RNG state, so simulations and tests replay identically. */
+  seed: number;
+  /** Contact quality (0..1) of the most recent paddle contact, for UI feedback. */
+  quality: number;
 };
 export const ZERO_INPUT: Input = {
   seq: -1,
@@ -80,6 +90,9 @@ export const COURT = {
   radius: 0.037,
   netCenter: 0.8636,
   netSide: 0.9144,
+  /** Net posts sit 12 in (0.3048 m) outside each sideline. */
+  post: 3.048 + 0.3048,
+  postRadius: 0.045,
 };
 export const slots = (m: Mode) =>
   m === "doubles" ? 4 : m === "coop" || m === "singles" ? 2 : 1;

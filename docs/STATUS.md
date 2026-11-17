@@ -1,38 +1,39 @@
-# Handoff status — 2026-11-17
+# Handoff status — 2026-11-17 (Claude session)
 
 ## Implemented
 
 - Real HTTP pairing/join with QR/manual room code, separate host/display/controller sessions, expiring pairing, reconnect tokens, and abandoned-room cleanup.
+- **Per-display pairing:** every display (host or another household) gets its own pairing QR; a display can direct its phones to Team 1 or Team 2; the host can switch teams in the lobby; the start gate requires even teams.
 - Phone permission UI, neutral orientation, two-swing calibration, live diagnostics, sensitivity, left-hand/screen orientation handling, and background/disconnect pause.
-- Original restrained sports UI, 3D WebGL court, low-poly avatars, paddle orientation mirror, interpolated state, opt-in contact sound.
+- Sports UI, 3D WebGL court, low-poly avatars, paddle orientation mirror, interpolated state, opt-in contact sound.
 - Practice feeds and swing-dependent contact; fixed-step authoritative physics and scoring.
-- Mode paths for singles vs bot, human singles, co-op doubles, and four-human doubles with start gates and automatic team assignment.
+- **Contact quality:** timing/position relative to the forehand side and contact height set shot accuracy; mishits go wide/long or into the net, amplified by hard swings. Human swing windows meet the ball at the best point within 120 ms.
+- **Rules additions:** kitchen entry to play bounced balls; volley before both feet re-established outside the NVZ is a fault; time-bounded volley momentum; net-post strikes; ball striking a player. Far-team aim mirroring bug fixed (team 2's left/right was inverted; its paddle was drawn behind the character).
+- **Bots:** same Input shape and rule path as phones; drives, rolls, third-shot drops, dinks, lobs, smashes; medium/hard move to the NVZ line; difficulty-scaled accuracy, patience and unforced errors; seeded deterministic RNG. Matches now finish (previously bot rallies never ended because shots could not land out).
+- Mode paths for singles vs bot, human singles, co-op doubles, and four-human doubles.
+- `npm run tunnel`: Cloudflare quick tunnel + server with PUBLIC_ORIGIN set, for no-account phone testing.
+- Rate limiting: per-IP only for unauthenticated traffic (strict for manual code joins, looser for QR-token joins); per-session budget for authenticated traffic, so households behind one NAT are not throttled together.
 - Strict TypeScript, build script, lockfile, Docker recipe, CI workflow, setup/deployment/device-check docs.
 
-## Actual verification
+## Actual verification (this session, Linux sandbox, Node 22.23)
 
-- `npm run check`: **PASS** — strict typecheck, production build, **21 tests**.
-- `npm run test:browser`: **PASS** on installed desktop Chrome, through real Node HTTP/SSE connections.
-- Browser test: synthetic orientation/motion → neutral calibration → gentle/stronger calibration → ready → practice → two contacts. Captured shot strengths **37% and 65%**, with different server-authoritative velocities.
-- QR generated locally and decoded by Chrome BarcodeDetector to the exact expected HTTPS URL.
-- Desktop rendering and mobile-sized controller layout inspected. No page errors in the successful smoke test.
-- Bot-v-bot simulation verifies multiple return contacts and bounded movement.
-- HTTP integration covers two-controller singles, spectator read-only authority, state streaming, and reconnecting to the same slot.
-- All four match roster configurations tested in room/engine tests. Four _physical_ controllers and cross-household network play remain untested.
+- `npm run check`: **PASS** — strict typecheck, production build, **36 tests**.
+- `npm run test:browser` with `CHROME_PATH=/usr/bin/google-chrome`: **PASS** — synthetic sensors, shots at 37% and 65%, both `sweet spot`. (BarcodeDetector unavailable in headless Linux Chrome, so QR decode was skipped there; it was verified by Codex earlier on desktop Chrome.)
+- `tests/multiplayer.test.ts`: real Node HTTP/SSE with **two household displays and four controller sessions**: per-display QR tokens, team preference, host team swap, 5th phone refused, host-only actions enforced, both displays receive identical rally state, out-of-order / duplicate / 5 s-stale / out-of-range inputs rejected, silent phone pauses the match, reconnect restores slot and team, resume refused until ready.
+- Load probe (`node scripts/load.mjs`, loopback, load generator on the same machine): 10 / 25 / 50 doubles rooms (40 / 100 / 200 controllers at 30 Hz) → 0 rejected inputs; input RTT p50 1.4 / 3.0 / 6.8 ms, p95 8.4 / 17.0 / 39.6 ms; ~30 snapshots/s per display.
+- Bot-vs-bot simulation over 12 seeds: no systematic side bias; rallies average roughly 10–22 contacts; matches end at 11 win-by-2.
+- Lobby rendering with a remote display inspected via screenshot.
 
 ## Not verified / incomplete
 
-1. No real public HTTPS deployment or tunnel. The local preview is not phone-accessible by QR. This is the first next step.
-2. No actual iPhone Safari or Android Chrome sensor tests. The user's physical-device success criterion is **not yet certified**.
-3. No wide-area latency/jitter/load benchmark. HTTP POST + SSE may warrant WebSocket transport after measurement.
-4. Rules include assists and exclusions documented in RULES.md. In particular, kitchen entry, full momentum lifecycle, body/support collisions, and tournament edge cases are incomplete.
-5. Bot tactical variety, avatar detail, and visual contact effects need more polish. The current bot mainly drives with variable placement.
-6. Rooms are memory-only; a server restart drops matches. No shared persistence or horizontal scaling.
-7. Docker and GitHub Actions recipes have not been executed here. Local equivalent checks passed.
-8. E2E test uses a fixed local port and synthetic sensor events; it is not a substitute for hardware tests. Additional four-controller HTTP/browser scenarios would improve coverage.
+1. **No physical iPhone Safari or Android Chrome tests.** The success criterion is not yet certified on hardware. Contact-quality tuning was done in simulation only.
+2. `npm run tunnel` could not be run end to end in the sandbox (no route to Cloudflare). No permanent public deployment exists.
+3. No wide-area/cellular latency or jitter measurement with real phones.
+4. Remaining rule limits are listed in RULES.md (serve assist, partner contact, tournament procedures, ball footprint).
+5. Rooms are memory-only; a server restart drops matches.
+6. Docker and GitHub Actions recipes have not been executed here.
+7. Visual redesign requested by the user (dark arena, menu-list layout) is in progress.
 
 ## Environment notes
 
-The original workspace had no Node/npm on PATH and no Git CLI developer tools. A bundled Node 24 runtime was used, with npm obtained from the official registry into a temporary workspace folder. The repository itself uses standard npm commands and has no dependency on those machine-specific paths. Development dependencies were installed from npm; no runtime package download is needed to play.
-
-Do not commit `node_modules`, `dist`, `.env`, temporary tool downloads, browser profiles, or test session credentials. The original local preview process may be stale; restart after pulling changes.
+Playwright's browser download is blocked in the sandbox; the system Chrome was used via CHROME_PATH. Do not commit `node_modules`, `dist`, `.env`, browser profiles, or test session credentials.

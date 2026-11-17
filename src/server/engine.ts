@@ -14,6 +14,7 @@ import {
   contactFault,
   landingFault,
   doubles,
+  inKitchen,
 } from "../shared/rules.ts";
 const vec = (x = 0, y = 0, z = 0): Vec => ({ x, y, z });
 export function player(
@@ -37,8 +38,11 @@ export function player(
     swingUntil: 0,
     swingAt: -10,
     swingInput: { ...ZERO_INPUT },
+    swingBest: -1,
     lastSeen: Date.now(),
     volleyMomentum: false,
+    kitchenClearAt: -10,
+    momentumAt: -10,
     reactionAt: 0,
     target: vec(),
   };
@@ -74,7 +78,34 @@ export function match(
     shot: "",
     contacts: 0,
     shotAt: 0,
+    seed: 0x5eed,
+    quality: 0,
   };
+}
+/** mulberry32 on match state: deterministic bot variety without Math.random. */
+export function rand(m: Match) {
+  m.seed = (m.seed + 0x6d2b79f5) | 0;
+  let t = m.seed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const REACTION = { easy: 0.22, medium: 0.16, hard: 0.1 };
+const SPEED = { easy: 3.3, medium: 3.8, hard: 4.3 };
+/** Body column used for ball-strikes-player faults (rule 11.A). */
+const BODY_RADIUS = 0.2,
+  BODY_HEIGHT = 1.75;
+/** Characters stand beside the ball's path on their forehand side, so the paddle, not the torso, meets it. */
+export const FOREHAND_OFFSET = 0.45;
+export const forehandSide = (p: Player) =>
+  (p.hand === "right" ? 1 : -1) * (p.team ? -1 : 1);
+/** Ballistic landing estimate (no drag) used for movement anticipation only, never for scoring. */
+export function landing(m: Match) {
+  const g = 9.81 + m.spin,
+    y = m.ball.y - C.radius,
+    vy = m.velocity.y;
+  const t = Math.max(0, (vy + Math.sqrt(Math.max(0, vy * vy + 2 * g * y))) / g);
+  return { t, x: m.ball.x + m.velocity.x * t, z: m.ball.z + m.velocity.z * t };
 }
 export function announce(m: Match, s: string) {
   m.message = s;
@@ -101,6 +132,7 @@ export function prepare(m: Match) {
     p.pos = vec(serviceX(m, p), 0, (p.team ? -1 : 1) * 7.05);
     p.velocity = vec();
     p.volleyMomentum = false;
+    p.kitchenClearAt = -10;
     p.swingUntil = 0;
   }
   const s = m.players.find((p) => p.id === m.serverId)!;
@@ -174,7 +206,7 @@ export function queueSwing(m: Match, p: Player, input: Input) {
   p.swingAt = m.time;
   p.swingUntil = m.time + 0.12;
   p.swingInput = { ...input };
-  if (hit(m, p, input)) p.swingUntil = 0;
+  p.swingBest = -1;
 }
 export function hit(m: Match, p: Player, input: Input): boolean {
   if (
@@ -197,6 +229,10 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     fault(m, p.team, f);
     return false;
   }
+  // Bots position perfectly, so they get execution noise in place of human sensor/timing error.
+  const quality = p.bot
+    ? botExecution(m, contactQuality(m, p))
+    : contactQuality(m, p);
   const power = clamp(input.strength, 0.15, 1),
     open = clamp(input.pitch / 55, -1, 1),
     direction = input.direction;
@@ -204,11 +240,38 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const lob = !smash && open > 0.45 && direction > 0.1;
   const roll = !lob && direction > 0.35;
   const dink = power < 0.42;
-  const depth = smash ? 5.5 : lob ? 5.8 : dink ? 2.7 : 3.4 + power * 2.5;
-  const x = clamp((input.roll + input.yaw * 0.25) / 35, -1, 1) * 2.8;
+  // Soft dinks land inside the opponent's kitchen; slightly firmer ones become drops just beyond it.
+  const depth = smash
+    ? 5.5
+    : lob
+      ? 5.8
+      : dink
+        ? 1.55 + power * 2.7
+        : 3.4 + power * 2.5;
+  // Roll/yaw are in the player's own frame (handedness already normalised on the phone);
+  // the far team faces +z, so its left/right is mirrored in world X.
+  // Off-centre or badly timed contact spreads the shot; big swings magnify the error.
+  // This is how shots go wide or long: comfortable compact swings stay reliable.
+  const miss = (1 - quality) * (0.45 + power);
+  const x =
+    clamp((input.roll + input.yaw * 0.25) / 35, -1, 1) *
+      2.8 *
+      (p.team ? -1 : 1) +
+    (rand(m) * 2 - 1) * miss * 2.8;
   const flight = smash ? 0.58 : lob ? 1.95 : dink ? 1.05 : 1.5 - power * 0.55;
   p.volleyMomentum = m.bounces === 0;
-  launch(m, p, x, (p.team ? 1 : -1) * depth, flight, roll ? power * 1.8 : 0);
+  if (p.volleyMomentum) p.momentumAt = m.time;
+  const long = (rand(m) * 1.4 - 0.4) * miss * 2.2;
+  launch(
+    m,
+    p,
+    x,
+    (p.team ? 1 : -1) * Math.max(0.6, depth + long),
+    // A mishit also flattens the arc, which is how balls find the net.
+    flight * (1 - rand(m) * Math.min(0.6, miss * 0.7)),
+    roll ? power * 1.8 : 0,
+  );
+  m.quality = quality;
   m.hits++;
   m.shot = smash
     ? "Smash"
@@ -219,8 +282,36 @@ export function hit(m: Match, p: Player, input: Input): boolean {
         : dink
           ? "Dink / drop"
           : "Drive";
-  announce(m, m.shot + " • " + Math.round(power * 100) + "%");
+  announce(
+    m,
+    m.shot +
+      " • " +
+      Math.round(power * 100) +
+      "%" +
+      (quality > 0.85
+        ? " • sweet spot"
+        : quality < 0.55
+          ? " • off-centre"
+          : ""),
+  );
   return true;
+}
+/** Bot contact: occasional mistimed hits (unforced errors), rarer on harder settings. */
+const BOT_ERROR = { easy: 0.09, medium: 0.07, hard: 0.045 };
+function botExecution(m: Match, q: number) {
+  if (rand(m) < BOT_ERROR[m.difficulty]) return 0.15 + rand(m) * 0.2;
+  return q - rand(m) ** 2 * 0.25;
+}
+/**
+ * 0..1 contact quality from where the ball is relative to the paddle side of the body
+ * at the moment of contact (i.e. timing), and contact height. Not a physical measurement.
+ */
+export function contactQuality(m: Match, p: Player) {
+  const b = m.ball,
+    px = p.pos.x + forehandSide(p) * FOREHAND_OFFSET;
+  const d = Math.hypot(b.x - px, (b.z - p.pos.z) * 1.2);
+  const h = b.y < 0.35 ? 0.35 - b.y : b.y > 1.5 ? (b.y - 1.5) * 0.4 : 0;
+  return clamp(1 - (d / 1.3) ** 2 * 0.75 - h, 0.15, 1);
 }
 export function feed(m: Match) {
   const p = m.players.find((p) => !p.bot)!;
@@ -248,26 +339,34 @@ export function movementTarget(m: Match, p: Player): Vec {
       Math.abs(q.pos.x - b.x) < Math.abs(a.pos.x - b.x) ? q : a,
     );
   if (m.hits === 1) owner = m.players.find((q) => q.id === m.receiverId)!;
+  const side = forehandSide(p) * FOREHAND_OFFSET;
   if (incoming && p.id === owner.id) {
-    const look =
-      m.bounces === 0
-        ? Math.max(
-            0,
-            (m.velocity.y +
-              Math.sqrt(
-                m.velocity.y * m.velocity.y +
-                  2 * 9.81 * Math.max(0, b.y - 0.037),
-              )) /
-              9.81,
-          )
-        : 0.15;
+    const land = landing(m);
+    const look = m.bounces === 0 ? land.t : 0.15;
+    const ahead = Math.abs(b.z + m.velocity.z * look);
+    // Entering the NVZ is legal to play a ball that has bounced (or will bounce) there.
+    // While volley momentum is active, or when the ball will land deep, stay outside the line.
+    const bouncesInKitchen =
+      (m.bounces > 0 && Math.abs(b.z) < C.kitchen + 0.9) ||
+      (m.bounces === 0 &&
+        Math.sign(land.z) === sign &&
+        Math.abs(land.z) < C.kitchen);
+    const minZ =
+      bouncesInKitchen && !p.volleyMomentum ? 0.55 : C.kitchen + 0.42;
     return vec(
-      clamp(b.x + m.velocity.x * look, -3.65, 3.65),
+      clamp(b.x + m.velocity.x * look - side, -3.65, 3.65),
       0,
-      sign * clamp(Math.abs(b.z + m.velocity.z * look) + 0.4, 2.55, 7.5),
+      sign * clamp(ahead + 0.4, minZ, 7.5),
     );
   }
-  return vec(teammates.length === 1 ? 0 : serviceX(m, p), 0, sign * 4.5);
+  // Recovery: get out of the kitchen first, then return to the base position.
+  // Medium/hard bots advance to the NVZ line once the return of serve is struck.
+  const advance = p.bot && m.difficulty !== "easy" && m.hits >= 2;
+  return vec(
+    teammates.length === 1 ? -side * 0.5 : serviceX(m, p),
+    0,
+    sign * (advance ? C.kitchen + 0.5 : 4.5),
+  );
 }
 export function step(m: Match, dt = 1 / 120) {
   if (m.paused || m.phase === "lobby" || m.phase === "over") return;
@@ -282,28 +381,31 @@ export function step(m: Match, dt = 1 / 120) {
   for (const p of m.players) {
     if (m.time >= p.reactionAt) {
       p.target = movementTarget(m, p);
-      p.reactionAt =
-        m.time +
-        (p.bot ? { easy: 0.22, medium: 0.16, hard: 0.1 }[m.difficulty] : 0.05);
+      p.reactionAt = m.time + (p.bot ? REACTION[m.difficulty] : 0.05);
     }
     const dx = p.target.x - p.pos.x,
       dz = p.target.z - p.pos.z,
       len = Math.hypot(dx, dz),
-      speed = p.bot ? { easy: 3.3, medium: 3.8, hard: 4.3 }[m.difficulty] : 4.3;
+      speed = p.bot ? SPEED[m.difficulty] : 4.3;
     const rate = Math.min(speed, len / dt);
     p.velocity = vec(
       len ? (dx / len) * rate : 0,
       0,
       len ? (dz / len) * rate : 0,
     );
+    const wasIn = inKitchen(p);
     p.pos.x += p.velocity.x * dt;
     p.pos.z += p.velocity.z * dt;
-    // Auto movement stops outside NVZ; a volley cannot carry feet through its line.
-    if (p.volleyMomentum && Math.abs(p.pos.z) <= C.kitchen + 0.22) {
+    const nowIn = inKitchen(p);
+    if (wasIn && !nowIn) p.kitchenClearAt = m.time;
+    if (nowIn) p.kitchenClearAt = m.time;
+    // Rule 9.C: volley momentum may not carry the player into the NVZ.
+    if (p.volleyMomentum && nowIn) {
       fault(m, p.team, "Kitchen momentum fault");
       return;
     }
-    if (len < 0.03) p.volleyMomentum = false;
+    // Momentum ends once the player has stopped or regained balance after the volley.
+    if (len < 0.03 || m.time - p.momentumAt > 0.6) p.volleyMomentum = false;
   }
   const old = { ...m.ball };
   m.velocity.y -= (9.81 + m.spin) * dt;
@@ -319,7 +421,16 @@ export function step(m: Match, dt = 1 / 120) {
     const net =
       C.netCenter +
       (C.netSide - C.netCenter) * Math.min(1, Math.abs(x) / C.halfWidth);
-    if (Math.abs(x) < 3.35 && y - C.radius < net) {
+    const ax = Math.abs(x);
+    if (
+      ax > C.post - C.postRadius - C.radius &&
+      ax < C.post + C.postRadius + C.radius &&
+      y - C.radius < C.netSide + 0.05
+    ) {
+      fault(m, m.lastTeam, "Net post");
+      return;
+    }
+    if (ax < C.post && y - C.radius < net) {
       m.ball.z = Math.sign(old.z) * 0.045;
       m.velocity.z *= -0.16;
       m.velocity.x *= 0.6;
@@ -354,6 +465,14 @@ export function step(m: Match, dt = 1 / 120) {
   }
   for (const p of m.players) {
     if (!p.bot && p.swingUntil > m.time) {
+      // Within the short swing window, meet the ball at its best point rather than the first
+      // reachable tick, so a well-timed compact swing gets clean contact.
+      const reach = Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) <= 1.15;
+      const q = contactQuality(m, p);
+      if (reach && m.time + dt < p.swingUntil && q > p.swingBest + 0.002) {
+        p.swingBest = q;
+        continue;
+      }
       if (hit(m, p, p.swingInput)) p.swingUntil = 0;
       if (m.phase !== "rally") return;
     }
@@ -362,23 +481,75 @@ export function step(m: Match, dt = 1 / 120) {
     if (!p.bot || p.id === "practice-feed") continue;
     if (
       m.time - p.lastHit < 0.5 ||
-      m.time - m.shotAt <
-        { easy: 0.22, medium: 0.16, hard: 0.1 }[m.difficulty] ||
-      m.ball.y > 1.5
+      m.time - m.shotAt < REACTION[m.difficulty] ||
+      m.lastTeam === p.team ||
+      Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) > 1.15
     )
       continue;
+    const smashable = m.difficulty !== "easy" && m.ball.y > 1.85;
+    if (m.ball.y > 1.5 && !smashable) continue;
+    const q = contactQuality(m, p),
+      nx = m.ball.x + m.velocity.x / 60,
+      nz = m.ball.z + m.velocity.z / 60,
+      leaving = Math.hypot(nx - p.pos.x, nz - p.pos.z) > 1.1;
+    if (q < { easy: 0.6, medium: 0.72, hard: 0.82 }[m.difficulty] && !leaving)
+      continue;
     if (contactFault(m, p)) continue;
-    hit(m, p, {
-      ...ZERO_INPUT,
-      strength:
-        m.difficulty === "easy"
-          ? 0.48
-          : m.difficulty === "medium"
-            ? 0.62
-            : 0.78,
-      roll: m.difficulty === "easy" ? 0 : Math.sin(m.time * 1.9) * 24,
-      pitch: 0,
-      direction: 0.15,
-    });
+    hit(m, p, botShot(m, p));
+    if (m.phase !== "rally") return;
   }
+  // Rule 11.A: a ball that strikes a player before it is played is a fault on that player.
+  for (const p of m.players) {
+    if (p.team === m.lastTeam || p.id === "practice-feed") continue;
+    if (
+      Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) < BODY_RADIUS &&
+      m.ball.y < BODY_HEIGHT
+    ) {
+      fault(m, p.team, "Ball hit " + p.name);
+      return;
+    }
+  }
+}
+/**
+ * Bot shot choice. Bots produce the same Input shape a phone does and go through hit(),
+ * so they obey identical reach, timing, kitchen and shot-shape rules.
+ */
+export function botShot(m: Match, p: Player): Input {
+  const d = m.difficulty,
+    b = m.ball,
+    r = () => rand(m);
+  const opponents = m.players.filter((q) => q.team !== p.team);
+  const oppNet = opponents.every((q) => Math.abs(q.pos.z) < C.kitchen + 1.3);
+  const nearNet = Math.abs(p.pos.z) < C.kitchen + 1.0;
+  const skill = { easy: 0.35, medium: 0.65, hard: 0.9 }[d];
+  // Aim into the widest gap on the far court; easy bots stay central to sustain rallies.
+  const gap =
+    opponents.length === 1
+      ? -Math.sign(opponents[0].pos.x || 1) * 1.6
+      : (r() < 0.5 ? -1 : 1) * 0.4;
+  const noise = { easy: 0.9, medium: 0.55, hard: 0.3 }[d] * (r() * 2 - 1);
+  const aimX = clamp((d === "easy" ? 0 : gap) + noise, -2.5, 2.5);
+  const roll = (aimX / 2.8) * 35 * (p.team ? -1 : 1);
+  const base = { ...ZERO_INPUT, roll, yaw: 0, sensors: true, calibrated: true };
+  const pick = r();
+  if (b.y > 1.85 && m.bounces === 0)
+    return {
+      ...base,
+      strength: 0.6 + skill * 0.3,
+      direction: -0.8,
+      pitch: -10,
+    };
+  if (d !== "easy" && oppNet && pick < 0.12 + (d === "hard" ? 0.08 : 0))
+    return { ...base, strength: 0.55, direction: 0.4, pitch: 40 };
+  // Third shot: better bots favour a drop to get to the net.
+  if (m.hits === 2 && pick < skill * 0.6)
+    return { ...base, strength: 0.3 + r() * 0.08, direction: 0.05 };
+  if (nearNet && oppNet && pick < 0.35 + skill * 0.4)
+    return { ...base, strength: 0.22 + r() * 0.12, direction: 0.05 };
+  const power = { easy: 0.48, medium: 0.62, hard: 0.76 }[d] + (r() - 0.5) * 0.1;
+  return {
+    ...base,
+    strength: clamp(power, 0.43, 0.9),
+    direction: d !== "easy" && pick > 0.7 ? 0.45 : 0.15,
+  };
 }

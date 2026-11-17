@@ -8,6 +8,9 @@ import {
   createRoom,
   rooms,
   joinController,
+  issuePair,
+  checkPair,
+  setTeam,
   begin,
   acceptInput,
   housekeeping,
@@ -83,13 +86,18 @@ const server = createServer(async (req, res) => {
         return json(res, { publicOrigin: publicURL, serverTime: Date.now() });
       if (path === "/api/clock") return json(res, { serverTime: Date.now() });
       const ip = req.socket.remoteAddress || "unknown";
-      let bucket = rate.get(ip);
-      if (!bucket || Date.now() - bucket.t > 60000) {
-        bucket = { t: Date.now(), n: 0 };
-        rate.set(ip, bucket);
+      const authed = /^Bearer ./.test(req.headers.authorization || "");
+      // Per-IP limits apply to unauthenticated traffic only. Authenticated controller traffic is
+      // budgeted per session below, so several households behind one NAT are not throttled together.
+      if (!authed) {
+        let bucket = rate.get(ip);
+        if (!bucket || Date.now() - bucket.t > 60000) {
+          bucket = { t: Date.now(), n: 0 };
+          rate.set(ip, bucket);
+        }
+        if (++bucket.n > 1200)
+          return json(res, { error: "Too many requests" }, 429);
       }
-      if (++bucket.n > 12000)
-        return json(res, { error: "Too many requests" }, 429);
       if (req.method === "POST" && path === "/api/create") {
         const a = await body(req);
         if (
@@ -116,34 +124,41 @@ const server = createServer(async (req, res) => {
         const a = await body(req);
         if (a.role === "display") {
           const credential = token();
-          r.sessions.set(credential, {
+          const s: Session = {
             role: "display",
             expires: Date.now() + 86400000,
             lastSeq: -1,
             lastInput: 0,
-          });
+          };
+          r.sessions.set(credential, s);
           r.updated = Date.now();
-          return json(res, { ...view(r), credential });
+          // Each household display gets its own pairing QR for its own phones.
+          return json(res, {
+            ...view(r),
+            credential,
+            ...issuePair(r, s),
+            publicOrigin: publicURL,
+          });
         }
+        let preferTeam: number | null = null;
         if (!a.credential) {
           // Rate limit unauthenticated pairing separately, including short-code joins.
-          const key = "join:" + ip;
+          // Manual room-code joins are guessable, so they get a strict per-IP limit.
+          // QR joins carry an unguessable pairing token and get a looser one.
+          const manual = !a.pair;
+          const key = (manual ? "join:" : "qrjoin:") + ip;
           let b = rate.get(key);
           if (!b || Date.now() - b.t > 60000) {
             b = { t: Date.now(), n: 0 };
             rate.set(key, b);
           }
-          if (++b.n > 15)
+          if (++b.n > (manual ? 15 : 240))
             return json(
               res,
               { error: "Pairing rate limit; wait a minute" },
               429,
             );
-          if (Date.now() > r.pairExpires)
-            throw Error(
-              "Pairing expired. Ask the host to refresh the QR code.",
-            );
-          if (a.pair && a.pair !== r.pair) throw Error("Invalid pairing link");
+          preferTeam = checkPair(r, a.pair);
         }
         const name =
           typeof a.name === "string" ? a.name.trim().slice(0, 20) : "Player";
@@ -152,6 +167,7 @@ const server = createServer(async (req, res) => {
           name || "Player",
           a.hand === "left" ? "left" : "right",
           a.credential,
+          preferTeam,
         );
         r.updated = Date.now();
         return json(res, { ...view(r), ...result });
@@ -160,6 +176,13 @@ const server = createServer(async (req, res) => {
       const session = r.sessions.get(key);
       if (!session || session.expires < Date.now())
         return json(res, { error: "Session expired. Rejoin the room." }, 401);
+      const sb = rate.get("s:" + key);
+      const sbucket =
+        sb && Date.now() - sb.t <= 60000 ? sb : { t: Date.now(), n: 0 };
+      rate.set("s:" + key, sbucket);
+      // ~30 Hz input plus clock/control calls fits comfortably; 4800/min ≈ 80 req/s.
+      if (++sbucket.n > 4800)
+        return json(res, { error: "Too many requests" }, 429);
       if (path === "/api/events" && req.method === "GET") {
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
@@ -200,8 +223,16 @@ const server = createServer(async (req, res) => {
         announce(r.state, "Paused");
         return json(res, { ok: true });
       }
+      if (path === "/api/pair" && session.role !== "controller") {
+        const team = a.team === 0 || a.team === 1 ? a.team : null;
+        return json(res, issuePair(r, session, team));
+      }
       if (session.role !== "host")
         return json(res, { error: "Host action only" }, 403);
+      if (path === "/api/team") {
+        setTeam(r, String(a.playerId || ""), Number(a.team));
+        return json(res, { ok: true });
+      }
       if (path === "/api/start") {
         begin(r);
         return json(res, { ok: true });
@@ -218,11 +249,6 @@ const server = createServer(async (req, res) => {
         r.state.paused = false;
         announce(r.state, "Play resumed");
         return json(res, { ok: true });
-      }
-      if (path === "/api/pair") {
-        r.pair = token();
-        r.pairExpires = Date.now() + 600000;
-        return json(res, { pair: r.pair, pairExpires: r.pairExpires });
       }
       return json(res, { error: "Unknown action" }, 404);
     }

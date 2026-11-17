@@ -5,6 +5,8 @@ import type { Mode, Difficulty, Match, Input } from "../shared/types.ts";
 export const token = () => randomBytes(24).toString("base64url");
 export type Session = {
   role: "host" | "display" | "controller";
+  /** Pairing token currently shown by this host/display, if any. */
+  pair?: string;
   playerId?: string;
   expires: number;
   lastSeq: number;
@@ -16,10 +18,62 @@ export type Room = {
   host: string;
   pair: string;
   pairExpires: number;
+  /** Every live pairing token (one per display), with an optional team for phones it pairs. */
+  pairs: Map<string, { expires: number; team: number | null }>;
   sessions: Map<string, Session>;
   updated: number;
 };
 export const rooms = new Map<string, Room>();
+export const PAIR_TTL = 600000;
+/** Teams that make sense to choose in a mode (null = no choice, e.g. co-op or practice). */
+export const teamChoice = (m: Mode) => m === "singles" || m === "doubles";
+/** Issue (or rotate) the pairing token a host/display shows in its QR. */
+export function issuePair(r: Room, s: Session, team: number | null = null) {
+  if (s.pair) r.pairs.delete(s.pair);
+  const pair = token(),
+    expires = Date.now() + PAIR_TTL;
+  r.pairs.set(pair, {
+    expires,
+    team: teamChoice(r.state.mode) && (team === 0 || team === 1) ? team : null,
+  });
+  s.pair = pair;
+  if (s.role === "host") {
+    r.pair = pair;
+    r.pairExpires = expires;
+  }
+  return { pair, pairExpires: expires };
+}
+/** Validate a pairing token, or a manual room-code join while any display's pairing is live. */
+export function checkPair(r: Room, pair: unknown, now = Date.now()) {
+  for (const [k, v] of r.pairs) if (v.expires < now) r.pairs.delete(k);
+  if (typeof pair === "string" && pair) {
+    const p = r.pairs.get(pair);
+    if (!p) throw Error("Pairing link expired. Rescan the QR on your display.");
+    return p.team;
+  }
+  if (!r.pairs.size)
+    throw Error("Pairing expired. Ask the host to refresh the QR code.");
+  return null;
+}
+const capacity = (m: Mode, team: number) =>
+  m === "doubles" ? 2 : m === "singles" ? 1 : team === 0 ? slots(m) : 0;
+/** Host lobby action: move a human to a team, if that team has room. */
+export function setTeam(r: Room, playerId: string, team: number) {
+  const m = r.state;
+  if (m.phase !== "lobby") throw Error("Teams are fixed once play starts");
+  if (!teamChoice(m.mode)) throw Error("This mode has fixed teams");
+  if (team !== 0 && team !== 1) throw Error("Invalid team");
+  const p = m.players.find((p) => p.id === playerId && !p.bot);
+  if (!p) throw Error("Player not found");
+  if (p.team === team) return p;
+  const others = m.players.filter((q) => !q.bot && q.team === team);
+  if (others.length >= capacity(m.mode, team)) {
+    // Full team: swap with the most recent joiner on that team.
+    others[others.length - 1].team = p.team;
+  }
+  p.team = team;
+  return p;
+}
 export function createRoom(mode: Mode, difficulty: Difficulty): Room {
   let code: string;
   do {
@@ -30,12 +84,15 @@ export function createRoom(mode: Mode, difficulty: Difficulty): Room {
     state: match(mode, difficulty),
     host: token(),
     pair: token(),
-    pairExpires: Date.now() + 600000,
+    pairExpires: Date.now() + PAIR_TTL,
+    pairs: new Map(),
     sessions: new Map(),
     updated: Date.now(),
   };
+  r.pairs.set(r.pair, { expires: r.pairExpires, team: null });
   r.sessions.set(r.host, {
     role: "host",
+    pair: r.pair,
     expires: Date.now() + 86400000,
     lastSeq: -1,
     lastInput: 0,
@@ -48,6 +105,7 @@ export function joinController(
   name: string,
   hand: "left" | "right",
   credential?: string,
+  preferTeam: number | null = null,
 ) {
   if (credential) {
     const session = r.sessions.get(credential);
@@ -71,11 +129,17 @@ export function joinController(
   const humans = r.state.players.filter((p) => !p.bot);
   if (humans.length >= slots(r.state.mode))
     throw Error("All controller slots are occupied");
-  const p = player(
-    token().slice(0, 10),
-    name,
-    teamFor(r.state.mode, humans.length),
-  );
+  let team = teamFor(r.state.mode, humans.length);
+  if (teamChoice(r.state.mode)) {
+    const count = (t: number) => humans.filter((p) => p.team === t).length;
+    if (
+      preferTeam !== null &&
+      count(preferTeam) < capacity(r.state.mode, preferTeam)
+    )
+      team = preferTeam;
+    else if (count(team) >= capacity(r.state.mode, team)) team = 1 - team;
+  }
+  const p = player(token().slice(0, 10), name, team);
   p.hand = hand;
   r.state.players.push(p);
   const key = token();
@@ -98,6 +162,9 @@ export function begin(r: Room) {
     )
   )
     throw Error("Every required phone must be connected, calibrated and ready");
+  for (const t of [0, 1])
+    if (humans.filter((p) => p.team === t).length !== capacity(m.mode, t))
+      throw Error("Teams are uneven. Switch a player's team in the lobby.");
   m.players = humans;
   if (m.mode === "solo") m.players.push(player("bot-1", "Orbit", 1, true));
   if (m.mode === "coop")

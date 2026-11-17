@@ -1,5 +1,11 @@
 import { COURT } from "./types.ts";
 import type { Match, Player } from "./types.ts";
+/** Foot radius around the character origin used for NVZ line contact. */
+export const FOOT = 0.22;
+/** Time needed to plant both feet outside the NVZ after leaving it. */
+export const FEET_RESET = 0.2;
+export const inKitchen = (p: Player) =>
+  Math.abs(p.pos.z) <= COURT.kitchen + FOOT;
 export const doubles = (m: Match) => m.mode === "coop" || m.mode === "doubles";
 export function rightPlayer(m: Match, team: number): Player {
   const ps = m.players.filter((p) => p.team === team);
@@ -40,8 +46,10 @@ export function rotateService(m: Match, winner: number) {
 export function contactFault(m: Match, p: Player): string | null {
   if (m.hits < 2 && m.bounces === 0) return "Two-bounce fault";
   if (m.hits === 1 && p.id !== m.receiverId) return "Wrong receiver";
-  if (m.bounces === 0 && Math.abs(p.pos.z) <= COURT.kitchen + 0.22)
-    return "Kitchen volley fault";
+  if (m.bounces === 0 && inKitchen(p)) return "Kitchen volley fault";
+  // Rule 9: after entering the NVZ, both feet must be re-established outside before volleying.
+  if (m.bounces === 0 && m.time - p.kitchenClearAt < FEET_RESET)
+    return "Volley before both feet re-established outside kitchen";
   return null;
 }
 export function landingFault(m: Match, x: number, z: number): string | null {
