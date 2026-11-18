@@ -1,4 +1,9 @@
-import { COURT as C, ZERO_INPUT, clamp } from "../shared/types.ts";
+import {
+  SWING_RELOAD,
+  COURT as C,
+  ZERO_INPUT,
+  clamp,
+} from "../shared/types.ts";
 import type {
   Match,
   Mode,
@@ -269,7 +274,8 @@ function launch(
   m.contacts++;
 }
 export function queueSwing(m: Match, p: Player, input: Input) {
-  if (m.paused || m.phase !== "rally" || m.time - p.swingAt < 0.32) return;
+  if (m.paused || m.phase !== "rally" || m.time - p.swingAt < SWING_RELOAD)
+    return;
   p.swingAt = m.time;
   p.swingUntil = m.time + 0.12;
   p.swingInput = { ...input };
@@ -280,7 +286,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     m.paused ||
     m.phase !== "rally" ||
     m.lastTeam === p.team ||
-    m.time - p.lastHit < 0.32
+    m.time - p.lastHit < SWING_RELOAD
   )
     return false;
   const b = m.ball;

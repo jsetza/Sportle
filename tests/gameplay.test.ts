@@ -762,3 +762,35 @@ test("a swing repeated across packets is applied once; a stale packet cannot los
   assert.ok(a.swingUntil > 0);
   rooms.delete(r.code);
 });
+
+test("swing reload: a player can swing again 0.2 s after the last swing, not sooner", async () => {
+  const { SWING_RELOAD } = await import("../src/shared/types.ts");
+  const { MotionFilter } = await import("../src/shared/motion.ts");
+  assert.equal(SWING_RELOAD, 0.2);
+  // Server side.
+  const m = singles(),
+    p = m.players[0];
+  rally(m, 1);
+  queueSwing(m, p, { ...ZERO_INPUT, strength: 0.5 });
+  const first = p.swingAt;
+  m.time += 0.15;
+  queueSwing(m, p, { ...ZERO_INPUT, strength: 0.5 });
+  assert.equal(p.swingAt, first, "too soon: ignored");
+  m.time += 0.06; // 0.21 s after the first swing
+  queueSwing(m, p, { ...ZERO_INPUT, strength: 0.5 });
+  assert.ok(p.swingAt > first, "reloaded: accepted");
+  // Phone side: the motion filter also re-arms after 0.2 s.
+  const f = new MotionFilter();
+  f.calibrated = true;
+  const burst = (t: number) =>
+    f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 300, gamma: 0 }, 0, t);
+  const calm = (t: number) =>
+    f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 0 }, 0, t);
+  assert.equal(burst(1000), true);
+  calm(1050);
+  calm(1080);
+  assert.equal(burst(1150), false, "150 ms later: still reloading");
+  calm(1170);
+  calm(1190);
+  assert.equal(burst(1210), true, "210 ms later: swing again");
+});

@@ -1,5 +1,7 @@
 export type Mode = "practice" | "solo" | "singles" | "coop" | "doubles";
 export type Difficulty = "easy" | "medium" | "hard";
+/** Swing reload (owner request): a player can swing again this many seconds after the last swing. */
+export const SWING_RELOAD = 0.2;
 export type MoveStyle = "auto" | "keys" | "phone";
 export const MOVE_STYLES: MoveStyle[] = ["auto", "keys", "phone"];
 export type Vec = { x: number; y: number; z: number };

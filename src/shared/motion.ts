@@ -1,3 +1,4 @@
+import { SWING_RELOAD } from "./types.ts";
 import { clamp } from "./types.ts";
 export const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180;
 // Relative Euler angles are intentional: orientation intent, never position tracking.
@@ -152,7 +153,7 @@ export class MotionFilter {
       this.calibrated &&
       this.armed &&
       this.strength > 0.24 &&
-      now - this.lastSwing > 320;
+      now - this.lastSwing > SWING_RELOAD * 1000;
     if (swing) {
       this.lastSwing = now;
       this.armed = false;
