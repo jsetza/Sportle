@@ -159,7 +159,7 @@ test("a swing window waits for the best contact point, still one contact", () =>
   m.ball = { x: fx, y: 0.8, z: 3.4 }; // inside reach, approaching (bounced: half speed)
   m.velocity = { x: 0, y: 0, z: 7 };
   queueSwing(m, p, { ...ZERO_INPUT, strength: 0.5 });
-  for (let i = 0; i < 15; i++) step(m);
+  for (let i = 0; i < 30; i++) step(m);
   assert.equal(m.contacts, 1);
   assert.ok(m.quality > 0.8, `quality ${m.quality}`);
 });
@@ -899,4 +899,41 @@ test("the ball is fastest off the paddle, loses 15% every 0.2 s, and still lands
   while (m.phase === "rally" && m.bounces === 0) step(m);
   assert.equal(m.bounces, 1);
   assert.ok(m.ball.z < -3, `landed at z ${m.ball.z.toFixed(2)}`);
+});
+
+test("a slightly late swing still connects at the moment the player was shown", async () => {
+  const { LATE_GRACE } = await import("../src/server/engine.ts");
+  const m = singles(),
+    p = m.players[0];
+  rally(m, 1);
+  m.bounces = 1;
+  p.pos = { x: 0, y: 0, z: 4.1 };
+  freeze(m);
+  const fx = forehandSide(p) * FOREHAND_OFFSET;
+  m.ball = { x: fx, y: 0.8, z: 3.4 };
+  m.velocity = { x: 0, y: 0, z: 7 };
+  // Let the ball go by without swinging, until it is out of reach behind the player.
+  let t = 0;
+  while (Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) <= 1.3) {
+    step(m);
+    t++;
+  }
+  step(m);
+  assert.equal(m.contacts, 0);
+  queueSwing(m, p, { ...ZERO_INPUT, strength: 0.6 });
+  assert.equal(m.contacts, 1, "late swing within the grace window connects");
+  assert.ok(m.quality > 0.8, `quality ${m.quality}`);
+  assert.ok(m.velocity.z < 0, "ball heads back over the net");
+  // Far too late: no contact.
+  const m2 = singles(),
+    p2 = m2.players[0];
+  rally(m2, 1);
+  m2.bounces = 1;
+  p2.pos = { x: 0, y: 0, z: 4.1 };
+  freeze(m2);
+  m2.ball = { x: fx, y: 0.8, z: 3.4 };
+  m2.velocity = { x: 0, y: 0, z: 7 };
+  for (let i = 0; i < t + 1 + Math.ceil(LATE_GRACE * 120) + 6; i++) step(m2);
+  queueSwing(m2, p2, { ...ZERO_INPUT, strength: 0.6 });
+  assert.equal(m2.contacts, 0);
 });

@@ -262,6 +262,7 @@ export function prepare(m: Match) {
   );
 }
 export function fault(m: Match, loser: number, reason: string) {
+  holds.delete(m);
   if (m.mode === "practice") {
     m.phase = "serve";
     m.nextServe = m.time + 1.6;
@@ -324,16 +325,128 @@ function launch(
           : 0.05);
   m.contacts++;
 }
+/** Reach (m, horizontal from the body) for a human swing; bots keep 1.15 m. */
+export const HUMAN_REACH = 1.3;
+/** An early swing waits this long (s) for the ball to arrive. */
+export const EARLY_WINDOW = 0.25;
+/**
+ * A late swing still connects if the ball was in reach this recently (s). The player swings
+ * at what their screen shows, which runs behind the server (stream + phone network delay),
+ * so without this the same swing hits or misses depending on that moment's lag.
+ */
+export const LATE_GRACE = 0.22;
+interface Chance {
+  at: number;
+  q: number;
+  ball: Vec;
+  velocity: Vec;
+  contacts: number;
+  bounces: number;
+}
+/** Hittable moments each human had within LATE_GRACE (server-only, not sent to clients). */
+const chances = new WeakMap<Player, Chance[]>();
+/**
+ * When the ball would end the point (second bounce, or leaving the area) while a human still
+ * has a late-swing chance, the call waits until that chance runs out. Server-only.
+ */
+const holds = new WeakMap<
+  Match,
+  { until: number; team: number; reason: string; bounces: number }
+>();
+function holdCall(m: Match, team: number, reason: string, bounces = m.bounces) {
+  if (holds.has(m)) return true;
+  let until = -1;
+  for (const p of m.players) {
+    if (p.bot || p.team === m.lastTeam) continue;
+    const c = lateChance(m, p, bounces);
+    if (c) until = Math.max(until, c.at + LATE_GRACE);
+  }
+  if (until <= m.time) return false;
+  holds.set(m, { until, team, reason, bounces });
+  return true;
+}
+function hittable(m: Match, p: Player) {
+  const b = m.ball;
+  return (
+    !holds.has(m) &&
+    m.phase === "rally" &&
+    m.lastTeam !== p.team &&
+    (p.team === 0 ? b.z >= 0.04 : b.z <= -0.04) &&
+    Math.hypot(b.x - p.pos.x, b.z - p.pos.z) <= HUMAN_REACH &&
+    b.y >= 0.12 &&
+    b.y <= 2.65
+  );
+}
+function remember(m: Match, p: Player) {
+  const list = (chances.get(p) ?? []).filter(
+    (c) => m.time - c.at <= LATE_GRACE && c.contacts === m.contacts,
+  );
+  if (hittable(m, p))
+    list.push({
+      at: m.time,
+      q: contactQuality(m, p),
+      ball: { ...m.ball },
+      velocity: { ...m.velocity },
+      contacts: m.contacts,
+      bounces: m.bounces,
+    });
+  chances.set(p, list);
+}
+/** The best moment the player had recently, if the ball is still in the same state. */
+function lateChance(m: Match, p: Player, bounces = m.bounces) {
+  let best: Chance | undefined;
+  for (const c of chances.get(p) ?? [])
+    if (
+      m.time - c.at <= LATE_GRACE &&
+      c.contacts === m.contacts &&
+      c.bounces === bounces &&
+      (!best || c.q > best.q)
+    )
+      best = c;
+  return best;
+}
 export function queueSwing(m: Match, p: Player, input: Input) {
   if (m.paused || m.phase !== "rally" || m.time - p.swingAt < SWING_RELOAD)
     return;
   p.swingAt = m.time;
-  p.swingUntil = m.time + 0.12;
   p.swingInput = { ...input };
   p.swingBest = -1;
+  // Late swing: the ball already went past. Play the contact at the best moment the player
+  // had (within LATE_GRACE), as long as nobody has touched the ball since and it hasn't
+  // bounced again — i.e. the moment their screen was showing when they swung.
+  const held = holds.get(m);
+  const c = hittable(m, p)
+    ? undefined
+    : held
+      ? p.team !== m.lastTeam
+        ? lateChance(m, p, held.bounces)
+        : undefined
+      : lateChance(m, p);
+  if (c) {
+    const ball = m.ball,
+      velocity = m.velocity,
+      bounces = m.bounces;
+    m.ball = { ...c.ball };
+    m.velocity = { ...c.velocity };
+    m.bounces = c.bounces;
+    holds.delete(m);
+    chances.delete(p);
+    if (hit(m, p, p.swingInput)) {
+      p.swingUntil = 0;
+      return;
+    }
+    if (m.phase === "rally") {
+      m.ball = ball;
+      m.velocity = velocity;
+      m.bounces = bounces;
+      if (held) holds.set(m, held);
+    }
+  }
+  p.swingUntil = m.time + EARLY_WINDOW;
 }
 export function hit(m: Match, p: Player, input: Input): boolean {
   if (
+    holds.has(m) ||
     m.paused ||
     m.phase !== "rally" ||
     m.lastTeam === p.team ||
@@ -343,7 +456,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const b = m.ball;
   if (
     (p.team === 0 ? b.z < 0.04 : b.z > -0.04) ||
-    Math.hypot(b.x - p.pos.x, b.z - p.pos.z) > 1.15 ||
+    Math.hypot(b.x - p.pos.x, b.z - p.pos.z) > (p.bot ? 1.15 : HUMAN_REACH) ||
     b.y < 0.12 ||
     b.y > 2.65
   )
@@ -674,24 +787,40 @@ export function step(m: Match, dt = 1 / 120) {
         return;
       }
     }
-    m.bounces++;
-    if (m.bounces >= 2) {
-      fault(m, 1 - m.lastTeam, "Double bounce");
-      return;
+    if (!holds.has(m)) {
+      m.bounces++;
+      if (
+        m.bounces >= 2 &&
+        !holdCall(m, 1 - m.lastTeam, "Double bounce", m.bounces - 1)
+      ) {
+        fault(m, 1 - m.lastTeam, "Double bounce");
+        return;
+      }
     }
     m.velocity.y = Math.abs(m.velocity.y) * 0.76;
     m.velocity.x *= 0.86;
     m.velocity.z *= 0.86;
   }
-  if (Math.abs(m.ball.z) > 13 || Math.abs(m.ball.x) > 10) {
-    fault(m, m.bounces ? 1 - m.lastTeam : m.lastTeam, "Out of reach");
+  const team = m.bounces ? 1 - m.lastTeam : m.lastTeam;
+  if (
+    (Math.abs(m.ball.z) > 13 || Math.abs(m.ball.x) > 10) &&
+    !holdCall(m, team, "Out of reach")
+  ) {
+    fault(m, team, "Out of reach");
+    return;
+  }
+  const hold = holds.get(m);
+  if (hold && m.time >= hold.until) {
+    holds.delete(m);
+    fault(m, hold.team, hold.reason);
     return;
   }
   for (const p of m.players) {
     if (!p.bot && p.swingUntil > m.time) {
       // Within the short swing window, meet the ball at its best point rather than the first
       // reachable tick, so a well-timed compact swing gets clean contact.
-      const reach = Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) <= 1.15;
+      const reach =
+        Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) <= HUMAN_REACH;
       const q = contactQuality(m, p);
       // A downward swing at a high ball is a smash: take it now, while it is still up there.
       const smashNow = smashIntent(m, p.swingInput);
@@ -708,6 +837,7 @@ export function step(m: Match, dt = 1 / 120) {
       if (m.phase !== "rally") return;
     }
   }
+  for (const p of m.players) if (!p.bot) remember(m, p);
   for (const p of m.players) {
     if (!p.bot || p.id === "practice-feed") continue;
     if (
