@@ -156,7 +156,7 @@ test("a swing window waits for the best contact point, still one contact", () =>
   p.pos = { x: 0, y: 0, z: 4.1 };
   freeze(m);
   const fx = forehandSide(p) * FOREHAND_OFFSET;
-  m.ball = { x: fx, y: 0.8, z: 2.95 }; // just inside reach, approaching
+  m.ball = { x: fx, y: 0.8, z: 3.4 }; // inside reach, approaching (bounced: half speed)
   m.velocity = { x: 0, y: 0, z: 7 };
   queueSwing(m, p, { ...ZERO_INPUT, strength: 0.5 });
   for (let i = 0; i < 15; i++) step(m);
@@ -683,4 +683,37 @@ test("auto mode runs to the smash spot and a downward swing smashes the pop-up",
     if (/smash/.test(m.shot) && m.lastTeam === 1) smashed++;
   }
   assert.ok(smashed >= 20, `smashed ${smashed}/30`);
+});
+
+test("the bounce lasts twice as long: same height and spot, half speed", async () => {
+  const { BOUNCE_TIME_SCALE } = await import("../src/server/engine.ts");
+  assert.equal(BOUNCE_TIME_SCALE, 0.5);
+  const m = singles();
+  rally(m, 1);
+  freeze(m);
+  // Ball drops onto team 0's court from 1 m with no horizontal motion.
+  m.ball = { x: 0, y: 1, z: 4 };
+  m.velocity = { x: 0, y: 0, z: 0 };
+  let bounceAt = -1,
+    peak = 0,
+    end = -1;
+  for (let i = 0; i < 120 * 6 && m.phase === "rally"; i++) {
+    step(m);
+    if (m.bounces === 1 && bounceAt < 0) bounceAt = m.time;
+    if (m.bounces === 1) peak = Math.max(peak, m.ball.y);
+  }
+  end = m.time;
+  // Real ballistic time between bounces: 2·v/g with v = 0.76·sqrt(2·g·h).
+  const v = 0.76 * Math.sqrt(2 * 9.81 * (1 - COURT.radius));
+  const real = (2 * v) / 9.81;
+  const hang = end - bounceAt;
+  assert.ok(
+    Math.abs(hang - real * 2) < 0.06,
+    `hang ${hang.toFixed(2)} vs ${(real * 2).toFixed(2)}`,
+  );
+  // Same bounce height as before (0.76² of the drop, ±1 cm).
+  assert.ok(
+    Math.abs(peak - (COURT.radius + (v * v) / (2 * 9.81))) < 0.02,
+    `peak ${peak}`,
+  );
 });

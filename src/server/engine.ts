@@ -99,6 +99,8 @@ export function rand(m: Match) {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 const REACTION = { easy: 0.22, medium: 0.16, hard: 0.1 };
+/** Assist (owner request): after bouncing, the ball moves at this fraction of real speed (0.5 = bounce lasts 2×). */
+export const BOUNCE_TIME_SCALE = 0.5;
 export const HUMAN_SPEED = 4.3;
 const ACCEL = 14;
 /** Phone thumb pad: player-relative (forward = toward the net) converted to world axes. */
@@ -546,12 +548,15 @@ export function step(m: Match, dt = 1 / 120) {
     if (len < 0.03 || m.time - p.momentumAt > 0.6) p.volleyMomentum = false;
   }
   const old = { ...m.ball };
-  m.velocity.y -= (9.81 + m.spin) * dt;
-  m.velocity.x *= 1 - 0.055 * dt;
-  m.velocity.z *= 1 - 0.055 * dt;
-  m.ball.x += m.velocity.x * dt;
-  m.ball.y += m.velocity.y * dt;
-  m.ball.z += m.velocity.z * dt;
+  // After the bounce the ball follows the same path at half speed, so it hangs in the
+  // hitting zone twice as long (same height, same spot). Players and bots move at normal speed.
+  const bdt = m.bounces > 0 ? dt * BOUNCE_TIME_SCALE : dt;
+  m.velocity.y -= (9.81 + m.spin) * bdt;
+  m.velocity.x *= 1 - 0.055 * bdt;
+  m.velocity.z *= 1 - 0.055 * bdt;
+  m.ball.x += m.velocity.x * bdt;
+  m.ball.y += m.velocity.y * bdt;
+  m.ball.z += m.velocity.z * bdt;
   if (old.z * m.ball.z <= 0 && old.z !== m.ball.z) {
     const t = old.z / (old.z - m.ball.z);
     const x = old.x + (m.ball.x - old.x) * t,
