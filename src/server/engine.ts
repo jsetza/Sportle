@@ -86,6 +86,8 @@ export function match(
     shotAt: 0,
     seed: 0x5eed,
     quality: 0,
+    popup: false,
+    popupAt: null,
   };
 }
 /** mulberry32 on match state: deterministic bot variety without Math.random. */
@@ -122,6 +124,16 @@ const SPEED = { easy: 3.3, medium: 3.8, hard: 4.3 };
 export const FOREHAND_OFFSET = 0.6;
 export const forehandSide = (p: Player) =>
   (p.hand === "right" ? 1 : -1) * (p.team ? -1 : 1);
+/** Where the ball (before bouncing) comes down through height `h`, ballistically. */
+export function descentPoint(m: Match, h: number): Vec | null {
+  const g = 9.81 + m.spin,
+    { x, y, z } = m.ball,
+    v = m.velocity;
+  const disc = v.y * v.y - 2 * g * (h - y);
+  if (disc < 0) return null;
+  const t = (v.y + Math.sqrt(disc)) / g;
+  return vec(x + v.x * t, h, z + v.z * t);
+}
 /**
  * Where an incoming ball will be at a comfortable hitting height (~0.8 m) on the way down
  * after its bounce (ballistic, no drag; movement anticipation only, never used for scoring).
@@ -239,6 +251,8 @@ function launch(
   m.spin = spin;
   m.shotAt = m.time;
   m.bounces = 0;
+  m.popup = false;
+  m.popupAt = null;
   m.lastTeam = p.team;
   m.lastPlayer = p.id;
   p.lastHit = m.time;
@@ -287,7 +301,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const power = clamp(input.strength, 0.15, 1),
     open = clamp(input.pitch / 55, -1, 1),
     direction = input.direction;
-  const smash = direction < -0.45 && b.y > 1.8;
+  const smash = smashIntent(m, input);
   const lob = !smash && open > 0.45 && direction > 0.1;
   const roll = !lob && direction > 0.35;
   const dink = power < 0.42;
@@ -310,6 +324,23 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const side = clamp(input.side ?? 0, -1, 1);
   const face = clamp((input.roll + input.yaw * 0.25) / 35, -1, 1);
   const aim = clamp(side * 1.9 + face * 0.9, -2.7, 2.7);
+  // Badly timed contact can pop the ball up instead: high, short and slow, an easy smash
+  // for the other side. Same chance for players and bots.
+  const popup = !smash && !lob && quality < 0.55 && rand(m) < 0.5;
+  if (popup) {
+    const px = aim * 0.5 * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * 0.6;
+    const pz = (p.team ? 1 : -1) * (C.kitchen + 2.3 + rand(m) * 1.5);
+    p.volleyMomentum = m.bounces === 0;
+    if (p.volleyMomentum) p.momentumAt = m.time;
+    launch(m, p, clamp(px, -2.6, 2.6), pz, 1.62 + rand(m) * 0.2, 0);
+    m.popup = true;
+    m.popupAt = descentPoint(m, 2.0);
+    m.quality = quality;
+    m.hits++;
+    m.shot = strokeSide(m, p, side) + " pop-up";
+    announce(m, "Pop-up! • " + m.shot + " • smash it!");
+    return true;
+  }
   const x = aim * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * miss * 2.8;
   const flight = smash ? 0.58 : lob ? 1.95 : dink ? 1.05 : 1.5 - power * 0.55;
   p.volleyMomentum = m.bounces === 0;
@@ -354,13 +385,19 @@ function botExecution(m: Match, q: number) {
  * 0..1 contact quality from where the ball is relative to the paddle side of the body
  * at the moment of contact (i.e. timing), and contact height. Not a physical measurement.
  */
+/** Downward swing at a ball above 1.8 m. Pop-ups are easier: a softer downward swing counts. */
+export function smashIntent(m: Match, input: Input) {
+  return input.direction < (m.popup ? -0.3 : -0.45) && m.ball.y > 1.8;
+}
 export function contactQuality(m: Match, p: Player) {
   const b = m.ball,
     side = forehandSide(p) * FOREHAND_OFFSET;
   // Clean contact on either side of the body: forehand, or a slightly less forgiving backhand.
   const at = (px: number) => Math.hypot(b.x - px, (b.z - p.pos.z) * 1.2);
   const d = Math.min(at(p.pos.x + side), at(p.pos.x - side) * 1.08);
-  const h = b.y < 0.35 ? 0.35 - b.y : b.y > 1.5 ? (b.y - 1.5) * 0.4 : 0;
+  // High contact is awkward for ordinary shots, but it is exactly where a smash happens.
+  const high = m.popup && m.bounces === 0 ? 2.5 : 1.5;
+  const h = b.y < 0.35 ? 0.35 - b.y : b.y > high ? (b.y - high) * 0.4 : 0;
   return clamp(1 - (d / 1.3) ** 2 * 0.75 - h, 0.15, 1);
 }
 /**
@@ -415,6 +452,20 @@ export function movementTarget(m: Match, p: Player): Vec {
     // Stand behind the ball, not inside it: go to where it comes back down to waist height
     // after its bounce, on the forehand side. That point does not drift as the ball travels,
     // so the player settles early and the ball comes to them.
+    // Pop-up coming: go to where it drops through smash height, outside the kitchen
+    // (a smash is a volley). If it would come down inside the kitchen, let it bounce instead.
+    const pu = m.popup && m.bounces === 0 ? m.popupAt : null;
+    if (
+      pu &&
+      Math.sign(pu.z) === sign &&
+      Math.abs(pu.z) > C.kitchen + 0.35 &&
+      !p.volleyMomentum
+    )
+      return vec(
+        clamp(pu.x - side * 0.6, -3.65, 3.65),
+        0,
+        sign * clamp(Math.abs(pu.z) + 0.15, C.kitchen + 0.42, 7.5),
+      );
     const ic = intercept(m);
     return vec(
       clamp(ic.x - side, -3.65, 3.65),
@@ -556,7 +607,14 @@ export function step(m: Match, dt = 1 / 120) {
       // reachable tick, so a well-timed compact swing gets clean contact.
       const reach = Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) <= 1.15;
       const q = contactQuality(m, p);
-      if (reach && m.time + dt < p.swingUntil && q > p.swingBest + 0.002) {
+      // A downward swing at a high ball is a smash: take it now, while it is still up there.
+      const smashNow = smashIntent(m, p.swingInput);
+      if (
+        reach &&
+        !smashNow &&
+        m.time + dt < p.swingUntil &&
+        q > p.swingBest + 0.002
+      ) {
         p.swingBest = q;
         continue;
       }

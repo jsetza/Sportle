@@ -1005,6 +1005,13 @@ export class Scene {
       );
       this.sphere(ball.x, ball.y, ball.z, 0.11, palette.ball);
     }
+    // Pop-up target: pulsing rings where the ball drops through smash height.
+    if (m && m.popup && m.bounces === 0 && m.popupAt && m.phase === "rally") {
+      const k = (Math.sin(now / 90) + 1) / 2,
+        col = teamColor(1 - m.lastTeam);
+      this.ring(m.popupAt.x, m.popupAt.z, 0.45 + k * 0.15, col, 0.04, 0.07);
+      this.ring(m.popupAt.x, m.popupAt.z, 0.2, palette.white, 0.045, 0.05, 12);
+    }
     // contact bursts: expanding ring and shards
     this.bursts = this.bursts.filter((s) => now - s.at < 420);
     for (const s of this.bursts) {

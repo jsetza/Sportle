@@ -82,6 +82,7 @@ function display() {
 <div class="hud"><span class="courtlabel" id="courtLabel">VISUAL ARENA</span><div class="score" id="score">0 : 0</div></div>
 <div class="message" id="message" aria-live="polite">Pick a mode to start.</div>
 <div class="keys" id="keys" aria-live="polite"></div>
+<div class="callout hidden" id="callout" aria-live="assertive"><b>POP-UP!</b><span>Swing down to smash</span></div>
 <div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small id="goMode">MATCH</small><h2 id="goTitle">Blue wins</h2><div class="goscore" id="goScore">11 : 7</div><p id="goNames"></p><button class="cta" id="again">Play again <span>↻</span></button><button class="link" id="goMenu">Change mode</button><p class="fine" id="goWait"></p></div>
 <dialog id="howto"><h2>How to play</h2><ol><li><b>Create a game</b> on this screen. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your hand and nickname.</li><li><b>Enable motion</b>, hold the phone like a paddle and set your neutral position.</li><li>Make one <b>gentle</b> swing and one <b>slightly quicker</b> swing to calibrate. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li></ol><p class="fine">Serves are assisted. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
@@ -218,6 +219,10 @@ function display() {
     scene.update(state);
     keyHints(state);
     gameOver(state);
+    const popup = state.phase === "rally" && state.popup && state.bounces === 0;
+    $("callout").classList.toggle("hidden", !popup);
+    $("callout").className =
+      "callout team" + (1 - state.lastTeam) + (popup ? "" : " hidden");
     const playing = state.phase !== "lobby";
     if (playing !== document.body.classList.contains("playing")) {
       document.body.classList.toggle("playing", playing);
@@ -776,6 +781,7 @@ function phone() {
       if (current) net.onState({ state: current });
     }),
   );
+  let popupBuzz = -1;
   const padVec = { x: 0, z: 0 };
   const ring = document.querySelector<HTMLElement>(".padring")!;
   const knob = $("knob");
@@ -823,6 +829,22 @@ function phone() {
       state.phase === "over"
         ? "Game over · " + state.message + " The host can tap Play again."
         : (state.paused ? "Paused · " : "") + state.message;
+    // Pop-up coming to my team: tell me (and buzz on phones that support it).
+    const mine = state.players.find((q) => q.id === playerId);
+    const myPopup =
+      !!mine &&
+      state.phase === "rally" &&
+      state.popup &&
+      state.bounces === 0 &&
+      state.lastTeam !== mine.team;
+    if (myPopup) {
+      $("matchStatus").textContent = "⚡ POP-UP! Swing DOWN to smash it!";
+      if (popupBuzz !== state.contacts) {
+        popupBuzz = state.contacts;
+        navigator.vibrate?.([60, 40, 60]);
+      }
+    }
+    $("matchStatus").classList.toggle("alert", myPopup);
     const inPlay = state.phase === "serve" || state.phase === "rally";
     $("pad").classList.toggle("hidden", !(inPlay && moveStyle() === 2));
   };

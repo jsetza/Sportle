@@ -90,6 +90,10 @@ export type Match = {
   seed: number;
   /** Contact quality (0..1) of the most recent paddle contact, for UI feedback. */
   quality: number;
+  /** The last shot was a mistimed pop-up: high, short and attackable. */
+  popup: boolean;
+  /** Where that pop-up comes down through smash height (~2 m), for positioning and the target ring. */
+  popupAt: Vec | null;
 };
 export const ZERO_INPUT: Input = {
   seq: -1,

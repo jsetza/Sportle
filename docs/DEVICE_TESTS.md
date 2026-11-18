@@ -48,6 +48,7 @@ Run on **iPhone Safari** and **Android Chrome**, with both left/right hand selec
 - [ ] Swinging left→right shows “→” on the phone and sends the ball to the player's right; right→left goes left. If reversed, Swap left / right fixes it. Record which grip (screen facing net / facing you).
 - [ ] Shots are announced as Forehand/Backhand correctly for right- and left-handed players.
 - [ ] Auto positioning: the character waits beside and slightly behind the ball's path, not on top of it.
+- [ ] A mistimed shot sometimes pops up; the display shows POP-UP and a target ring; the receiving phone alerts (Android also vibrates); a downward swing smashes it.
 - [ ] A soft dink lands in the opponent's kitchen; the opponent's character steps in to play it after the bounce.
 - [ ] Invalid/stale inputs cannot move the score or impersonate another player's slot.
 

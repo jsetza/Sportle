@@ -973,3 +973,52 @@ kbd {
   color: var(--muted);
   font-size: 12px;
 }
+/* Pop-up callout */
+.callout {
+  position: fixed;
+  z-index: 3;
+  left: 50%;
+  top: 22%;
+  transform: translateX(-50%) skewX(-8deg);
+  text-align: center;
+  pointer-events: none;
+  animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.callout b {
+  display: block;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: clamp(48px, 7vw, 96px);
+  line-height: 0.9;
+  color: var(--ball);
+  text-shadow:
+    0 0 30px rgba(235, 245, 56, 0.45),
+    0 6px 0 rgba(0, 0, 0, 0.35);
+}
+.callout span {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #fff;
+  color: #0b0b12;
+  font-weight: 800;
+  font-size: 18px;
+}
+.callout.team0 span {
+  box-shadow: 0 0 0 3px var(--blue);
+}
+.callout.team1 span {
+  box-shadow: 0 0 0 3px var(--red);
+}
+@keyframes pop {
+  from {
+    transform: translateX(-50%) skewX(-8deg) scale(0.4);
+    opacity: 0;
+  }
+}
+.phone .alert {
+  color: var(--ball);
+  font-weight: 800;
+  font-size: 18px;
+}

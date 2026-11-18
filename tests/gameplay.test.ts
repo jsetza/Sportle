@@ -608,3 +608,79 @@ test("players get half the error spread of bots for the same mistimed contact", 
     `human ${human.toFixed(2)} vs bot ${bot.toFixed(2)}`,
   );
 });
+
+test("badly timed contact can pop the ball up: high, short, past the kitchen", () => {
+  let popups = 0,
+    clean = 0;
+  for (let i = 0; i < 120; i++) {
+    const m = singles();
+    m.seed = 77 + i;
+    const p = m.players[0];
+    rally(m, 1);
+    m.bounces = 1;
+    p.pos = { x: 0, y: 0, z: 4 };
+    m.ball = { x: 0.95, y: 2.3, z: 3.5 }; // late and high: poor contact
+    p.lastHit = -10;
+    assert.ok(hit(m, p, { ...ZERO_INPUT, strength: 0.6 }));
+    if (!m.popup) continue;
+    popups++;
+    assert.match(m.shot, /pop-up/);
+    const apex = m.ball.y + (m.velocity.y * m.velocity.y) / (2 * 9.81);
+    assert.ok(apex > 3, `apex ${apex}`);
+    assert.ok(
+      m.popupAt && m.popupAt.z < -(COURT.kitchen + 0.3),
+      "comes down past the kitchen",
+    );
+  }
+  // Clean contact never pops up.
+  for (let i = 0; i < 40; i++) {
+    const m = singles();
+    m.seed = 500 + i;
+    const p = m.players[0];
+    rally(m, 1);
+    m.bounces = 1;
+    p.pos = { x: 0, y: 0, z: 4 };
+    m.ball = { x: forehandSide(p) * FOREHAND_OFFSET, y: 0.9, z: 4 };
+    p.lastHit = -10;
+    hit(m, p, { ...ZERO_INPUT, strength: 0.6 });
+    if (!m.popup) clean++;
+  }
+  assert.ok(popups > 25 && popups < 95, `popups ${popups}/120`);
+  assert.equal(clean, 40);
+});
+
+test("auto mode runs to the smash spot and a downward swing smashes the pop-up", () => {
+  let smashed = 0;
+  for (let i = 0; i < 30; i++) {
+    const m = singles();
+    m.seed = 900 + i;
+    const [a, b] = m.players;
+    rally(m, 0);
+    b.pos = { x: 0, y: 0, z: -4.5 };
+    // A pops the ball up toward B.
+    do {
+      a.pos = { x: 0, y: 0, z: 4 };
+      m.ball = { x: 0.95, y: 2.3, z: 3.5 };
+      m.lastTeam = 1;
+      m.bounces = 1;
+      a.lastHit = -10;
+      hit(m, a, { ...ZERO_INPUT, strength: 0.6 });
+    } while (!m.popup && m.seed++);
+    // B (auto movement) waits for the ball to drop to ~2 m in reach, then swings down.
+    for (let k = 0; k < 400 && m.phase === "rally" && m.lastTeam === 0; k++) {
+      step(m);
+      const reach = Math.hypot(m.ball.x - b.pos.x, m.ball.z - b.pos.z);
+      if (
+        m.bounces === 0 &&
+        m.velocity.y < 0 &&
+        m.ball.y < 2.3 &&
+        m.ball.y > 1.85 &&
+        reach < 1.1 &&
+        b.swingUntil < m.time
+      )
+        queueSwing(m, b, { ...ZERO_INPUT, strength: 0.7, direction: -0.4 });
+    }
+    if (/smash/.test(m.shot) && m.lastTeam === 1) smashed++;
+  }
+  assert.ok(smashed >= 20, `smashed ${smashed}/30`);
+});
