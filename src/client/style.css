@@ -880,8 +880,8 @@ kbd {
   text-align: center;
 }
 .padring {
-  width: min(250px, 66vw);
-  height: min(250px, 66vw);
+  width: min(300px, 80vw);
+  height: min(300px, 80vw);
   margin: 0 auto;
   border-radius: 50%;
   border: 2px solid var(--line);
@@ -897,8 +897,8 @@ kbd {
   -webkit-user-select: none;
 }
 .knob {
-  width: 96px;
-  height: 96px;
+  width: 112px;
+  height: 112px;
   border-radius: 50%;
   background: radial-gradient(
     circle at 35% 30%,
@@ -1306,4 +1306,9 @@ body.controller .card {
 }
 .goscore + p b {
   margin-left: 4px;
+}
+
+body.joined .phone > h1,
+body.joined .phone > p {
+  display: none;
 }

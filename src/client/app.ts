@@ -980,6 +980,8 @@ function phone() {
     }
     net.credential = r.credential;
     playerId = r.player.id;
+    // Joined: drop the welcome title and blurb so the controller is just the controls.
+    document.body.classList.add("joined");
     seq = r.seq + 1;
     filter.hand = r.player.hand === "left" ? -1 : 1;
     localStorage.setItem("visual-controller-" + net.room, net.credential);
