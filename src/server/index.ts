@@ -22,6 +22,16 @@ import {
   token,
 } from "./rooms.ts";
 import { step, announce } from "./engine.ts";
+import {
+  createLobby,
+  search,
+  cancel,
+  matchmake,
+  rankedTick,
+  setRank,
+} from "./ranked.ts";
+import { loadRatings, saveRatings, leaderboard, rankId } from "./ratings.ts";
+import type { RankedQueue } from "../shared/types.ts";
 import type { Room, Session } from "./rooms.ts";
 import { detectOrigin, detectPlatform, clientIp } from "./hosting.ts";
 import type { ServerResponse } from "node:http";
@@ -126,7 +136,12 @@ const server = createServer(async (req, res) => {
         const map = (
           MAPS.some((m) => m.id === a.map) ? a.map : "arena"
         ) as MapId;
-        const r = createRoom(a.mode as Mode, a.difficulty as Difficulty, map);
+        const ranked = (
+          a.ranked === "1v1" || a.ranked === "2v2" ? a.ranked : null
+        ) as RankedQueue | null;
+        const r = ranked
+          ? createLobby(ranked, map)
+          : createRoom(a.mode as Mode, a.difficulty as Difficulty, map);
         return json(res, {
           ...view(r),
           credential: r.host,
@@ -136,6 +151,8 @@ const server = createServer(async (req, res) => {
           publicOrigin: publicURL,
         });
       }
+      if (path === "/api/leaderboard" && req.method === "GET")
+        return json(res, { top: leaderboard(20) });
       const code = (u.searchParams.get("room") || "").toUpperCase();
       // Room codes are short, so guessing them is rate limited per visitor: too many
       // unknown codes in a minute blocks further lookups (checked before the lookup).
@@ -214,6 +231,8 @@ const server = createServer(async (req, res) => {
             ? a.outfit
             : "classic") as Outfit,
         );
+        // Ranked identity: the phone's own random key (only a hash is kept on the server).
+        if (r.state.ranked) setRank(r, result.player.id, rankId(a.rankKey));
         r.updated = Date.now();
         return json(res, { ...view(r), ...result });
       }
@@ -272,11 +291,11 @@ const server = createServer(async (req, res) => {
         );
         return json(res, { ok: true });
       }
-      if (path === "/api/pause" && (session.role === "host" || p)) {
+      if (path === "/api/pause" && (session.role !== "controller" || p)) {
         hostPause(r);
         return json(res, { ok: true });
       }
-      if (path === "/api/resume" && (session.role === "host" || p)) {
+      if (path === "/api/resume" && (session.role !== "controller" || p)) {
         resume(r);
         return json(res, { ok: true });
       }
@@ -286,6 +305,16 @@ const server = createServer(async (req, res) => {
       }
       if (session.role !== "host")
         return json(res, { error: "Host action only" }, 403);
+      if (path === "/api/ranked/search") {
+        search(r);
+        return json(res, { ok: true });
+      }
+      if (path === "/api/ranked/cancel") {
+        cancel(r);
+        return json(res, { ok: true });
+      }
+      if (r.state.ranked && (path === "/api/start" || path === "/api/rematch"))
+        throw Error("Ranked matches start by themselves");
       if (path === "/api/team") {
         setTeam(r, String(a.playerId || ""), Number(a.team));
         return json(res, { ok: true });
@@ -376,6 +405,7 @@ const interval = setInterval(() => {
   }
   if (++tick % 4 === 0) {
     for (const r of rooms.values()) safely(r, () => housekeeping(r));
+    for (const r of [...rooms.values()]) safely(r, () => rankedTick(r));
     for (const [res, { room, session }] of streams) {
       if (!rooms.has(room.code) || session.expires < Date.now()) {
         res.end();
@@ -394,6 +424,13 @@ const interval = setInterval(() => {
       }
     }
   }
+  if (tick % 120 === 0)
+    try {
+      matchmake();
+    } catch (e) {
+      console.error("[ranked] matchmaking error:", e);
+    }
+  if (tick % 3600 === 0) saveRatings();
   if (tick % 7200 === 0)
     for (const [k, v] of rate) if (Date.now() - v.t > 60000) rate.delete(k);
 }, 8);
@@ -404,6 +441,12 @@ process.on("unhandledRejection", (e) =>
   console.error("[server] unhandled:", e),
 );
 server.on("clientError", (_e, socket) => socket.destroy());
+loadRatings();
+for (const sig of ["SIGTERM", "SIGINT"] as const)
+  process.on(sig, () => {
+    saveRatings();
+    process.exit(0);
+  });
 server.listen(port, host, () =>
   console.log(
     `POVpickle listening on http://localhost:${port} • host: ${platform} • phone origin: ${publicURL || "not configured (set PUBLIC_ORIGIN to HTTPS deployment)"}`,

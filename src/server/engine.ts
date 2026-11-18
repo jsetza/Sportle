@@ -56,6 +56,7 @@ export function player(
     display: "",
     moveStyle: "keys",
     outfit: "classic",
+    rr: 0,
     reactionAt: 0,
     target: vec(),
   };
@@ -73,6 +74,8 @@ export function match(
     paused: false,
     pauseReason: "",
     resumeAt: 0,
+    ranked: null,
+    moves: {},
     score: [0, 0],
     serving: 0,
     serverNumber: 2,

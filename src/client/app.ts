@@ -88,6 +88,8 @@ function display() {
       <div class="list" data-group="online">
       ${item("online", "singles", "Play a friend", "1 v 1 · share the code")}
       ${item("online", "doubles", "Online 2 v 2", "2 phones each side")}
+      ${item("online", "ranked1", "Ranked 1 v 1", "Find an opponent · RR")}
+      ${item("online", "ranked2", "Ranked 2 v 2", "Solo or with a friend · RR")}
       <details id="joinBox"><summary class="item"><span class="ball"></span><b>Join a game</b><small>Enter a code</small></summary><div class="joinrow"><input id="displayCode" maxlength="6" placeholder="ROOM CODE" autocomplete="off" aria-label="Room code"><button id="joinDisplay">Join</button></div></details>
       </div>
       <div class="difficulty mappick" role="radiogroup" aria-label="Map"><span>Map</span>${MAPS.map((m) => `<input type="radio" name="map" id="map-${m.id}" value="${m.id}"><label for="map-${m.id}">${m.short}</label>`).join("")}</div>
@@ -103,6 +105,7 @@ function display() {
     <div id="pairing" class="pairing"><div class="qrtile"><canvas id="qr" class="qr"></canvas></div><div><small>Room code</small><div class="roomcode" id="roomcode"></div><p class="fine" id="pairHint">Scan with your phone camera.</p><div id="teamPick" class="hidden"><label for="pairTeam">Phones paired here join</label><select id="pairTeam"><option value="">Any open team</option><option value="0">Team blue</option><option value="1">Team red</option></select></div><button class="link" id="refreshPair">Refresh pairing link</button></div></div>
     <div class="difficulty viewpick" role="radiogroup" aria-label="Camera"><span>Camera · <kbd>V</kbd></span>${(["third", "first", "broadcast"] as const).map((v) => `<input type="radio" name="view" id="v-${v}" value="${v}"><label for="v-${v}">${{ third: "3rd person", first: "1st person", broadcast: "Broadcast" }[v]}</label>`).join("")}</div>
     <div id="players"></div>
+    <div id="rankedBox" class="ranked hidden"><div class="rkstatus" id="rkStatus"></div><p class="fine" id="rkLast"></p><button class="cta" id="rkFind">Find match <span>→</span></button><button class="ghost hidden" id="rkCancel">Cancel search</button><h3>Leaderboard</h3><ol class="board" id="rkBoard"><li class="fine">No ranked games yet.</li></ol></div>
     <div class="telemetry" id="telemetry"></div>
     <button id="start" class="cta">Start practice <span>→</span></button>
     <div class="row"><button id="pause" class="ghost">Pause</button><button id="resume" class="ghost">Resume</button></div>
@@ -129,11 +132,19 @@ function display() {
     "online-doubles":
       "Each household opens its own screen with the code and pairs its own two phones.",
   };
+  modeNotes["online-ranked1"] =
+    "Pair your phone, then Find match: you're paired with someone near your rating, on their own screen.";
+  modeNotes["online-ranked2"] =
+    "Bring a friend on this screen, or queue alone and get a teammate. Each side plays on its own screen.";
   const syncMode = () => {
     const sel = document.querySelector<HTMLInputElement>(
       "input[name=mode]:checked",
     )!;
     const bots = sel.value === "solo" || sel.value === "coop";
+    const ranked = sel.value.startsWith("ranked");
+    // Ranked uses the standard (Hard) hitbox for everyone, so no difficulty choice.
+    $("difficultyRow").classList.toggle("hidden", ranked);
+    $("difficultyHint").classList.toggle("hidden", ranked);
     $("difficultyHint").textContent = bots
       ? "Easy: biggest hitbox (2.3×), gentle bots. Medium: 1.6× hitbox. Hard: normal hitbox, sharp bots."
       : "Easy: biggest hitbox (2.3×). Medium: 1.6×. Hard: normal hitbox.";
@@ -310,8 +321,17 @@ function display() {
     ui("connection").text = s + " · " + net.room;
   };
   net.onState = ({ state }: { state: Match }) => {
+    // Matchmaking moves this screen into its ranked match (and back home afterwards).
+    const mv = state.moves?.[displayId];
+    if (mv && mv.code !== net.room) {
+      net.room = mv.code;
+      if (mv.displayId) displayId = mv.displayId;
+      net.kick();
+      return;
+    }
     current = state;
     scene.update(state);
+    rankedUI(state);
     keyHints(state);
     gameOver(state);
     const popup = state.phase === "rally" && state.popup && state.bounces === 0;
@@ -330,6 +350,7 @@ function display() {
     ui("courtLabel").text =
       (MAPS.find((x) => x.id === state.map)?.short.toUpperCase() ?? "") +
       " · " +
+      (state.ranked ? "RANKED " : "") +
       (state.mode === "practice"
         ? "MOTION LAB · LIVE PADDLE"
         : (
@@ -346,18 +367,25 @@ function display() {
             : state.paused
               ? "PAUSED"
               : state.phase.toUpperCase()));
-    const choice = state.mode === "singles" || state.mode === "doubles";
+    const choice =
+      !state.ranked && (state.mode === "singles" || state.mode === "doubles");
     $("teamPick").classList.toggle(
       "hidden",
       !choice || state.phase !== "lobby",
     );
-    ui("players").html = Array.from({ length: slots(state.mode) }, (_, i) => {
+    const seats =
+      state.ranked && state.ranked.stage !== "match"
+        ? state.ranked.queue === "1v1"
+          ? 1
+          : 2
+        : slots(state.mode);
+    ui("players").html = Array.from({ length: seats }, (_, i) => {
       const p = state.players.filter((p) => !p.bot)[i];
       const swap =
         p && host && choice && state.phase === "lobby"
           ? `<button class="swap" data-team="${p.id}:${1 - p.team}">→ ${p.team ? "Blue" : "Red"}</button>`
           : "";
-      return `<div class="player team${p ? p.team : ""}"><span>${p ? escape(p.name) : "Waiting for player " + (i + 1)}<br><small>${p ? (p.team ? "Red" : "Blue") + " · " + p.hand + " handed" : "Scan to claim this slot"}</small></span>${swap}<span class="status">${p ? (p.connected ? (p.ready ? "Ready ✓" : "Calibrate") : "Offline") : "○"}</span></div>`;
+      return `<div class="player team${p ? p.team : ""}"><span>${p ? escape(p.name) : "Waiting for player " + (i + 1)}<br><small>${p ? (state.ranked ? p.rr + " RR" : (p.team ? "Red" : "Blue") + " · " + p.hand + " handed") : state.ranked && i > 0 ? "Optional: a friend on this screen" : "Scan to claim this slot"}</small></span>${swap}<span class="status">${p ? (p.connected ? (p.ready ? "Ready ✓" : "Calibrate") : "Offline") : "○"}</span></div>`;
     }).join("");
     const p = state.players.find((p) => !p.bot);
     ui("telemetry").html = p
@@ -551,11 +579,80 @@ function display() {
           practice: "PRACTICE",
         } as Record<string, string>
       )[state.mode] + " · FINAL";
+    if (state.ranked) {
+      $("goMode").textContent =
+        "RANKED " + state.ranked.queue.toUpperCase() + " · FINAL";
+      $("goNames").innerHTML = state.ranked.results
+        .map((r) => {
+          const d = r.after - r.before;
+          return `<span class="team${r.team}">${escape(r.name)} ${r.after} RR <b>${d >= 0 ? "+" : ""}${d}</b></span>`;
+        })
+        .join("<br>");
+      $("again").classList.add("hidden");
+      $("goMenu").classList.add("hidden");
+      $("goWait").textContent = "Heading back to your lobby…";
+      return;
+    }
+    $("goMenu").classList.remove("hidden");
     $("again").classList.toggle("hidden", !host);
     $("goWait").textContent = host
       ? "Same players, same mode, fresh score."
       : "Waiting for the host to start a rematch…";
   };
+  // ——— Ranked lobby: search, status, leaderboard ———
+  let boardAt = 0;
+  const rankedUI = (state: Match) => {
+    const rk = state.ranked;
+    const box = !!rk && rk.stage !== "match";
+    $("rankedBox").classList.toggle("hidden", !box);
+    $("start").classList.toggle("hidden", !!rk);
+    $("pairing").classList.toggle("hidden", !!rk && rk.stage !== "lobby");
+    if (!rk || !box) return;
+    const h = state.players.filter((p) => !p.bot);
+    const allSet = h.length > 0 && h.every((p) => p.connected && p.ready);
+    const secs = Math.floor((Date.now() - rk.since) / 1000);
+    ui("rkStatus").text =
+      rk.stage === "searching"
+        ? `Searching ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")} · players within ±${rk.window} RR`
+        : rk.stage === "matched"
+          ? "Match found! Heading to the court…"
+          : !h.length
+            ? "Scan the QR with your phone to join."
+            : allSet
+              ? "Ready. Find a match when you are."
+              : "Finish the movement test on your phone, then tap Ready.";
+    const mine = rk.results.filter((r) => h.some((p) => p.name === r.name));
+    ui("rkLast").text = mine.length
+      ? "Last match: " +
+        mine
+          .map(
+            (r) =>
+              `${r.name} ${r.before} → ${r.after} (${r.after >= r.before ? "+" : ""}${r.after - r.before})`,
+          )
+          .join(" · ")
+      : "";
+    $("rkFind").classList.toggle("hidden", rk.stage !== "lobby");
+    $<HTMLButtonElement>("rkFind").disabled = !allSet;
+    $("rkCancel").classList.toggle("hidden", rk.stage !== "searching");
+    if (Date.now() - boardAt > 15000) {
+      boardAt = Date.now();
+      fetch("/api/leaderboard")
+        .then((r) => r.json())
+        .then(({ top }) => {
+          ui("rkBoard").html = top.length
+            ? top
+                .map(
+                  (t: any) =>
+                    `<li><span>${escape(t.name)}</span><b>${t.rr}</b><small>${t.wins}–${t.games - t.wins}</small></li>`,
+                )
+                .join("")
+            : '<li class="fine">No ranked games yet.</li>';
+        })
+        .catch(() => {});
+    }
+  };
+  action("rkFind", () => net.api("ranked/search", {}));
+  action("rkCancel", () => net.api("ranked/cancel", {}));
   action("again", () => net.api("rematch", {}));
   $("goMenu").onclick = () => {
     sessionStorage.removeItem("visual-host");
@@ -588,8 +685,14 @@ function display() {
     const mode = document.querySelector<HTMLInputElement>(
       "input[name=mode]:checked",
     )!.value;
+    const ranked = mode.startsWith("ranked")
+      ? mode === "ranked1"
+        ? "1v1"
+        : "2v2"
+      : undefined;
     const r = await net.api("create", {
-      mode,
+      mode: ranked ? (ranked === "1v1" ? "singles" : "doubles") : mode,
+      ranked,
       map:
         document.querySelector<HTMLInputElement>("input[name=map]:checked")
           ?.value || "arena",
@@ -679,7 +782,10 @@ function display() {
   }
 }
 function phone() {
-  app.innerHTML = `<div class="phone"><div class="row"><div class="logo"><b>POV</b>pickle</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A quick movement test learns your swings. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div id="setup" class="card"><div class="number" id="stage">02 / MOVEMENT TEST</div><h2 id="instruction">Let’s test your swings.</h2><p id="guidance">Tap Enable, then hold the phone like a paddle. Screen forward or back, either is fine.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary hidden" id="useSaved">Use my saved swings</button><button class="full secondary" id="calibrate" disabled>Hold still · start the test</button><ol class="checks" id="checks"><li data-k="right"><i>→</i>Swing right<b></b></li><li data-k="left"><i>←</i>Swing left<b></b></li><li data-k="up"><i>↑</i>Swing up<b></b></li><li data-k="down"><i>↓</i>Swing down<b></b></li></ol><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Small, comfortable swings work best.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div class="telemetry"><span>Sensors<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Live swing<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><button class="link" id="reconnect">Reconnect</button></div><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div><p class="fine">Thumb up = run to the net · down = back · sideways = slide</p></div><button class="full secondary" id="phonePause">Pause</button><p class="fine" id="lockNote">Your swing settings are locked for this game.</p><button class="link" id="redo">Redo movement test</button></div></div><div id="error" role="alert"></div><p class="screen-note">Keep this page visible during play.<br>Sensor motion estimates intent, not physical position.</p></div>`;
+  app.innerHTML = `<div class="phone"><div class="row"><div class="logo"><b>POV</b>pickle</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A quick movement test learns your swings. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div id="setup" class="card"><div class="number" id="stage">02 / MOVEMENT TEST</div><h2 id="instruction">Let’s test your swings.</h2><p id="guidance">Tap Enable, then hold the phone like a paddle. Screen forward or back, either is fine.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary hidden" id="useSaved">Use my saved swings</button><button class="full secondary" id="calibrate" disabled>Hold still · start the test</button><ol class="checks" id="checks"><li data-k="right"><i>→</i>Swing right<b></b></li><li data-k="left"><i>←</i>Swing left<b></b></li><li data-k="up"><i>↑</i>Swing up<b></b></li><li data-k="down"><i>↓</i>Swing down<b></b></li></ol><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Small, comfortable swings work best.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div class="telemetry"><span>Sensors<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Live swing<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><button class="link" id="reconnect">Reconnect</button></div><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><button class="full secondary" id="phonePause">Pause</button><button class="link" id="redo">Redo movement test</button></div></div><div id="error" role="alert"></div></div>`;
+  // Gripping the phone like a paddle presses on the screen: no text selection, look-up or
+  // copy pop-ups anywhere on the controller.
+  document.body.classList.add("controller");
   {
     const o = $<HTMLSelectElement>("outfit");
     const saved = localStorage.getItem("pov-outfit");
@@ -844,7 +950,15 @@ function phone() {
     if (!/^[A-F0-9]{6}$/.test(net.room))
       throw Error("Enter the six-character room code shown on your display.");
     const saved = localStorage.getItem("visual-controller-" + net.room);
+    let rankKey = localStorage.getItem("pov-rank-key");
+    if (!rankKey) {
+      const b = new Uint8Array(24);
+      crypto.getRandomValues(b);
+      rankKey = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem("pov-rank-key", rankKey);
+    }
     const r = await net.api("join", {
+      rankKey,
       name: info.name,
       hand: info.hand,
       outfit: info.outfit,
@@ -853,10 +967,16 @@ function phone() {
     });
     if (!joinInfo) {
       joinInfo = info;
-      // iOS offers "Undo Typing" when you shake the phone after typing in a text box —
-      // and swinging is shaking. Removing the typed-in fields clears that undo history.
       (document.activeElement as HTMLElement | null)?.blur();
       $("join").replaceChildren();
+      // iOS offers "Undo Typing" when you shake the phone after typing in a text box — and
+      // swinging is shaking. Its undo history belongs to the page, so after a typed join we
+      // reopen the controller as a fresh page (this phone's seat is saved and taken back).
+      if (!reconnect) {
+        localStorage.setItem("visual-controller-" + net.room, r.credential);
+        location.replace("/controller?room=" + net.room);
+        return;
+      }
     }
     net.credential = r.credential;
     playerId = r.player.id;
@@ -905,8 +1025,21 @@ function phone() {
     if (
       /^[A-F0-9]{6}$/.test(room) &&
       localStorage.getItem("visual-controller-" + room)
-    )
-      claim(true).catch(() => {});
+    ) {
+      // Never show (or let anyone type in) the text fields on this page.
+      $("join").replaceChildren();
+      joinInfo = {
+        room,
+        name: "",
+        hand: "right",
+        outfit: localStorage.getItem("pov-outfit") || "classic",
+      };
+      claim(true).catch(() => {
+        // Seat expired: forget it and start over with the join form.
+        localStorage.removeItem("visual-controller-" + room);
+        location.replace("/controller?room=" + room);
+      });
+    }
   }
   // Permission calls must occur directly in the click gesture, before network or other awaits.
   $("enable").onclick = async () => {
@@ -1060,7 +1193,8 @@ function phone() {
     const dead = Math.hypot(dx, dy) < 0.15;
     padVec.x = dead ? 0 : Math.round(dx * 100) / 100;
     padVec.z = dead ? 0 : Math.round(-dy * 100) / 100;
-    knob.style.transform = `translate(${dx * 38}px, ${dy * 38}px)`;
+    const travel = rad - knob.offsetWidth / 2;
+    knob.style.transform = `translate(${dx * travel}px, ${dy * travel}px)`;
   };
   const padEnd = () => {
     padTouch = null;
@@ -1079,6 +1213,15 @@ function phone() {
   ring.addEventListener("pointerup", padEnd);
   ring.addEventListener("pointercancel", padEnd);
   net.onState = ({ state }: { state: Match }) => {
+    // Ranked matchmaking moves this phone into its match and back to the lobby afterwards.
+    const mv = state.moves?.[playerId];
+    if (mv && mv.code !== net.room) {
+      localStorage.setItem("visual-controller-" + mv.code, net.credential);
+      net.room = mv.code;
+      history.replaceState(null, "", "/controller?room=" + mv.code);
+      net.kick();
+      return;
+    }
     current = state;
     const p = state.players.find((p) => p.id === playerId);
     const wasReady = ready;
@@ -1089,16 +1232,25 @@ function phone() {
       $("guidance").textContent =
         "Paused for you. Hold still, tap the button to set your start position, then Ready.";
     }
-    if (p) ui("igTitle").text = "Ready ✓ · " + p.name;
+    if (p)
+      ui("igTitle").text =
+        p.name + (state.ranked && p.rr ? " · " + p.rr + " RR" : " · Ready ✓");
     ui("phonePause").text = state.paused ? "Resume" : "Pause";
+    const mineRes = state.ranked?.results.find((r) => r.name === p?.name);
     ui("matchStatus").text =
-      state.phase === "over"
-        ? "Game over · " + state.message + " The host can tap Play again."
-        : state.phase === "lobby"
-          ? ready
-            ? "You're ready. Waiting for the big screen to start the game."
-            : state.message
-          : (state.paused ? "Paused · " : "") + state.message;
+      state.phase === "over" && state.ranked
+        ? mineRes
+          ? `${state.message} ${mineRes.after >= mineRes.before ? "+" : ""}${mineRes.after - mineRes.before} RR`
+          : state.message
+        : state.phase === "lobby" && state.ranked
+          ? state.message
+          : state.phase === "over"
+            ? "Game over · " + state.message + " The host can tap Play again."
+            : state.phase === "lobby"
+              ? ready
+                ? "You're ready. Waiting for the big screen to start the game."
+                : state.message
+              : (state.paused ? "Paused · " : "") + state.message;
     // Pop-up coming to my team: tell me (and buzz on phones that support it).
     const mine = state.players.find((q) => q.id === playerId);
     const myPopup =

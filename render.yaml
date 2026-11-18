@@ -19,3 +19,6 @@ services:
       - key: NODE_ENV
         value: production
 # Rooms live in memory: keep this at ONE instance (do not enable autoscaling).
+# Ranked ratings are saved to DATA_DIR (default ./data). The free plan has no persistent
+# disk, so they reset on every restart/redeploy. To keep them: use a paid plan, add a disk
+# (e.g. mountPath /var/data) and set DATA_DIR=/var/data.

@@ -156,11 +156,15 @@ export function joinController(
     return { credential, player: p, seq: session.lastSeq };
   }
   if (r.state.phase !== "lobby") throw Error("Match already started");
+  const rk = r.state.ranked;
+  if (rk && rk.stage !== "lobby")
+    throw Error("This ranked lobby is busy. Pair before searching.");
   const humans = r.state.players.filter((p) => !p.bot);
-  if (humans.length >= slots(r.state.mode))
-    throw Error("All controller slots are occupied");
-  let team = teamFor(r.state.mode, humans.length);
-  if (teamChoice(r.state.mode)) {
+  // A ranked lobby holds just this household's phones: one for 1v1, up to two for 2v2.
+  const cap = rk ? (rk.queue === "1v1" ? 1 : 2) : slots(r.state.mode);
+  if (humans.length >= cap) throw Error("All controller slots are occupied");
+  let team = rk ? 0 : teamFor(r.state.mode, humans.length);
+  if (!rk && teamChoice(r.state.mode)) {
     const count = (t: number) => humans.filter((p) => p.team === t).length;
     if (
       preferTeam !== null &&

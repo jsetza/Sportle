@@ -880,8 +880,8 @@ kbd {
   text-align: center;
 }
 .padring {
-  width: 150px;
-  height: 150px;
+  width: min(250px, 66vw);
+  height: min(250px, 66vw);
   margin: 0 auto;
   border-radius: 50%;
   border: 2px solid var(--line);
@@ -897,8 +897,8 @@ kbd {
   -webkit-user-select: none;
 }
 .knob {
-  width: 64px;
-  height: 64px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
   background: radial-gradient(
     circle at 35% 30%,
@@ -1240,4 +1240,70 @@ body.split::after {
   width: auto;
   text-align: left;
   margin: 0 0 4px;
+}
+
+/* Phone controller: gripping the phone presses the screen — no selection, callouts or
+   look-up pop-ups, no double-tap zoom. */
+body.controller,
+body.controller * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+body.controller input,
+body.controller select {
+  -webkit-user-select: text;
+  user-select: text;
+}
+body.controller button,
+body.controller .card {
+  touch-action: manipulation;
+}
+/* Ranked lobby */
+.ranked {
+  margin-top: 14px;
+}
+.rkstatus {
+  font-size: 18px;
+  font-weight: 650;
+  margin: 6px 0 2px;
+}
+.ranked h3 {
+  margin: 22px 0 8px;
+  font-size: 15px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: rank;
+}
+.board li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  counter-increment: rank;
+}
+.board li:not(.fine)::before {
+  content: counter(rank);
+  width: 22px;
+  color: var(--faint);
+}
+.board li span {
+  flex: 1;
+}
+.board li small {
+  color: var(--muted);
+}
+#rkCancel {
+  width: 100%;
+  margin-top: 10px;
+}
+.goscore + p b {
+  margin-left: 4px;
 }

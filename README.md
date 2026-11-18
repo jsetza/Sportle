@@ -103,6 +103,7 @@ Phones must stay visible. Backgrounding, lost sensor data, or a disconnected pho
 - **Maps:** Arena, Tokyo, Manila rooftop, San Francisco rooftop, Central Park NY — pick one on the start screen.
 - **Outfits:** pick one on your phone when you join (jersey, cap, sweatband, chef, astronaut, cowboy).
 - **Dropouts:** if a phone drops out the game pauses and resumes by itself when it's back; a reloaded phone needs one tap to rejoin.
+- **Ranked:** Online → Ranked 1 v 1 or 2 v 2 finds players near your rating (RR), each on their own screen and phone. Ratings live on the server in `DATA_DIR` (they reset on hosts without a persistent disk, like Render's free plan).
 - Each player's name floats above their head in their team colour (hidden for your own player in first person).
 - Sound is opt-in (contact and fault tones). The scoreboard and status banner announce service and faults visually.
 - The display is a full-screen 3D arena. The menu shows a cosmetic demo rally between two mascots; it is decoration only and never presented as a match. During play the panel tucks away behind a **Room** tab. Arrow keys + Enter navigate the menu (TV remotes).

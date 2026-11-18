@@ -14,3 +14,4 @@ coverage/
 .idea/
 playwright-report/
 test-results/
+data/

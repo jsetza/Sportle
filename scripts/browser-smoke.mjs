@@ -101,7 +101,8 @@ try {
   await rot(0, 240, 0); // up
   await rot(0, -250, 0); // down
   const checks = await phone.locator("#checks li.done").count();
-  if (checks !== 4) throw Error("Movement test confirmed " + checks + " of 4 swings");
+  if (checks !== 4)
+    throw Error("Movement test confirmed " + checks + " of 4 swings");
   await phone.locator("#ready").click();
   await phone.locator("#ingame").waitFor({ state: "visible" });
   if (await phone.locator("#setup").isVisible())
@@ -169,7 +170,11 @@ try {
     phone.evaluate(() => {
       window.testSensors = setInterval(() => {
         window.dispatchEvent(
-          new DeviceOrientationEvent("deviceorientation", { alpha: 0, beta: 35, gamma: 0 }),
+          new DeviceOrientationEvent("deviceorientation", {
+            alpha: 0,
+            beta: 35,
+            gamma: 0,
+          }),
         );
         window.dispatchEvent(
           new DeviceMotionEvent("devicemotion", {

@@ -55,6 +55,23 @@ export const OUTFITS: { id: Outfit; name: string }[] = [
   { id: "astro", name: "Astronaut" },
   { id: "cowboy", name: "Cowboy" },
 ];
+export type RankedQueue = "1v1" | "2v2";
+export type Ranked = {
+  queue: RankedQueue;
+  /**
+   * lobby: a household's own ranked lobby (pair phones, then search)
+   * searching: waiting in the matchmaking queue · matched: moving to the match
+   * match: the ranked match itself
+   */
+  stage: "lobby" | "searching" | "matched" | "match";
+  /** When searching started (epoch ms) and how wide the rating search is right now. */
+  since: number;
+  window: number;
+  /** Final rating changes, filled in when a ranked match ends. */
+  results: { name: string; team: number; before: number; after: number }[];
+};
+/** Starting rating for new players; Elo-style changes of up to 32 per match. */
+export const START_RR = 1000;
 export type Vec = { x: number; y: number; z: number };
 export type Input = {
   seq: number;
@@ -114,6 +131,8 @@ export type Player = {
   /** How this player moves: automatic positioning, display keyboard, or the phone's thumb pad. */
   moveStyle: MoveStyle;
   outfit: Outfit;
+  /** Ranked rating, shown in ranked rooms (0 when the phone has no ranked profile). */
+  rr: number;
 };
 export type Match = {
   mode: Mode;
@@ -126,6 +145,13 @@ export type Match = {
    * dropped out (play resumes by itself once everyone is back). "" when not paused.
    */
   pauseReason: "" | "host" | "drop";
+  /** Competitive play (owner request: "RR" ranked matchmaking). null for casual rooms. */
+  ranked: Ranked | null;
+  /**
+   * Clients that must switch rooms (matchmaking moves a household into its match and back):
+   * keyed by a display's id or a phone's player id → the room to switch to.
+   */
+  moves: Record<string, { code: string; displayId?: string }>;
   /** Epoch ms when an automatic resume happens (0 = none scheduled). */
   resumeAt: number;
   score: number[];
