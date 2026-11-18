@@ -322,6 +322,7 @@ test("a short swing window contacts an approaching ball without repeated hits", 
   const { queueSwing } = await import("../src/server/engine.ts");
   const m = singles(),
     p = m.players[0];
+  m.difficulty = "hard"; // base hitbox
   m.phase = "rally";
   m.hits = 3;
   m.lastTeam = 1;

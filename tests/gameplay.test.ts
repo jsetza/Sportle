@@ -151,6 +151,7 @@ test("clean timing beats edge-of-reach contact", () => {
 test("a swing window waits for the best contact point, still one contact", () => {
   const m = singles(),
     p = m.players[0];
+  m.difficulty = "hard"; // base hitbox
   rally(m, 1);
   m.bounces = 1;
   p.pos = { x: 0, y: 0, z: 4.1 };
@@ -617,6 +618,7 @@ test("badly timed contact can pop the ball up: high, short, past the kitchen", (
     clean = 0;
   for (let i = 0; i < 120; i++) {
     const m = singles();
+    m.difficulty = "hard"; // base hitbox
     m.seed = 77 + i;
     const p = m.players[0];
     rally(m, 1);
@@ -656,6 +658,7 @@ test("auto mode runs to the smash spot and a downward swing smashes the pop-up",
   let smashed = 0;
   for (let i = 0; i < 30; i++) {
     const m = singles();
+    m.difficulty = "hard"; // base hitbox: off-centre contact pops up
     m.seed = 900 + i;
     const [a, b] = m.players;
     rally(m, 0);
@@ -905,6 +908,7 @@ test("a slightly late swing still connects at the moment the player was shown", 
   const { LATE_GRACE } = await import("../src/server/engine.ts");
   const m = singles(),
     p = m.players[0];
+  m.difficulty = "hard"; // base hitbox
   rally(m, 1);
   m.bounces = 1;
   p.pos = { x: 0, y: 0, z: 4.1 };
@@ -927,6 +931,7 @@ test("a slightly late swing still connects at the moment the player was shown", 
   // Far too late: no contact.
   const m2 = singles(),
     p2 = m2.players[0];
+  m2.difficulty = "hard";
   rally(m2, 1);
   m2.bounces = 1;
   p2.pos = { x: 0, y: 0, z: 4.1 };
@@ -936,4 +941,32 @@ test("a slightly late swing still connects at the moment the player was shown", 
   for (let i = 0; i < t + 1 + Math.ceil(LATE_GRACE * 120) + 6; i++) step(m2);
   queueSwing(m2, p2, { ...ZERO_INPUT, strength: 0.6 });
   assert.equal(m2.contacts, 0);
+});
+
+test("difficulty sets the human hitbox: easy 2.3x, medium 1.6x, hard 1x", async () => {
+  const { HITBOX, HUMAN_REACH, humanReach } = await import(
+    "../src/server/engine.ts"
+  );
+  assert.deepEqual({ ...HITBOX }, { easy: 2.3, medium: 1.6, hard: 1 });
+  for (const [d, dist, hits] of [
+    ["hard", 1.5, false],
+    ["medium", 1.5, true],
+    ["medium", 2.3, false],
+    ["easy", 2.3, true],
+  ] as const) {
+    const m = singles(),
+      p = m.players[0];
+    m.difficulty = d;
+    assert.ok(Math.abs(humanReach(m) - HUMAN_REACH * HITBOX[d]) < 1e-9);
+    rally(m, 1);
+    m.bounces = 1;
+    p.pos = { x: 0, y: 0, z: 5 };
+    m.ball = { x: dist * forehandSide(p), y: 0.9, z: 5 };
+    p.lastHit = -10;
+    assert.equal(
+      hit(m, p, { ...ZERO_INPUT, strength: 0.6 }),
+      hits,
+      `${d} at ${dist} m`,
+    );
+  }
 });

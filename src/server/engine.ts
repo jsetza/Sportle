@@ -327,6 +327,10 @@ function launch(
 }
 /** Reach (m, horizontal from the body) for a human swing; bots keep 1.15 m. */
 export const HUMAN_REACH = 1.3;
+/** Owner request: human hitbox size by game difficulty (hard = the base hitbox). */
+export const HITBOX = { easy: 2.3, medium: 1.6, hard: 1 } as const;
+/** Reach (m) for a human player at this match's difficulty. */
+export const humanReach = (m: Match) => HUMAN_REACH * HITBOX[m.difficulty];
 /** An early swing waits this long (s) for the ball to arrive. */
 export const EARLY_WINDOW = 0.25;
 /**
@@ -372,7 +376,7 @@ function hittable(m: Match, p: Player) {
     m.phase === "rally" &&
     m.lastTeam !== p.team &&
     (p.team === 0 ? b.z >= 0.04 : b.z <= -0.04) &&
-    Math.hypot(b.x - p.pos.x, b.z - p.pos.z) <= HUMAN_REACH &&
+    Math.hypot(b.x - p.pos.x, b.z - p.pos.z) <= humanReach(m) &&
     b.y >= 0.12 &&
     b.y <= 2.65
   );
@@ -456,7 +460,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const b = m.ball;
   if (
     (p.team === 0 ? b.z < 0.04 : b.z > -0.04) ||
-    Math.hypot(b.x - p.pos.x, b.z - p.pos.z) > (p.bot ? 1.15 : HUMAN_REACH) ||
+    Math.hypot(b.x - p.pos.x, b.z - p.pos.z) > (p.bot ? 1.15 : humanReach(m)) ||
     b.y < 0.12 ||
     b.y > 2.65
   )
@@ -587,7 +591,10 @@ export function contactQuality(m: Match, p: Player) {
     side = forehandSide(p) * FOREHAND_OFFSET;
   // Clean contact on either side of the body: forehand, or a slightly less forgiving backhand.
   const at = (px: number) => Math.hypot(b.x - px, (b.z - p.pos.z) * 1.2);
-  const d = Math.min(at(p.pos.x + side), at(p.pos.x - side) * 1.08);
+  // A bigger hitbox (easier difficulty) also keeps contact clean further from the body.
+  const d =
+    Math.min(at(p.pos.x + side), at(p.pos.x - side) * 1.08) /
+    (p.bot ? 1 : HITBOX[m.difficulty]);
   // High contact is awkward for ordinary shots, but it is exactly where a smash happens.
   const high = m.popup && m.bounces === 0 ? 2.5 : 1.5;
   const h = b.y < 0.35 ? 0.35 - b.y : b.y > high ? (b.y - high) * 0.4 : 0;
@@ -820,7 +827,7 @@ export function step(m: Match, dt = 1 / 120) {
       // Within the short swing window, meet the ball at its best point rather than the first
       // reachable tick, so a well-timed compact swing gets clean contact.
       const reach =
-        Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) <= HUMAN_REACH;
+        Math.hypot(m.ball.x - p.pos.x, m.ball.z - p.pos.z) <= humanReach(m);
       const q = contactQuality(m, p);
       // A downward swing at a high ball is a smash: take it now, while it is still up there.
       const smashNow = smashIntent(m, p.swingInput);

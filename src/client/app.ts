@@ -79,7 +79,8 @@ function display() {
       ${item("online", "doubles", "Online 2 v 2", "2 phones each side")}
       <details id="joinBox"><summary class="item"><span class="ball"></span><b>Join a game</b><small>Enter a code</small></summary><div class="joinrow"><input id="displayCode" maxlength="6" placeholder="ROOM CODE" autocomplete="off" aria-label="Room code"><button id="joinDisplay">Join</button></div></details>
     </div>
-    <div class="difficulty" id="difficultyRow" role="radiogroup" aria-label="Bot level"><span>Bot level</span>${["easy", "medium", "hard"].map((d, i) => `<input type="radio" name="difficulty" id="d-${d}" value="${d}" ${i === 0 ? "checked" : ""}><label for="d-${d}">${d[0].toUpperCase() + d.slice(1)}</label>`).join("")}</div>
+    <div class="difficulty" id="difficultyRow" role="radiogroup" aria-label="Difficulty"><span>Difficulty</span>${["easy", "medium", "hard"].map((d, i) => `<input type="radio" name="difficulty" id="d-${d}" value="${d}" ${i === 0 ? "checked" : ""}><label for="d-${d}">${d[0].toUpperCase() + d.slice(1)}</label>`).join("")}</div>
+    <p class="fine" id="difficultyHint"></p>
     <button class="cta" id="create">Create game <span>→</span></button>
     <p class="fine" id="modeNote">No app to install. Scan, calibrate, swing.</p>
   </div>
@@ -119,7 +120,9 @@ function display() {
       "input[name=mode]:checked",
     )!;
     const bots = sel.value === "solo" || sel.value === "coop";
-    $("difficultyRow").classList.toggle("hidden", !bots);
+    $("difficultyHint").textContent = bots
+      ? "Easy: biggest hitbox (2.3×), gentle bots. Medium: 1.6× hitbox. Hard: normal hitbox, sharp bots."
+      : "Easy: biggest hitbox (2.3×). Medium: 1.6×. Hard: normal hitbox.";
     $("modeNote").textContent =
       modeNotes[sel.dataset.group + "-" + sel.value] || "";
     ($("joinBox") as HTMLDetailsElement).open = false;
