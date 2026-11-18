@@ -90,8 +90,8 @@ export const LOOKS: Record<MapId, Look> = {
   },
   centralpark: {
     sky: [0.56, 0.76, 0.96],
-    fogNear: 40,
-    fogFar: 135,
+    fogNear: 60,
+    fogFar: 200,
     ambient: 1.02,
     spots: 0.15,
     ground: [0.3, 0.56, 0.26],
@@ -157,6 +157,131 @@ function tree(b: Builder, x: number, z: number, s: number, leaf: V, y = 0) {
       5,
       8,
     );
+}
+
+const BLOSSOM = [
+  [1, 0.78, 0.86],
+  [0.98, 0.68, 0.8],
+  [1, 0.86, 0.92],
+  [0.95, 0.6, 0.74],
+];
+/** Cherry-blossom (sakura) tree: dark crooked trunk, spreading branches, clouds of pink. */
+function sakura(b: Builder, x: number, z: number, s: number) {
+  const bark = [0.24, 0.16, 0.14];
+  b.box(x, 0.9 * s, z, 0.32 * s, 1.8 * s, 0.32 * s, bark, 0, 0.06);
+  const n = 4 + Math.floor(rnd() * 2);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.6,
+      len = (1.3 + rnd() * 0.6) * s;
+    const ex = x + Math.cos(a) * len * 0.8,
+      ez = z + Math.sin(a) * len * 0.8,
+      ey = (1.8 + 0.9 + rnd() * 0.5) * s;
+    // branch from the top of the trunk out to the blossom cloud
+    const mx = (x + ex) / 2,
+      mz = (z + ez) / 2,
+      my = (1.7 * s + ey) / 2;
+    const horiz = Math.hypot(ex - x, ez - z),
+      tilt = Math.atan2(horiz, ey - 1.7 * s);
+    b.box(
+      mx,
+      my,
+      mz,
+      0.13 * s,
+      Math.hypot(horiz, ey - 1.7 * s),
+      0.13 * s,
+      bark,
+      0,
+      tilt,
+      -a + Math.PI / 2,
+    );
+    b.blob(
+      ex,
+      ey,
+      ez,
+      (1 + rnd() * 0.4) * s,
+      (0.7 + rnd() * 0.3) * s,
+      (1 + rnd() * 0.4) * s,
+      pick(BLOSSOM),
+      0,
+      5,
+      9,
+    );
+  }
+  b.blob(
+    x,
+    (3 + rnd() * 0.4) * s,
+    z,
+    1.3 * s,
+    0.9 * s,
+    1.3 * s,
+    pick(BLOSSOM),
+    0,
+    5,
+    9,
+  );
+  // fallen petals on the ground under it
+  for (let i = 0; i < 14; i++) {
+    const a = rnd() * Math.PI * 2,
+      r = rnd() * 2.6 * s;
+    b.box(
+      x + Math.cos(a) * r,
+      0.012,
+      z + Math.sin(a) * r,
+      0.12,
+      0.01,
+      0.08,
+      pick(BLOSSOM),
+      0,
+      0,
+      a,
+    );
+  }
+}
+/** Red torii gate. */
+function torii(b: Builder, x: number, z: number, w: number, h: number, ry = 0) {
+  const red = [0.86, 0.2, 0.14],
+    black = [0.08, 0.06, 0.07];
+  const cos = Math.cos(ry),
+    sin = Math.sin(ry);
+  for (const sd of [-1, 1]) {
+    const px = x + sd * w * 0.38 * cos,
+      pz = z - sd * w * 0.38 * sin;
+    b.box(px, h / 2, pz, 0.5, h, 0.5, red, 0, 0, ry);
+    b.box(px, 0.25, pz, 0.7, 0.5, 0.7, black, 0, 0, ry);
+  }
+  b.box(x, h * 0.78, z, w * 0.92, 0.4, 0.35, red, 0, 0, ry);
+  b.box(x, h + 0.1, z, w * 1.12, 0.45, 0.6, red, 0, 0, ry);
+  b.box(x, h + 0.45, z, w * 1.22, 0.3, 0.75, black, 0, 0, ry);
+  for (const sd of [-1, 1])
+    b.box(
+      x + sd * w * 0.62 * cos,
+      h + 0.6,
+      z - sd * w * 0.62 * sin,
+      0.8,
+      0.3,
+      0.75,
+      black,
+      0,
+      sd * 0.25,
+      ry,
+    );
+  b.box(x, h * 0.9, z, 0.5, h * 0.22, 0.4, red, 0, 0, ry);
+}
+/** Five-tier pagoda. */
+function pagoda(b: Builder, x: number, z: number, s: number) {
+  const wall = [0.82, 0.3, 0.2],
+    roof = [0.14, 0.12, 0.14];
+  b.box(x, 0.5 * s, z, 7 * s, 1 * s, 7 * s, [0.55, 0.52, 0.5]);
+  let y = 1 * s;
+  for (let i = 0; i < 5; i++) {
+    const w = (5 - i * 0.7) * s,
+      h = (2.6 - i * 0.2) * s;
+    b.box(x, y + h / 2, z, w, h, w, wall);
+    b.box(x, y + h + 0.15 * s, z, w + 2.4 * s, 0.35 * s, w + 2.4 * s, roof);
+    b.box(x, y + h + 0.5 * s, z, w + 1.2 * s, 0.4 * s, w + 1.2 * s, roof);
+    y += h + 0.7 * s;
+  }
+  b.box(x, y + 2.5 * s, z, 0.25 * s, 5 * s, 0.25 * s, [0.75, 0.6, 0.3]);
 }
 
 /** Rooftop deck the court sits on, with a railing and the building below it. */
@@ -279,9 +404,28 @@ function tokyo(b: Builder) {
       b.box(tx, y + 4.6, tz, w + 1.5, 1.4, w + 1.5, [0.9, 0.9, 0.85]);
   }
   b.box(tx, 66, tz, 0.5, 10, 0.5, [0.92, 0.28, 0.12]);
-  // cherry trees and lanterns along the plaza
-  for (const s of [-1, 1])
-    for (let z = -9; z <= 9; z += 6) tree(b, s * 9, z, 0.8, [0.98, 0.7, 0.82]);
+  // a sakura avenue: two rows of cherry trees down each side of the court
+  for (const s of [-1, 1]) {
+    for (let z = -14; z <= 14; z += 3.5)
+      sakura(b, s * (8.4 + rnd() * 0.4), z, 0.85 + rnd() * 0.2);
+    for (let z = -12.5; z <= 14; z += 4.5)
+      sakura(b, s * 11.2, z, 1 + rnd() * 0.2);
+  }
+  // more sakura behind each baseline, kept clear of the camera's view down the middle
+  for (const zs of [-1, 1])
+    for (const x of [-9.5, -7.5, 7.5, 9.5])
+      sakura(b, x, zs * (16 + rnd()), 1.05);
+  // petals drifted across the plaza
+  for (let i = 0; i < 260; i++) {
+    const x = (rnd() * 2 - 1) * 12,
+      z = (rnd() * 2 - 1) * 17;
+    if (Math.abs(x) < 3.4 && Math.abs(z) < 7) continue;
+    b.box(x, 0.008, z, 0.1, 0.01, 0.07, pick(BLOSSOM), 0, 0, rnd() * 3);
+  }
+  // torii gates framing each end, and a pagoda on the skyline
+  torii(b, 0, -19, 9, 6.5);
+  torii(b, 0, 19.5, 9, 6.5);
+  pagoda(b, -32, -48, 1.6);
   for (const s of [-1, 1]) {
     b.box(s * 7.6, 4.2, 0, 0.03, 0.03, 26, [0.15, 0.15, 0.2]);
     for (let z = -12; z <= 12; z += 2)
@@ -534,9 +678,9 @@ function centralpark(b: Builder) {
     [0.18, 0.42, 0.18],
     [0.36, 0.6, 0.22],
   ];
-  for (let i = 0; i < 170; i++) {
-    const x = (rnd() * 2 - 1) * 55,
-      z = (rnd() * 2 - 1) * 55;
+  for (let i = 0; i < 190; i++) {
+    const x = (rnd() * 2 - 1) * 40,
+      z = (rnd() * 2 - 1) * 40;
     if (Math.abs(x) < 11 && Math.abs(z) < 14) continue;
     if (Math.abs(z + 12.5) < 2.5 || Math.abs(x - 12.5) < 2.5) continue;
     if (Math.hypot((x + 30) / 15, (z + 32) / 10) < 1) continue;
@@ -553,31 +697,59 @@ function centralpark(b: Builder) {
     [0.5, 0.6, 0.72],
     [0.72, 0.66, 0.58],
   ];
-  for (let i = 0; i < 70; i++) {
+  // A solid wall of buildings along all four edges of the park, then taller towers behind.
+  const edge = (out: number, along: number, side: number) =>
+    side === 0
+      ? [along, -out]
+      : side === 1
+        ? [along, out]
+        : side === 2
+          ? [-out, along]
+          : [out, along];
+  for (let side = 0; side < 4; side++)
+    for (let along = -50; along <= 50; along += 6 + rnd() * 2) {
+      const [x, z] = edge(48 + rnd() * 3, along, side);
+      const w = 5 + rnd() * 2,
+        h = 28 + rnd() ** 1.4 * 50;
+      tower(b, x, 0, z, w, h, w, pick(colors), lit, 3, 0.55);
+      // rooftop water tank on the shorter ones
+      if (h < 45 && rnd() < 0.6) {
+        for (const [dx, dz] of [
+          [-0.5, -0.5],
+          [0.5, -0.5],
+          [-0.5, 0.5],
+          [0.5, 0.5],
+        ])
+          b.box(x + dx, h + 1.2, z + dz, 0.12, 1.2, 0.12, [0.25, 0.2, 0.18]);
+        b.blob(x, h + 2.4, z, 0.9, 0.8, 0.9, [0.5, 0.36, 0.26], 0.6, 4, 10);
+      }
+    }
+  for (let i = 0; i < 160; i++) {
     const side = Math.floor(rnd() * 4),
-      along = (rnd() * 2 - 1) * 80,
-      out = 66 + rnd() * 18;
-    const [x, z] =
-      side === 0
-        ? [along, -out]
-        : side === 1
-          ? [along, out]
-          : side === 2
-            ? [-out, along]
-            : [out, along];
+      along = (rnd() * 2 - 1) * 95,
+      out = 58 + rnd() * 30;
+    const [x, z] = edge(out, along, side);
     tower(
       b,
       x,
       0,
       z,
-      6 + rnd() * 6,
-      22 + rnd() ** 1.5 * 55,
-      6 + rnd() * 6,
+      6 + rnd() * 7,
+      40 + rnd() ** 1.3 * 90,
+      6 + rnd() * 7,
       pick(colors),
       lit,
       3,
       0.5,
     );
+  }
+  // a few very tall, thin glass towers ("billionaires' row") on the south side
+  for (let i = 0; i < 6; i++) {
+    const x = -40 + i * 15 + rnd() * 4,
+      z = 62 + rnd() * 6;
+    b.box(x, 75, z, 5, 150, 5, [0.55, 0.66, 0.78]);
+    for (let y = 6; y < 148; y += 6)
+      b.box(x, y, z, 5.1, 0.25, 5.1, [0.8, 0.85, 0.9]);
   }
   // a stepped art-deco tower with a spire
   const dx = -18,

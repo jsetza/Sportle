@@ -47,7 +47,7 @@ function camera(aspect: number, eye: V, target: V, fov: number, shift: number) {
   ];
   const f = 1 / Math.tan((fov * Math.PI) / 360),
     near = 0.1,
-    far = 140;
+    far = 220;
   return multiply(
     [
       f / aspect,
@@ -1341,6 +1341,33 @@ export class Scene {
           12,
         );
       }
+      // Tokyo: cherry petals drifting down over the court.
+      if (this.map === "tokyo")
+        for (let i = 0; i < 70; i++) {
+          const fall = 9,
+            speed = 0.55 + (i % 7) * 0.06,
+            t = (now / 1000) * speed + i * 1.37;
+          const y = fall - (t % fall),
+            base = (i * 7.31) % 1;
+          const x = -11 + ((i * 3.97) % 22) + Math.sin(t * 1.3 + i) * 0.6,
+            z =
+              -16 +
+              ((i * 5.17) % 32) +
+              Math.cos(t * 0.9 + i) * 0.6 +
+              (fall - y) * 0.35;
+          this.box(
+            x,
+            y,
+            z,
+            0.09,
+            0.012,
+            0.06,
+            base < 0.5 ? [1, 0.78, 0.86] : [0.98, 0.66, 0.8],
+            t * 2.1,
+            t * 1.7,
+            t,
+          );
+        }
       // Contact bursts: expanding ring and shards.
       for (const s of this.bursts) {
         const k = (now - s.at) / 420;
