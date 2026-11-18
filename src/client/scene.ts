@@ -174,8 +174,23 @@ export class Scene {
   follow: string | null = null;
   followPos: Vec | null = null;
   followTeam = 0;
+  /** HTML name tags floating over players' heads (crisp text, projected from 3D each frame). */
+  tagLayer: HTMLDivElement;
+  tagEls = new Map<string, HTMLDivElement>();
+  tags: {
+    id: string;
+    name: string;
+    team: number;
+    x: number;
+    y: number;
+    z: number;
+  }[] = [];
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    this.tagLayer = document.createElement("div");
+    this.tagLayer.className = "nametags";
+    this.tagLayer.setAttribute("aria-hidden", "true");
+    canvas.after(this.tagLayer);
     const gl = canvas.getContext("webgl", { antialias: true, alpha: false });
     if (!gl)
       throw Error(
@@ -917,6 +932,38 @@ export class Scene {
   demoNear = 0;
   demoFar = 0;
   demoHit = -1;
+  /** Project each tag's 3D head point to the screen and move its label there. */
+  placeTags(vp: V) {
+    const cw = this.canvas.clientWidth,
+      ch = this.canvas.clientHeight,
+      seen = new Set<string>();
+    for (const t of this.tags) {
+      // Column-major view-projection × (x, y, z, 1).
+      const cx = vp[0] * t.x + vp[4] * t.y + vp[8] * t.z + vp[12],
+        cy = vp[1] * t.x + vp[5] * t.y + vp[9] * t.z + vp[13],
+        cw4 = vp[3] * t.x + vp[7] * t.y + vp[11] * t.z + vp[15];
+      if (cw4 <= 0.1) continue; // behind the camera
+      const sx = ((cx / cw4 + 1) / 2) * cw,
+        sy = ((1 - cy / cw4) / 2) * ch;
+      if (sx < -100 || sx > cw + 100 || sy < -50 || sy > ch + 50) continue;
+      let el = this.tagEls.get(t.id);
+      if (!el) {
+        el = document.createElement("div");
+        this.tagLayer.appendChild(el);
+        this.tagEls.set(t.id, el);
+      }
+      if (el.textContent !== t.name) el.textContent = t.name;
+      const cls = "nametag team" + t.team;
+      if (el.className !== cls) el.className = cls;
+      // Shrink with distance a little so far players' tags don't crowd the court.
+      const scale = Math.max(0.65, Math.min(1.15, 9 / cw4));
+      el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%) scale(${scale.toFixed(2)})`;
+      el.style.display = "";
+      seen.add(t.id);
+    }
+    for (const [id, el] of this.tagEls)
+      if (!seen.has(id)) el.style.display = "none";
+  }
   render = () => {
     this.raf = requestAnimationFrame(this.render);
     const gl = this.gl,
@@ -968,6 +1015,7 @@ export class Scene {
     };
     let ball: Vec | null = null;
     this.followPos = null;
+    this.tags = [];
     if (m) {
       const owner = m.players
         .filter((p) => p.team !== m.lastTeam)
@@ -989,6 +1037,20 @@ export class Scene {
           this.followPos = pos;
           this.followTeam = p.team;
         }
+        // Name tag for human players (not your own in first person: it'd sit in your eyes).
+        const ownFirst =
+          this.viewMode === "first" &&
+          p.id === this.follow &&
+          m.phase !== "lobby";
+        if (!p.bot && !ownFirst)
+          this.tags.push({
+            id: p.id,
+            name: p.name,
+            team: p.team,
+            x: pos.x,
+            y: 1.85 + (m.serverId === p.id && m.phase === "serve" ? 0.55 : 0),
+            z: pos.z,
+          });
         this.mascot(p, pos, {
           firstPerson:
             this.viewMode === "first" &&
@@ -1129,19 +1191,19 @@ export class Scene {
     gl.enable(gl.DEPTH_TEST);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
+    const vp = camera(
+      w / Math.max(1, h),
+      this.view.eye,
+      this.view.target,
+      this.view.fov,
+      this.view.shift,
+    );
     gl.uniformMatrix4fv(
       gl.getUniformLocation(this.program, "camera"),
       false,
-      new Float32Array(
-        camera(
-          w / Math.max(1, h),
-          this.view.eye,
-          this.view.target,
-          this.view.fov,
-          this.view.shift,
-        ),
-      ),
+      new Float32Array(vp),
     );
+    this.placeTags(vp);
     gl.uniform3fv(gl.getUniformLocation(this.program, "fogColor"), palette.fog);
     gl.uniform4fv(
       gl.getUniformLocation(this.program, "spots"),
