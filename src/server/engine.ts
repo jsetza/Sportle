@@ -131,6 +131,20 @@ const SPEED = { easy: 3.3, medium: 3.8, hard: 4.3 };
 export const FOREHAND_OFFSET = 0.6;
 export const forehandSide = (p: Player) =>
   (p.hand === "right" ? 1 : -1) * (p.team ? -1 : 1);
+/** Ball slowdown: 15% of its speed lost every 0.2 s → exponential rate per second. */
+export const BALL_DRAG = -Math.log(0.85) / 0.2;
+/** Cap on launch speed relative to the shot's average speed (owner: "max velocity ~3x"). */
+export const MAX_LAUNCH_FACTOR = 3;
+/** Horizontal distance covered in time t starting at speed v under BALL_DRAG. */
+export const travel = (v: number, t: number) =>
+  (v * (1 - Math.exp(-BALL_DRAG * t))) / BALL_DRAG;
+/** Time to cover distance d starting at speed v (Infinity if the ball stops short). */
+const timeToCover = (v: number, d: number) => {
+  const r = 1 - (BALL_DRAG * Math.abs(d)) / Math.max(1e-6, Math.abs(v));
+  return r <= 0 ? Infinity : -Math.log(r) / BALL_DRAG;
+};
+/** Horizontal speed (m/s) of a 100% forehand/backhand drive; lower swings scale down from it. */
+export const GROUND_MAX_SPEED = 12.5;
 /** Speed multiplier for overheads and attacking volleys (owner request: +75%). */
 export const VOLLEY_SPEEDUP = 1.75;
 /**
@@ -147,7 +161,13 @@ function netSafeFlight(
   if (Math.sign(b.z) === Math.sign(targetZ) || b.z === 0) return fast;
   for (let t = fast; t < normal; t += 0.02) {
     const vy = (0.07 - b.y + 4.905 * t * t) / t;
-    const tn = t * (Math.abs(b.z) / Math.abs(targetZ - b.z));
+    // When does the (slowing) ball reach the net plane?
+    const boost = Math.min(
+      MAX_LAUNCH_FACTOR,
+      (BALL_DRAG * t) / (1 - Math.exp(-BALL_DRAG * t)),
+    );
+    const vz = ((targetZ - b.z) / t) * boost;
+    const tn = Math.min(t, timeToCover(vz, b.z));
     if (b.y + vy * tn - 4.905 * tn * tn > C.netCenter + 0.12) return t;
   }
   return normal;
@@ -160,7 +180,7 @@ export function descentPoint(m: Match, h: number): Vec | null {
   const disc = v.y * v.y - 2 * g * (h - y);
   if (disc < 0) return null;
   const t = (v.y + Math.sqrt(disc)) / g;
-  return vec(x + v.x * t, h, z + v.z * t);
+  return vec(x + travel(v.x, t), h, z + travel(v.z, t));
 }
 /**
  * Where an incoming ball will be at a comfortable hitting height (~0.8 m) on the way down
@@ -179,12 +199,13 @@ export function intercept(m: Match) {
     z = l.z;
     y = C.radius;
     vy = Math.abs(vy - g * l.t) * 0.76;
-    vx *= 0.86;
-    vz *= 0.86;
+    const slow = Math.exp(-BALL_DRAG * l.t);
+    vx *= 0.86 * slow;
+    vz *= 0.86 * slow;
   }
   const disc = vy * vy - 2 * g * (H - y);
   const t = disc > 0 ? (vy + Math.sqrt(disc)) / g : Math.max(0, vy / g);
-  return { x: x + vx * t, z: z + vz * t, t };
+  return { x: x + travel(vx, t), z: z + travel(vz, t), t };
 }
 /** Ballistic landing estimate (no drag) used for movement anticipation only, never for scoring. */
 export function landing(m: Match) {
@@ -192,7 +213,11 @@ export function landing(m: Match) {
     y = m.ball.y - C.radius,
     vy = m.velocity.y;
   const t = Math.max(0, (vy + Math.sqrt(Math.max(0, vy * vy + 2 * g * y))) / g);
-  return { t, x: m.ball.x + m.velocity.x * t, z: m.ball.z + m.velocity.z * t };
+  return {
+    t,
+    x: m.ball.x + travel(m.velocity.x, t),
+    z: m.ball.z + travel(m.velocity.z, t),
+  };
 }
 export function announce(m: Match, s: string) {
   m.message = s;
@@ -271,10 +296,15 @@ function launch(
   t: number,
   spin: number,
 ) {
+  // Start fast enough that, slowing down under BALL_DRAG, the ball reaches (x, z) in t.
+  const boost = Math.min(
+    MAX_LAUNCH_FACTOR,
+    (BALL_DRAG * t) / (1 - Math.exp(-BALL_DRAG * t)),
+  );
   m.velocity = vec(
-    (x - m.ball.x) / t,
+    ((x - m.ball.x) / t) * boost,
     (0.07 - m.ball.y + 4.905 * t * t) / t,
-    (z - m.ball.z) / t,
+    ((z - m.ball.z) / t) * boost,
   );
   m.spin = spin;
   m.shotAt = m.time;
@@ -373,6 +403,19 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   }
   const x = aim * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * miss * 2.8;
   let flight = smash ? 0.58 : lob ? 1.95 : dink ? 1.05 : 1.5 - power * 0.55;
+  // Owner request: ball speed follows the swing percentage for forehand/backhand drives,
+  // rolls and dinks — a gentle swing sends a proportionally slower (loopier) ball to the
+  // same spot. Smashes and lobs keep their own speeds.
+  if (!smash && !lob) {
+    const tz = (p.team ? 1 : -1) * Math.max(0.6, depth);
+    const dist = Math.hypot(x - b.x, tz - b.z);
+    if (dink) flight = 1.05 + (0.42 - power) * 1.3;
+    else {
+      flight = clamp(dist / (GROUND_MAX_SPEED * power ** 0.8), 0.7, 2.4);
+      // Fast drives are flat: make sure the arc still clears the net.
+      flight = netSafeFlight(m, tz, flight, flight * 1.8);
+    }
+  }
   // Owner request: overheads and attacking volleys (hit before the bounce) fly 1.75× faster.
   // Soft volleys (dinks) and lob volleys keep their touch. A safety check keeps the faster,
   // flatter ball above the net.
@@ -587,8 +630,11 @@ export function step(m: Match, dt = 1 / 120) {
   // hitting zone twice as long (same height, same spot). Players and bots move at normal speed.
   const bdt = m.bounces > 0 ? dt * BOUNCE_TIME_SCALE : dt;
   m.velocity.y -= (9.81 + m.spin) * bdt;
-  m.velocity.x *= 1 - 0.055 * bdt;
-  m.velocity.z *= 1 - 0.055 * bdt;
+  // Owner request: the ball is fastest right off the paddle and loses 15% of its speed
+  // every 0.2 s (horizontal). Launches compensate, so shots still land where aimed.
+  const drag = Math.exp(-BALL_DRAG * bdt);
+  m.velocity.x *= drag;
+  m.velocity.z *= drag;
   m.ball.x += m.velocity.x * bdt;
   m.ball.y += m.velocity.y * bdt;
   m.ball.z += m.velocity.z * bdt;

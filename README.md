@@ -97,6 +97,8 @@ Phones must stay visible. Backgrounding, lost sensor data, or a disconnected pho
 - Bots produce the same input shape a phone sends and go through the same contact/rules functions, with speed/reaction limits. They choose drives, rolls, third-shot drops, dinks, lobs and (medium/hard) smashes; medium/hard bots advance to the kitchen line after the return. Difficulty changes placement accuracy, patience for clean contact, and unforced-error rate (easy 9%, medium 7%, hard 4.5% mishits). Bot randomness is a seeded per-match generator, so simulations replay deterministically.
 - **Split screen:** two players on one screen in third- or first-person view get a half each (player 1 left, player 2 right). Player 1 moves with **WASD**, player 2 with the **arrow keys** (if they chose Keyboard on their phone); every phone also has its own thumb pad. Broadcast view stays one shared picture.
 - **Volleys and overheads** (hit before the bounce) fly 1.75× faster; soft volleys (dinks) and lob volleys don't.
+- **Swing strength sets speed:** weaker forehand/backhand swings send slower balls.
+- **Ball slowdown:** the ball leaves the paddle fastest (up to 3× its average speed) and loses 15% of its speed every 0.2 s, still landing where aimed.
 - Each player's name floats above their head in their team colour (hidden for your own player in first person).
 - Sound is opt-in (contact and fault tones). The scoreboard and status banner announce service and faults visually.
 - The display is a full-screen 3D arena. The menu shows a cosmetic demo rally between two mascots; it is decoration only and never presented as a match. During play the panel tucks away behind a **Room** tab. Arrow keys + Enter navigate the menu (TV remotes).

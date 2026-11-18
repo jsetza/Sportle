@@ -568,20 +568,14 @@ test("shots are named forehand or backhand from the contact side and paddle hand
   assert.match(m.shot, /^Forehand drive$/);
 });
 
-test("auto positioning stands a step behind the bounce, not on top of the ball", () => {
+test("auto positioning stands a step behind the bounce, not on top of the ball", async () => {
   const m = singles(),
     p = m.players[0];
   rally(m, 1);
   m.bounces = 0;
   m.ball = { x: 0, y: 1.2, z: -2 };
   m.velocity = { x: 0, y: 2, z: 7 };
-  const land = (() => {
-    const g = 9.81,
-      y = m.ball.y - COURT.radius,
-      vy = m.velocity.y;
-    const t = (vy + Math.sqrt(vy * vy + 2 * g * y)) / g;
-    return m.ball.z + m.velocity.z * t;
-  })();
+  const land = (await import("../src/server/engine.ts")).landing(m).z;
   const t = movementTarget(m, p);
   assert.ok(t.z - land >= 0.9, `behind by ${t.z - land}`);
   assert.ok(
@@ -842,4 +836,67 @@ test("volleys and overheads fly 1.75x faster; soft volleys keep their touch; sti
   const dinkGround = speedOf(1, 0.9, { strength: 0.2 }).speed;
   const dinkVolley = speedOf(0, 0.9, { strength: 0.2 }).speed;
   assert.ok(Math.abs(dinkVolley / dinkGround - 1) < 0.05);
+});
+
+test("ball speed follows the swing percentage for forehand/backhand drives and dinks", async () => {
+  const { landing } = await import("../src/server/engine.ts");
+  const speed = (strength: number, side = 0) => {
+    const m = singles(),
+      p = m.players[0];
+    rally(m, 1);
+    m.bounces = 1;
+    p.pos = { x: 0, y: 0, z: 5 };
+    m.ball = { x: forehandSide(p) * FOREHAND_OFFSET, y: 0.9, z: 5 };
+    p.lastHit = -10;
+    assert.ok(hit(m, p, { ...ZERO_INPUT, strength, side }));
+    // Average speed over the flight (the ball starts faster and slows down on the way).
+    const l = landing(m);
+    const v = Math.hypot(l.x - m.ball.x, l.z - m.ball.z) / l.t;
+    return { v, shot: m.shot };
+  };
+  const s45 = speed(0.45),
+    s60 = speed(0.6),
+    s90 = speed(0.9);
+  assert.match(s45.shot, /drive/);
+  assert.ok(s45.v < s60.v && s60.v < s90.v, `${s45.v} ${s60.v} ${s90.v}`);
+  // Roughly proportional: a 45% swing is clearly slower than half-way to a 90% one.
+  assert.ok(
+    s45.v / s90.v < 0.65,
+    `45%/90% ratio ${(s45.v / s90.v).toFixed(2)}`,
+  );
+  // Dinks: a softer dink floats slower too.
+  const d15 = speed(0.15),
+    d35 = speed(0.35);
+  assert.match(d15.shot, /dink/);
+  assert.ok(d15.v < d35.v, `${d15.v} ${d35.v}`);
+  // Backhand side behaves the same.
+  assert.ok(speed(0.45, -0.3).v < speed(0.9, -0.3).v);
+});
+
+test("the ball is fastest off the paddle, loses 15% every 0.2 s, and still lands where aimed", async () => {
+  const { BALL_DRAG, MAX_LAUNCH_FACTOR } = await import(
+    "../src/server/engine.ts"
+  );
+  assert.ok(Math.abs(Math.exp(-BALL_DRAG * 0.2) - 0.85) < 1e-9);
+  assert.equal(MAX_LAUNCH_FACTOR, 3);
+  const m = singles(),
+    p = m.players[0];
+  rally(m, 1);
+  m.bounces = 1;
+  p.pos = { x: 0, y: 0, z: 5 };
+  m.ball = { x: forehandSide(p) * FOREHAND_OFFSET, y: 0.9, z: 5 };
+  p.lastHit = -10;
+  assert.ok(hit(m, p, { ...ZERO_INPUT, strength: 0.7 }));
+  freeze(m);
+  const v0 = Math.hypot(m.velocity.x, m.velocity.z);
+  for (let i = 0; i < 24; i++) step(m); // 0.2 s
+  const v1 = Math.hypot(m.velocity.x, m.velocity.z);
+  assert.ok(
+    Math.abs(v1 / v0 - 0.85) < 0.01,
+    `after 0.2 s: ${(v1 / v0).toFixed(3)}`,
+  );
+  // It still lands in the opponent's court, deep like an ordinary drive.
+  while (m.phase === "rally" && m.bounces === 0) step(m);
+  assert.equal(m.bounces, 1);
+  assert.ok(m.ball.z < -3, `landed at z ${m.ball.z.toFixed(2)}`);
 });
