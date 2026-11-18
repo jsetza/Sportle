@@ -61,6 +61,7 @@ try {
   await phone.locator("#calibrate").click();
   await phone.waitForTimeout(150);
   const swing = async (rate) => {
+    // Practice shots: upward swings (the learned "up" axis).
     await phone.evaluate(
       (value) =>
         window.dispatchEvent(
@@ -72,24 +73,33 @@ try {
       rate,
     );
   };
-  await swing(120);
-  await phone.waitForTimeout(500);
-  await swing(320);
-  await phone.waitForTimeout(500);
-  // "Swing to your RIGHT" step. Sent with the opposite sensor sign on purpose: the phone
-  // must learn that this grip reports right as negative and flip left/right itself.
-  await phone.evaluate(() =>
-    window.dispatchEvent(
-      new DeviceMotionEvent("devicemotion", {
-        acceleration: { x: 0, y: 0, z: 0 },
-        rotationRate: { alpha: 0, beta: 0, gamma: -260 },
-      }),
-    ),
-  );
-  await phone.waitForTimeout(500);
-  if (!(await phone.locator("#swapSides").isChecked()))
-    throw Error("Calibration did not learn the reversed left/right");
+  // Movement test: right, left, up, down. Right/left use the opposite sensor sign from what a
+  // "screen forward" grip would give, to prove the phone learns whatever it actually reads.
+  const rot = async (alpha, beta, gamma) => {
+    await phone.evaluate(
+      ([a, b, g]) =>
+        window.dispatchEvent(
+          new DeviceMotionEvent("devicemotion", {
+            acceleration: { x: 0, y: 0, z: 0 },
+            rotationRate: { alpha: a, beta: b, gamma: g },
+          }),
+        ),
+      [alpha, beta, gamma],
+    );
+    await phone.waitForTimeout(450);
+  };
+  await rot(0, 0, -260); // right
+  await rot(0, 0, 250); // left
+  await rot(0, 240, 0); // up
+  await rot(0, -250, 0); // down
+  const checks = await phone.locator("#checks li.done").count();
+  if (checks !== 4) throw Error("Movement test confirmed " + checks + " of 4 swings");
   await phone.locator("#ready").click();
+  await phone.locator("#ingame").waitFor({ state: "visible" });
+  if (await phone.locator("#setup").isVisible())
+    throw Error("Movement tester still visible after Ready");
+  const saved = await phone.evaluate(() => localStorage.getItem("pov-profile"));
+  if (!saved || !JSON.parse(saved).axes) throw Error("Swings were not saved");
   await display.locator("#start").click();
   const host = JSON.parse(
       await display.evaluate(() => sessionStorage.getItem("visual-host")),

@@ -115,7 +115,7 @@ test("ball passing around the post below net height is not a net fault", () => {
   assert.equal(m.phase, "rally");
 });
 
-test("far-team aim is mirrored so roll right sends the ball to the player's right", () => {
+test("far-team aim is mirrored so a swing to the right sends the ball to the player's right", () => {
   const m = singles();
   for (const [team, sign] of [
     [0, 1],
@@ -131,7 +131,7 @@ test("far-team aim is mirrored so roll right sends the ball to the player's righ
       z: p.pos.z,
     };
     p.lastHit = -10;
-    assert.ok(hit(m, p, { ...ZERO_INPUT, strength: 0.4, roll: 30 }));
+    assert.ok(hit(m, p, { ...ZERO_INPUT, strength: 0.4, side: 0.8 }));
     assert.equal(Math.sign(m.velocity.x), sign, `team ${team}`);
   }
 });
@@ -685,9 +685,9 @@ test("auto mode runs to the smash spot and a downward swing smashes the pop-up",
   assert.ok(smashed >= 20, `smashed ${smashed}/30`);
 });
 
-test("the bounce lasts twice as long: same height and spot, half speed", async () => {
+test("the slow bounce: same height and spot, longer hang (0.8 speed)", async () => {
   const { BOUNCE_TIME_SCALE } = await import("../src/server/engine.ts");
-  assert.equal(BOUNCE_TIME_SCALE, 0.5);
+  assert.equal(BOUNCE_TIME_SCALE, 0.8);
   const m = singles();
   rally(m, 1);
   freeze(m);
@@ -708,8 +708,8 @@ test("the bounce lasts twice as long: same height and spot, half speed", async (
   const real = (2 * v) / 9.81;
   const hang = end - bounceAt;
   assert.ok(
-    Math.abs(hang - real * 2) < 0.06,
-    `hang ${hang.toFixed(2)} vs ${(real * 2).toFixed(2)}`,
+    Math.abs(hang - real / BOUNCE_TIME_SCALE) < 0.06,
+    `hang ${hang.toFixed(2)} vs ${(real / BOUNCE_TIME_SCALE).toFixed(2)}`,
   );
   // Same bounce height as before (0.76² of the drop, ±1 cm).
   assert.ok(

@@ -99,8 +99,8 @@ export function rand(m: Match) {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 const REACTION = { easy: 0.22, medium: 0.16, hard: 0.1 };
-/** Assist (owner request): after bouncing, the ball moves at this fraction of real speed (0.5 = bounce lasts 2×). */
-export const BOUNCE_TIME_SCALE = 0.5;
+/** Assist (owner request): after bouncing, the ball moves at this fraction of real speed (0.8 ≈ bounce lasts 1.25×). */
+export const BOUNCE_TIME_SCALE = 0.8;
 export const HUMAN_SPEED = 4.3;
 const ACCEL = 14;
 /** Phone thumb pad: player-relative (forward = toward the net) converted to world axes. */
@@ -323,9 +323,10 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const miss = (1 - quality) * (0.45 + power) * (p.bot ? 1 : 0.5);
   // Aim in the player's own frame: the swing path (left→right sends it right) leads,
   // the paddle-face angle fine-tunes. The far team faces +z, so its frame is mirrored in X.
+  // Left/right comes from the swing path the phone learned in the movement test.
+  // (Paddle tilt is still shown on screen but no longer bends the aim, so it can't fight it.)
   const side = clamp(input.side ?? 0, -1, 1);
-  const face = clamp((input.roll + input.yaw * 0.25) / 35, -1, 1);
-  const aim = clamp(side * 1.9 + face * 0.9, -2.7, 2.7);
+  const aim = clamp(side * 2.5, -2.7, 2.7);
   // Badly timed contact can pop the ball up instead: high, short and slow, an easy smash
   // for the other side. Same chance for players and bots.
   const popup = !smash && !lob && quality < 0.55 && rand(m) < 0.5;

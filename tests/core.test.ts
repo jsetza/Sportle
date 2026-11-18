@@ -336,3 +336,74 @@ test("a short swing window contacts an approaching ball without repeated hits", 
   for (let i = 0; i < 15; i++) step(m);
   assert.equal(m.contacts, 1);
 });
+
+test("movement test learns right/left/up/down for any grip and rejects inconsistent swings", async () => {
+  const { learnAxes, MotionFilter } = await import("../src/shared/motion.ts");
+  // Three different grips: screen forward, screen toward you (mirrored), phone turned sideways.
+  const grips = [
+    {
+      right: [0, 10, 240],
+      left: [0, -15, -230],
+      up: [5, 220, 20],
+      down: [0, -230, -10],
+    },
+    {
+      right: [0, -12, -250],
+      left: [0, 8, 240],
+      up: [0, -210, 15],
+      down: [0, 225, -20],
+    },
+    {
+      right: [230, 20, 0],
+      left: [-240, 0, 10],
+      up: [10, 0, 210],
+      down: [-5, 10, -220],
+    },
+  ] as const;
+  for (const g of grips) {
+    const r = learnAxes(g as never);
+    assert.ok(r.ok, JSON.stringify(r));
+    const f = new MotionFilter();
+    f.axes = r.ok ? r.axes : null;
+    f.calibrated = true;
+    const read = (v: readonly number[]) => {
+      f.motion(
+        { x: 0, y: 0, z: 0 },
+        { alpha: v[0], beta: v[1], gamma: v[2] },
+        0,
+        1000,
+      );
+      return { side: f.side, dir: f.direction };
+    };
+    assert.ok(read(g.right).side > 0.5);
+    assert.ok(read(g.left).side < -0.5);
+    assert.ok(read(g.up).dir > 0.5);
+    assert.ok(read(g.down).dir < -0.5);
+  }
+  // Right and left recorded the same way → redo both.
+  const same = learnAxes({
+    right: [0, 0, 240],
+    left: [0, 0, 230],
+    up: [0, 220, 0],
+    down: [0, -220, 0],
+  });
+  assert.ok(
+    !same.ok && same.redo.includes("right") && same.redo.includes("left"),
+  );
+  // A tiny swing → redo just that one.
+  const weak = learnAxes({
+    right: [0, 0, 240],
+    left: [0, 0, -230],
+    up: [0, 20, 0],
+    down: [0, -220, 0],
+  });
+  assert.ok(!weak.ok && weak.redo.length === 1 && weak.redo[0] === "up");
+  // Side-to-side and up-down recorded identically → redo all four.
+  const mixed = learnAxes({
+    right: [0, 0, 240],
+    left: [0, 0, -230],
+    up: [0, 10, 230],
+    down: [0, -10, -230],
+  });
+  assert.ok(!mixed.ok && mixed.redo.length === 4);
+});
