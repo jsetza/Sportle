@@ -325,8 +325,10 @@ export function acceptMove(
   r.updated = Date.now();
   if (r.state.paused || r.state.phase === "lobby") return true;
   for (const k of a.keys as { slot: number; x: number; z: number }[]) {
-    const p = local.filter((q) => q.moveStyle === "keys")[k.slot];
-    if (p) setMove(r.state, p, k.x, k.z);
+    // Fixed seats: WASD = this screen's player 1, arrows = player 2 (split-screen halves),
+    // and only for a player who chose keyboard movement on their phone.
+    const p = local[k.slot];
+    if (p && p.moveStyle === "keys") setMove(r.state, p, k.x, k.z);
   }
   return true;
 }

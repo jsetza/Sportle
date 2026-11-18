@@ -171,7 +171,12 @@ export class Scene {
   panelOpen = true;
   /** Camera choice during play. Player views follow `follow` (this screen's player 1). */
   viewMode: ViewMode = "third";
+  /** This screen's players (up to two). Two players + a player view = split screen. */
+  follows: string[] = [];
   follow: string | null = null;
+  views: View[] = [];
+  /** Aspect ratio of the view being drawn (a split-screen half is narrow). */
+  aspect = 16 / 9;
   followPos: Vec | null = null;
   followTeam = 0;
   /** HTML name tags floating over players' heads (crisp text, projected from 3D each frame). */
@@ -839,7 +844,12 @@ export class Scene {
       }
       // Third person: chase camera over the shoulder, nudged toward the ball.
       return {
-        eye: [f.x * 0.7, 3.4, f.z + 5.4 * facing],
+        // On a narrow view (a split-screen half) sit directly behind and a bit further back,
+        // so the player stays in frame.
+        eye:
+          this.aspect < 1.2
+            ? [f.x, 3.8, f.z + 6.3 * facing]
+            : [f.x * 0.7, 3.4, f.z + 5.4 * facing],
         target: [lerp(f.x, b.x, 0.35), 0.85, f.z - 5.5 * facing],
         fov: 56,
         shift: 0,
@@ -933,24 +943,24 @@ export class Scene {
   demoFar = 0;
   demoHit = -1;
   /** Project each tag's 3D head point to the screen and move its label there. */
-  placeTags(vp: V) {
-    const cw = this.canvas.clientWidth,
-      ch = this.canvas.clientHeight,
-      seen = new Set<string>();
+  placeTags(vp: V, ox: number, cw: number, pass: number, seen: Set<string>) {
+    const ch = this.canvas.clientHeight;
     for (const t of this.tags) {
       // Column-major view-projection × (x, y, z, 1).
       const cx = vp[0] * t.x + vp[4] * t.y + vp[8] * t.z + vp[12],
         cy = vp[1] * t.x + vp[5] * t.y + vp[9] * t.z + vp[13],
         cw4 = vp[3] * t.x + vp[7] * t.y + vp[11] * t.z + vp[15];
       if (cw4 <= 0.1) continue; // behind the camera
-      const sx = ((cx / cw4 + 1) / 2) * cw,
+      const sx = ox + ((cx / cw4 + 1) / 2) * cw,
         sy = ((1 - cy / cw4) / 2) * ch;
-      if (sx < -100 || sx > cw + 100 || sy < -50 || sy > ch + 50) continue;
-      let el = this.tagEls.get(t.id);
+      if (sx < ox - 60 || sx > ox + cw + 60 || sy < -50 || sy > ch + 50)
+        continue;
+      const key = t.id + "@" + pass;
+      let el = this.tagEls.get(key);
       if (!el) {
         el = document.createElement("div");
         this.tagLayer.appendChild(el);
-        this.tagEls.set(t.id, el);
+        this.tagEls.set(key, el);
       }
       if (el.textContent !== t.name) el.textContent = t.name;
       const cls = "nametag team" + t.team;
@@ -959,10 +969,8 @@ export class Scene {
       const scale = Math.max(0.65, Math.min(1.15, 9 / cw4));
       el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%) scale(${scale.toFixed(2)})`;
       el.style.display = "";
-      seen.add(t.id);
+      seen.add(key);
     }
-    for (const [id, el] of this.tagEls)
-      if (!seen.has(id)) el.style.display = "none";
   }
   render = () => {
     this.raf = requestAnimationFrame(this.render);
@@ -976,7 +984,6 @@ export class Scene {
       canvas.height = h;
     }
     const now = performance.now();
-    this.vertices = [];
     // Draw the present, not the past: extrapolate from the latest snapshot using the
     // velocities it carries (capped), then ease out any correction when the next snapshot
     // lands. Rendering ~65–220 ms in the past made first person feel laggy.
@@ -1013,59 +1020,19 @@ export class Scene {
       this.shown.set(key, out);
       return out;
     };
+    // ——— once per frame: positions, ball, trail, effects bookkeeping ———
+    const positions = new Map<string, Vec>();
     let ball: Vec | null = null;
-    this.followPos = null;
-    this.tags = [];
     if (m) {
-      const owner = m.players
-        .filter((p) => p.team !== m.lastTeam)
-        .sort(
-          (p, q) =>
-            Math.hypot(p.pos.x - m.ball.x, p.pos.z - m.ball.z) -
-            Math.hypot(q.pos.x - m.ball.x, q.pos.z - m.ball.z),
-        )[0];
-      const doublesTeam = (team: number) =>
-        m.players.filter((p) => p.team === team).length > 1;
-      for (const p of m.players) {
-        if (p.id === "practice-feed") continue;
-        const pos = smooth("p:" + p.id, {
-          x: p.pos.x + p.velocity.x * Math.min(ahead, 0.1),
-          y: 0,
-          z: p.pos.z + p.velocity.z * Math.min(ahead, 0.1),
-        });
-        if (p.id === this.follow) {
-          this.followPos = pos;
-          this.followTeam = p.team;
-        }
-        // Name tag for human players (not your own in first person: it'd sit in your eyes).
-        const ownFirst =
-          this.viewMode === "first" &&
-          p.id === this.follow &&
-          m.phase !== "lobby";
-        if (!p.bot && !ownFirst)
-          this.tags.push({
-            id: p.id,
-            name: p.name,
-            team: p.team,
-            x: pos.x,
-            y: 1.85 + (m.serverId === p.id && m.phase === "serve" ? 0.55 : 0),
-            z: pos.z,
-          });
-        this.mascot(p, pos, {
-          firstPerson:
-            this.viewMode === "first" &&
-            p.id === this.follow &&
-            m.phase !== "lobby",
-          swing: Math.max(0, 1 - (m.time - p.lastHit) / 0.28),
-          pitch: p.input.pitch,
-          roll: p.input.roll,
-          yaw: p.input.yaw,
-          moving: Math.hypot(p.velocity.x, p.velocity.z),
-          server: m.serverId === p.id && m.phase === "serve",
-          owner:
-            m.phase === "rally" && doublesTeam(p.team) && owner?.id === p.id,
-        });
-      }
+      for (const p of m.players)
+        positions.set(
+          p.id,
+          smooth("p:" + p.id, {
+            x: p.pos.x + p.velocity.x * Math.min(ahead, 0.1),
+            y: 0,
+            z: p.pos.z + p.velocity.z * Math.min(ahead, 0.1),
+          }),
+        );
       // Ball: ballistic extrapolation during a rally (post-bounce at the slow-bounce speed).
       const bt =
         m.phase === "rally"
@@ -1079,131 +1046,21 @@ export class Scene {
         ),
         z: m.ball.z + m.velocity.z * bt,
       });
-      // Enlarged, readable orientation mirror in practice/lobby.
-      // Only where it can be seen clearly: the lobby, or practice in the broadcast view.
-      if (
-        m.phase === "lobby" ||
-        (m.mode === "practice" && this.viewMode === "broadcast")
-      ) {
-        const p = m.players.find((p) => !p.bot);
-        if (p) {
-          const rx = (p.input.pitch * Math.PI) / 180,
-            rz = (-p.input.roll * Math.PI) / 180;
-          this.box(-4.1, 1.15, 6.4, 0.12, 0.85, 0.12, palette.dark);
-          this.box(-4.1, 2.05, 6.4, 0.9, 1.15, 0.08, palette.dark, rx, rz);
-          this.box(-4.1, 2.05, 6.4, 0.82, 1.06, 0.1, teamColor(p.team), rx, rz);
-          this.ring(-4.1, 6.4, 0.7, palette.orange, 0.03, 0.05);
-        }
-      }
-    } else {
-      ball = this.demo(now);
     }
-    if (ball) {
-      // Short motion trail; cleared when the ball jumps (new serve/feed) so no stray dots remain.
-      const lastT = this.trail[this.trail.length - 1];
-      if (
-        lastT &&
-        Math.hypot(lastT.x - ball.x, lastT.y - ball.y, lastT.z - ball.z) > 0.7
-      )
-        this.trail = [];
-      this.trail.push({ ...ball });
-      if (this.trail.length > 6) this.trail.shift();
-      this.trail.forEach((q, i) => {
-        if (i < this.trail.length - 1)
-          this.sphere(
-            q.x,
-            q.y,
-            q.z,
-            0.035 + i * 0.01,
-            palette.ball.map((v) => v * (0.35 + i * 0.1)),
-          );
-      });
-      this.blob(
-        ball.x,
-        0.03,
-        ball.z,
-        0.12,
-        0.004,
-        0.12,
-        [0.03, 0.03, 0.05],
-        0,
-        2,
-        10,
-      );
-      this.sphere(ball.x, ball.y, ball.z, 0.11, palette.ball);
-    }
-    // Pop-up target: pulsing rings where the ball drops through smash height.
-    if (m && m.popup && m.bounces === 0 && m.popupAt && m.phase === "rally") {
-      const k = (Math.sin(now / 90) + 1) / 2,
-        col = teamColor(1 - m.lastTeam);
-      this.ring(m.popupAt.x, m.popupAt.z, 0.45 + k * 0.15, col, 0.04, 0.07);
-      this.ring(m.popupAt.x, m.popupAt.z, 0.2, palette.white, 0.045, 0.05, 12);
-    }
-    // contact bursts: expanding ring and shards
     this.bursts = this.bursts.filter((s) => now - s.at < 420);
-    for (const s of this.bursts) {
-      const k = (now - s.at) / 420;
-      if (k < 0) continue;
-      const r = 0.15 + k * 0.85,
-        size = 0.07 * (1 - k);
-      for (let i = 0; i < 10; i++) {
-        const ang = (i / 10) * Math.PI * 2 + s.at;
-        this.box(
-          s.x + Math.cos(ang) * r,
-          s.y + Math.sin(ang) * r * 0.8,
-          s.z,
-          size,
-          size,
-          size,
-          s.col,
-        );
-      }
-      this.ring(
-        s.x,
-        s.z,
-        0.2 + k * 1.1,
-        s.col,
-        0.04,
-        0.05 * (1 - k) + 0.01,
-        16,
-      );
-    }
-    // camera easing toward the view for the current phase
-    const goal = this.targetView(m, ball);
-    // Player cameras track tightly (a lagging first-person view feels sickly).
-    const playerView =
-      m &&
+    // Split screen: two players on this screen, a player camera, and a match in progress.
+    const split =
+      !!m &&
       m.phase !== "lobby" &&
-      this.followPos &&
-      this.viewMode !== "broadcast";
-    const e = playerView ? (this.viewMode === "first" ? 1 : 0.3) : 0.06;
-    this.view = {
-      eye: this.view.eye.map((v, i) => lerp(v, goal.eye[i], e)),
-      // Look direction eases a little even in first person, so it never jerks.
-      target: this.view.target.map((v, i) =>
-        lerp(v, goal.target[i], Math.min(e, 0.35)),
-      ),
-      fov: lerp(this.view.fov, goal.fov, e),
-      shift: lerp(this.view.shift, goal.shift, e),
-    };
+      this.viewMode !== "broadcast" &&
+      this.follows.length >= 2;
+    document.body.classList.toggle("split", split);
     gl.viewport(0, 0, w, h);
+    gl.disable(gl.SCISSOR_TEST);
     gl.clearColor(palette.fog[0], palette.fog[1], palette.fog[2], 1);
     gl.enable(gl.DEPTH_TEST);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
-    const vp = camera(
-      w / Math.max(1, h),
-      this.view.eye,
-      this.view.target,
-      this.view.fov,
-      this.view.shift,
-    );
-    gl.uniformMatrix4fv(
-      gl.getUniformLocation(this.program, "camera"),
-      false,
-      new Float32Array(vp),
-    );
-    this.placeTags(vp);
     gl.uniform3fv(gl.getUniformLocation(this.program, "fogColor"), palette.fog);
     gl.uniform4fv(
       gl.getUniformLocation(this.program, "spots"),
@@ -1222,13 +1079,226 @@ export class Scene {
       }
       gl.drawArrays(gl.TRIANGLES, 0, count);
     };
-    draw(this.staticBuffer, this.staticCount);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array(this.vertices),
-      gl.DYNAMIC_DRAW,
-    );
-    draw(this.buffer, this.vertices.length / 6);
+    const seenTags = new Set<string>();
+    const passes = split ? 2 : 1;
+    for (let pass = 0; pass < passes; pass++) {
+      // Each pass: geometry for this viewer (their own body hidden in first person) and
+      // this viewer's camera, drawn into their half of the screen.
+      this.follow = this.follows[pass] ?? null;
+      this.vertices = [];
+      this.followPos = null;
+      this.tags = [];
+      if (m) {
+        const owner = m.players
+          .filter((p) => p.team !== m.lastTeam)
+          .sort(
+            (p, q) =>
+              Math.hypot(p.pos.x - m.ball.x, p.pos.z - m.ball.z) -
+              Math.hypot(q.pos.x - m.ball.x, q.pos.z - m.ball.z),
+          )[0];
+        const doublesTeam = (team: number) =>
+          m.players.filter((p) => p.team === team).length > 1;
+        for (const p of m.players) {
+          if (p.id === "practice-feed") continue;
+          const pos = positions.get(p.id)!;
+          if (p.id === this.follow) {
+            this.followPos = pos;
+            this.followTeam = p.team;
+          }
+          // Name tag for human players (not your own in first person: it'd sit in your eyes).
+          const ownFirst =
+            this.viewMode === "first" &&
+            p.id === this.follow &&
+            m.phase !== "lobby";
+          if (!p.bot && !ownFirst)
+            this.tags.push({
+              id: p.id,
+              name: p.name,
+              team: p.team,
+              x: pos.x,
+              y: 1.85 + (m.serverId === p.id && m.phase === "serve" ? 0.55 : 0),
+              z: pos.z,
+            });
+          this.mascot(p, pos, {
+            firstPerson: ownFirst,
+            swing: Math.max(0, 1 - (m.time - p.lastHit) / 0.28),
+            pitch: p.input.pitch,
+            roll: p.input.roll,
+            yaw: p.input.yaw,
+            moving: Math.hypot(p.velocity.x, p.velocity.z),
+            server: m.serverId === p.id && m.phase === "serve",
+            owner:
+              m.phase === "rally" && doublesTeam(p.team) && owner?.id === p.id,
+          });
+        }
+        // Enlarged orientation mirror: the lobby, or practice in the broadcast view.
+        if (
+          m.phase === "lobby" ||
+          (m.mode === "practice" && this.viewMode === "broadcast")
+        ) {
+          const p = m.players.find((p) => !p.bot);
+          if (p) {
+            const rx = (p.input.pitch * Math.PI) / 180,
+              rz = (-p.input.roll * Math.PI) / 180;
+            this.box(-4.1, 1.15, 6.4, 0.12, 0.85, 0.12, palette.dark);
+            this.box(-4.1, 2.05, 6.4, 0.9, 1.15, 0.08, palette.dark, rx, rz);
+            this.box(
+              -4.1,
+              2.05,
+              6.4,
+              0.82,
+              1.06,
+              0.1,
+              teamColor(p.team),
+              rx,
+              rz,
+            );
+            this.ring(-4.1, 6.4, 0.7, palette.orange, 0.03, 0.05);
+          }
+        }
+      } else {
+        ball = this.demo(now);
+      }
+      if (ball) {
+        if (pass === 0) {
+          // Short motion trail; cleared when the ball jumps (new serve/feed).
+          const lastT = this.trail[this.trail.length - 1];
+          if (
+            lastT &&
+            Math.hypot(lastT.x - ball.x, lastT.y - ball.y, lastT.z - ball.z) >
+              0.7
+          )
+            this.trail = [];
+          this.trail.push({ ...ball });
+          if (this.trail.length > 6) this.trail.shift();
+        }
+        this.trail.forEach((q, i) => {
+          if (i < this.trail.length - 1)
+            this.sphere(
+              q.x,
+              q.y,
+              q.z,
+              0.035 + i * 0.01,
+              palette.ball.map((v) => v * (0.35 + i * 0.1)),
+            );
+        });
+        this.blob(
+          ball.x,
+          0.03,
+          ball.z,
+          0.12,
+          0.004,
+          0.12,
+          [0.03, 0.03, 0.05],
+          0,
+          2,
+          10,
+        );
+        this.sphere(ball.x, ball.y, ball.z, 0.11, palette.ball);
+      }
+      // Pop-up target: pulsing rings where the ball drops through smash height.
+      if (m && m.popup && m.bounces === 0 && m.popupAt && m.phase === "rally") {
+        const k = (Math.sin(now / 90) + 1) / 2,
+          col = teamColor(1 - m.lastTeam);
+        this.ring(m.popupAt.x, m.popupAt.z, 0.45 + k * 0.15, col, 0.04, 0.07);
+        this.ring(
+          m.popupAt.x,
+          m.popupAt.z,
+          0.2,
+          palette.white,
+          0.045,
+          0.05,
+          12,
+        );
+      }
+      // Contact bursts: expanding ring and shards.
+      for (const s of this.bursts) {
+        const k = (now - s.at) / 420;
+        if (k < 0) continue;
+        const r = 0.15 + k * 0.85,
+          size = 0.07 * (1 - k);
+        for (let i = 0; i < 10; i++) {
+          const ang = (i / 10) * Math.PI * 2 + s.at;
+          this.box(
+            s.x + Math.cos(ang) * r,
+            s.y + Math.sin(ang) * r * 0.8,
+            s.z,
+            size,
+            size,
+            size,
+            s.col,
+          );
+        }
+        this.ring(
+          s.x,
+          s.z,
+          0.2 + k * 1.1,
+          s.col,
+          0.04,
+          0.05 * (1 - k) + 0.01,
+          16,
+        );
+      }
+      // Camera for this viewer, eased toward the view for the current phase.
+      // Each half keeps its own camera; a new one starts from the current view.
+      this.view = this.views[pass] || { ...this.view };
+      this.aspect = (split ? Math.floor(w / 2) - 1 : w) / Math.max(1, h);
+      const goal = this.targetView(m, ball);
+      // Player cameras track tightly (a lagging first-person view feels sickly).
+      const playerView =
+        m &&
+        m.phase !== "lobby" &&
+        this.followPos &&
+        this.viewMode !== "broadcast";
+      const e = playerView ? (this.viewMode === "first" ? 1 : 0.3) : 0.06;
+      this.view = {
+        eye: this.view.eye.map((v, i) => lerp(v, goal.eye[i], e)),
+        // Look direction eases a little even in first person, so it never jerks.
+        target: this.view.target.map((v, i) =>
+          lerp(v, goal.target[i], Math.min(e, 0.35)),
+        ),
+        fov: lerp(this.view.fov, goal.fov, e),
+        shift: lerp(this.view.shift, goal.shift, e),
+      };
+      this.views[pass] = this.view;
+      // This viewer's rectangle (a 2-px gap between the halves).
+      const vx = split ? pass * Math.ceil(w / 2) + (pass ? 1 : 0) : 0,
+        vw = split ? Math.floor(w / 2) - 1 : w;
+      gl.viewport(vx, 0, vw, h);
+      if (split) {
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(vx, 0, vw, h);
+      }
+      const vp = camera(
+        vw / Math.max(1, h),
+        this.view.eye,
+        this.view.target,
+        this.view.fov,
+        this.view.shift,
+      );
+      gl.uniformMatrix4fv(
+        gl.getUniformLocation(this.program, "camera"),
+        false,
+        new Float32Array(vp),
+      );
+      this.placeTags(
+        vp,
+        (vx / w) * canvas.clientWidth,
+        (vw / w) * canvas.clientWidth,
+        pass,
+        seenTags,
+      );
+      draw(this.staticBuffer, this.staticCount);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array(this.vertices),
+        gl.DYNAMIC_DRAW,
+      );
+      draw(this.buffer, this.vertices.length / 6);
+    }
+    gl.disable(gl.SCISSOR_TEST);
+    for (const [key, el] of this.tagEls)
+      if (!seenTags.has(key)) el.style.display = "none";
   };
 }

@@ -1121,3 +1121,17 @@ body.in-room .wordmark span {
   color: var(--red);
   border: 2px solid var(--red);
 }
+/* Split screen: a divider between the two players' halves */
+body.split::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  margin-left: -1px;
+  background: linear-gradient(var(--blue), var(--red));
+  opacity: 0.8;
+  z-index: 1;
+  pointer-events: none;
+}

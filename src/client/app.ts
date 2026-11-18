@@ -337,10 +337,12 @@ function display() {
       }
       // Keys are camera-relative: when the camera looks from the far side (following a
       // red-team player in a player view), "up" on screen is +z in the world.
-      const flip =
-        scene.viewMode !== "broadcast" &&
-        current &&
-        localPlayers(current)[0]?.team === 1;
+      // Keys follow the camera the player is looking through. In split screen each player
+      // has their own half; otherwise everyone shares the camera of this screen's player 1.
+      const local = current ? localPlayers(current) : [];
+      const split = scene.viewMode !== "broadcast" && local.length >= 2;
+      const viewer = split ? local[slot] : local[0];
+      const flip = scene.viewMode !== "broadcast" && viewer?.team === 1;
       return flip ? { slot, x: -x || 0, z: -z || 0 } : { slot, x, z };
     });
     const sig = JSON.stringify(keys);
@@ -481,25 +483,24 @@ function display() {
     location.reload();
   };
   const keyHints = (state: Match) => {
-    const follow = localPlayers(state)[0];
-    scene.follow = follow ? follow.id : null;
+    scene.follows = localPlayers(state)
+      .slice(0, 2)
+      .map((p) => p.id);
     const local = localPlayers(state);
-    const keyed = local.filter((p) => p.moveStyle === "keys").slice(0, 2);
     ui("keys").html = local
-      .map((p) => {
-        const slot = keyed.indexOf(p);
+      .map((p, slot) => {
         const how =
           p.moveStyle === "phone"
             ? "<kbd>📱 pad</kbd>"
-            : p.moveStyle === "auto" || slot < 0
+            : p.moveStyle === "auto" || slot > 1
               ? "<kbd>AUTO</kbd>"
               : `<kbd>${slot ? "← ↑ ↓ →" : "W A S D"}</kbd>`;
         const note =
-          p.moveStyle !== "auto" && slot !== -1 && !p.manual
-            ? " · auto until you move"
-            : p.moveStyle === "phone" && !p.manual
+          p.moveStyle === "auto" || slot > 1 || p.manual
+            ? ""
+            : p.moveStyle === "phone"
               ? " · auto until you use the pad"
-              : "";
+              : " · auto until you move";
         return `<span class="team${p.team}">${how}${escape(p.name)}${note}</span>`;
       })
       .join("");

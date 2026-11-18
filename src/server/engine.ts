@@ -131,6 +131,27 @@ const SPEED = { easy: 3.3, medium: 3.8, hard: 4.3 };
 export const FOREHAND_OFFSET = 0.6;
 export const forehandSide = (p: Player) =>
   (p.hand === "right" ? 1 : -1) * (p.team ? -1 : 1);
+/** Speed multiplier for overheads and attacking volleys (owner request: +75%). */
+export const VOLLEY_SPEEDUP = 1.75;
+/**
+ * The shortest flight time from `fast` up to `normal` whose arc still clears the net by
+ * ~12 cm (a faster shot to the same spot is flatter).
+ */
+function netSafeFlight(
+  m: Match,
+  targetZ: number,
+  fast: number,
+  normal: number,
+) {
+  const b = m.ball;
+  if (Math.sign(b.z) === Math.sign(targetZ) || b.z === 0) return fast;
+  for (let t = fast; t < normal; t += 0.02) {
+    const vy = (0.07 - b.y + 4.905 * t * t) / t;
+    const tn = t * (Math.abs(b.z) / Math.abs(targetZ - b.z));
+    if (b.y + vy * tn - 4.905 * tn * tn > C.netCenter + 0.12) return t;
+  }
+  return normal;
+}
 /** Where the ball (before bouncing) comes down through height `h`, ballistically. */
 export function descentPoint(m: Match, h: number): Vec | null {
   const g = 9.81 + m.spin,
@@ -351,7 +372,14 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     return true;
   }
   const x = aim * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * miss * 2.8;
-  const flight = smash ? 0.58 : lob ? 1.95 : dink ? 1.05 : 1.5 - power * 0.55;
+  let flight = smash ? 0.58 : lob ? 1.95 : dink ? 1.05 : 1.5 - power * 0.55;
+  // Owner request: overheads and attacking volleys (hit before the bounce) fly 1.75× faster.
+  // Soft volleys (dinks) and lob volleys keep their touch. A safety check keeps the faster,
+  // flatter ball above the net.
+  if (smash || (m.bounces === 0 && !dink && !lob)) {
+    const targetZ = (p.team ? 1 : -1) * Math.max(0.6, depth);
+    flight = netSafeFlight(m, targetZ, flight / VOLLEY_SPEEDUP, flight);
+  }
   p.volleyMomentum = m.bounces === 0;
   if (p.volleyMomentum) p.momentumAt = m.time;
   const long = (rand(m) * 1.4 - 0.4) * miss * 2.2;

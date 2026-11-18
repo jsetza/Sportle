@@ -467,10 +467,19 @@ test("display keyboard only drives players whose style is keyboard", async () =>
   }
   begin(r);
   r.state.phase = "rally";
-  // WASD is slot 0 among keyboard players → B, not A (A uses the phone pad).
-  assert.ok(acceptMove(r, host, { seq: 1, keys: [{ slot: 0, x: 1, z: 0 }] }));
+  // Fixed seats: WASD = player 1 (A), arrows = player 2 (B). A chose the phone pad, so
+  // WASD does nothing; B chose keyboard, so the arrow keys move B.
+  assert.ok(
+    acceptMove(r, host, {
+      seq: 1,
+      keys: [
+        { slot: 0, x: 1, z: 0 },
+        { slot: 1, x: -1, z: 0 },
+      ],
+    }),
+  );
   assert.equal(a.moveX, 0);
-  assert.equal(b.moveX, 1);
+  assert.equal(b.moveX, -1);
   rooms.delete(r.code);
 });
 
@@ -793,4 +802,44 @@ test("swing reload: a player can swing again 0.2 s after the last swing, not soo
   calm(1170);
   calm(1190);
   assert.equal(burst(1210), true, "210 ms later: swing again");
+});
+
+test("volleys and overheads fly 1.75x faster; soft volleys keep their touch; still clear the net", async () => {
+  const { VOLLEY_SPEEDUP } = await import("../src/server/engine.ts");
+  assert.equal(VOLLEY_SPEEDUP, 1.75);
+  const speedOf = (bounces: number, y: number, input: object) => {
+    const m = singles(),
+      p = m.players[0];
+    rally(m, 1);
+    m.bounces = bounces;
+    p.pos = { x: 0, y: 0, z: 4 };
+    m.ball = { x: forehandSide(p) * FOREHAND_OFFSET, y, z: 4 };
+    p.lastHit = -10;
+    assert.ok(hit(m, p, { ...ZERO_INPUT, ...input }));
+    return { m, speed: Math.hypot(m.velocity.x, m.velocity.z) };
+  };
+  // Attacking volley vs the same drive off the bounce, same contact height.
+  const ground = speedOf(1, 1.2, { strength: 0.6 }).speed;
+  const volley = speedOf(0, 1.2, { strength: 0.6 });
+  const ratio = volley.speed / ground;
+  assert.ok(ratio > 1.4 && ratio <= 1.76, `volley ratio ${ratio.toFixed(2)}`);
+  // The faster, flatter volley still clears the net.
+  const m = volley.m;
+  freeze(m);
+  for (let i = 0; i < 240 && m.phase === "rally" && m.bounces === 0; i++)
+    step(m);
+  assert.doesNotMatch(m.message, /net/i);
+  assert.equal(m.bounces, 1, "landed in the opponent's court");
+  // Overhead: faster than the old smash speed.
+  const smash = speedOf(0, 2.2, { strength: 0.7, direction: -0.8 });
+  assert.match(smash.m.shot, /smash/);
+  const oldSmashSpeed = Math.hypot(5.5 + 4, 0) / 0.58; // depth 5.5 from z=4, old 0.58 s flight
+  assert.ok(
+    smash.speed > oldSmashSpeed * 1.3,
+    `smash ${smash.speed.toFixed(1)}`,
+  );
+  // A soft volley (dink) is not sped up.
+  const dinkGround = speedOf(1, 0.9, { strength: 0.2 }).speed;
+  const dinkVolley = speedOf(0, 0.9, { strength: 0.2 }).speed;
+  assert.ok(Math.abs(dinkVolley / dinkGround - 1) < 0.05);
 });
