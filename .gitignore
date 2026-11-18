@@ -4,3 +4,13 @@ dist/
 *.log
 .DS_Store
 coverage/
+# never commit secrets or local settings
+.env.*
+!.env.example
+*.pem
+*.key
+.claude/settings.local.json
+.vscode/
+.idea/
+playwright-report/
+test-results/
