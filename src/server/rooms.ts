@@ -20,6 +20,8 @@ export type Session = {
   playerId?: string;
   expires: number;
   lastSeq: number;
+  /** Highest swing id already applied (swings repeat across packets). */
+  lastSwingId?: number;
   lastInput: number;
 };
 export type Room = {
@@ -220,6 +222,11 @@ export function acceptInput(
     typeof a.calibrated !== "boolean"
   )
     return false;
+  if (
+    a.swingId !== undefined &&
+    (!Number.isSafeInteger(a.swingId) || a.swingId < 0)
+  )
+    return false;
   for (const k of ["mx", "mz", "side"] as const)
     if (
       a[k] !== undefined &&
@@ -252,7 +259,13 @@ export function acceptInput(
   }
   if (p.moveStyle === "phone" && r.state.phase !== "lobby" && !r.state.paused)
     setPhoneMove(r.state, p, a.mx ?? 0, a.mz ?? 0);
-  if (a.swing && a.sensors && a.calibrated) queueSwing(r.state, p, a);
+  if (a.swing && a.sensors && a.calibrated) {
+    if (a.swingId === undefined) queueSwing(r.state, p, a);
+    else if (a.swingId > (s.lastSwingId ?? -1)) {
+      s.lastSwingId = a.swingId;
+      queueSwing(r.state, p, a);
+    }
+  }
   return true;
 }
 export function housekeeping(r: Room, now = Date.now()) {

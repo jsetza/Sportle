@@ -23,6 +23,8 @@
 - **Slow bounce (owner request):** post-bounce ball time runs at 0.5× (`BOUNCE_TIME_SCALE`), so the bounce lasts 2× with the same height and path; documented as an assist. Test verifies 2× hang time and unchanged bounce height (49 tests passing).
 - **Renamed to POVpickle (owner request)** across the UI, arena lettering, phone, page title, package and Render service; the GitHub repo name is unchanged.
 - **Hosting readiness:** `render.yaml` blueprint (free plan, `/healthz` health check, one instance); public origin auto-detected on Render / Railway / Fly; per-platform client address (Render True-Client-IP, Fly Fly-Client-IP, Railway X-Real-IP, `TRUST_PROXY=1` rightmost X-Forwarded-For; headers ignored when running directly). Fixed: wrong room codes were never rate limited (404 came before the limiter); now 20 wrong codes/min per visitor → 429. Verified by a local production build booted with Render's variables (health, origin, create, per-visitor limits). Not yet deployed to a real Render account.
+- **Real-phone feedback round 2 (owner):** left/right swing direction was reversed with the screen held as the paddle face. Default sign flipped, grip text now says the screen is the paddle face, and calibration gained a “swing to your RIGHT” step that learns the sign per phone/grip (stored on the phone; Swap switch still available). Browser smoke test sends a reversed “right” swing and checks the phone flips itself.
+- **Lag (owner report, over the quick tunnel):** polling now uses three staggered pollers (5 → 15 updates/s at a 200 ms round trip, measured with a delay proxy); phone input allows two packets in flight and repeats each swing in three packets with a swing id the server applies once; display interpolation delay adapts to the arrival rate; unchanged DOM is no longer rewritten 30×/s. Real hosting (Render) uses the SSE stream at ~30 updates/s. Tests: 51 passing.
 - Mode paths for singles vs bot, human singles, co-op doubles, and four-human doubles.
 - `npm run tunnel`: Cloudflare quick tunnel + server with PUBLIC_ORIGIN set, for no-account phone testing.
 - Rate limiting: per-IP only for unauthenticated traffic (strict for manual code joins, looser for QR-token joins); per-session budget for authenticated traffic, so households behind one NAT are not throttled together.
@@ -30,7 +32,7 @@
 
 ## Actual verification (this session, Linux sandbox, Node 22.23)
 
-- `npm run check`: **PASS** — strict typecheck, production build, **50 tests**.
+- `npm run check`: **PASS** — strict typecheck, production build, **51 tests**.
 - `npm run test:browser` with `CHROME_PATH=/usr/bin/google-chrome`: **PASS** — synthetic sensors, shots at 37% and 65%, both `sweet spot`. (BarcodeDetector unavailable in headless Linux Chrome, so QR decode was skipped there; it was verified by Codex earlier on desktop Chrome.)
 - `tests/multiplayer.test.ts`: real Node HTTP/SSE with **two household displays and four controller sessions**: per-display QR tokens, team preference, host team swap, 5th phone refused, host-only actions enforced, both displays receive identical rally state, out-of-order / duplicate / 5 s-stale / out-of-range inputs rejected, silent phone pauses the match, reconnect restores slot and team, resume refused until ready.
 - Load probe (`node scripts/load.mjs`, loopback, load generator on the same machine): 10 / 25 / 50 doubles rooms (40 / 100 / 200 controllers at 30 Hz) → 0 rejected inputs; input RTT p50 1.4 / 3.0 / 6.8 ms, p95 8.4 / 17.0 / 39.6 ms; ~30 snapshots/s per display.

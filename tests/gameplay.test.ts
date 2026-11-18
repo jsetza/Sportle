@@ -717,3 +717,48 @@ test("the bounce lasts twice as long: same height and spot, half speed", async (
     `peak ${peak}`,
   );
 });
+
+test("a swing repeated across packets is applied once; a stale packet cannot lose it", async () => {
+  const { createRoom, joinController, begin, acceptInput, rooms } =
+    await import("../src/server/rooms.ts");
+  const r = createRoom("practice", "easy");
+  const a = joinController(r, "A", "right").player;
+  for (const p of r.state.players) {
+    p.ready = true;
+    p.lastSeen = Date.now();
+  }
+  begin(r);
+  r.state.phase = "rally"; // swings only count during a rally
+  const s = [...r.sessions.values()].find((x) => x.playerId === a.id)!;
+  let now = Date.now();
+  const base = {
+    pitch: 0,
+    roll: 0,
+    yaw: 0,
+    strength: 0.6,
+    direction: 0,
+    sensors: true,
+    calibrated: true,
+  };
+  const send = (seq: number, extra: object) =>
+    acceptInput(
+      r,
+      s,
+      { ...base, seq, t: now, swing: true, ...extra } as never,
+      (now += 20),
+    );
+  // Packet 2 arrives first (packet 1 is late and gets rejected as stale): the swing still lands.
+  assert.ok(send(2, { swingId: 1 }));
+  const queued = a.swingUntil;
+  assert.ok(queued > 0);
+  assert.equal(send(1, { swingId: 1 }), false);
+  // The third copy is accepted but does not start a second swing.
+  a.swingUntil = 0;
+  assert.ok(send(3, { swingId: 1 }));
+  assert.equal(a.swingUntil, 0);
+  // A new swing id is a new swing (after the short gap required between swings).
+  r.state.time += 0.4;
+  assert.ok(send(4, { swingId: 2 }));
+  assert.ok(a.swingUntil > 0);
+  rooms.delete(r.code);
+});

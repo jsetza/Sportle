@@ -24,6 +24,9 @@ export class Connection {
         (this.room ? "?room=" + encodeURIComponent(this.room) : ""),
       {
         method: data === undefined ? "GET" : "POST",
+        // Never cache: browsers otherwise queue identical in-flight GETs behind each other,
+        // which would serialise the parallel state pollers.
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
           ...(this.credential
@@ -109,24 +112,37 @@ export class Connection {
       }
     }
   }
-  /** One polling session: ~25 snapshots/s until stopped or the session fails. */
+  /**
+   * Polling session: three staggered pollers so a slow round trip (tunnels, cellular) does not
+   * cap the update rate at one per round trip. Out-of-order replies are dropped by sim time.
+   */
   async poll() {
-    let errors = 0;
-    while (this.running && this.mode === "poll") {
-      const t = performance.now();
-      try {
-        const s = await this.api("state");
-        errors = 0;
-        this.onStatus("Connected");
-        this.onState(s);
-      } catch {
-        errors++;
-        this.onStatus("Reconnecting…");
-        await new Promise((r) => setTimeout(r, Math.min(3000, 300 * errors)));
+    let newest = -1;
+    const loop = async (delay: number) => {
+      await new Promise((r) => setTimeout(r, delay));
+      let errors = 0;
+      while (this.running && this.mode === "poll") {
+        const t = performance.now();
+        try {
+          const s = await this.api("state");
+          errors = 0;
+          this.onStatus("Connected");
+          const time = s?.state?.time ?? 0;
+          if (time >= newest || s?.state?.phase === "lobby") {
+            newest = time;
+            this.onState(s);
+          }
+        } catch {
+          errors++;
+          this.onStatus("Reconnecting…");
+          await new Promise((r) => setTimeout(r, Math.min(3000, 300 * errors)));
+        }
+        // Each poller aims for ~11/s, so three together give ~30 updates/s.
+        const wait = 90 - (performance.now() - t);
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       }
-      const wait = 40 - (performance.now() - t);
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    }
+    };
+    await Promise.all([loop(0), loop(30), loop(60)]);
   }
   stop() {
     this.running = false;

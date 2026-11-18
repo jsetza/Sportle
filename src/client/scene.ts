@@ -136,6 +136,7 @@ export class Scene {
   history: { state: Match; at: number }[] = [];
   raf = 0;
   lastEvent = -1;
+  delay = 65;
   lastContacts = -1;
   bursts: { x: number; y: number; z: number; at: number; col: V }[] = [];
   trail: Vec[] = [];
@@ -903,7 +904,15 @@ export class Scene {
     }
     const now = performance.now();
     this.vertices = [];
-    const target = now - 65;
+    // Render slightly in the past so there are two snapshots to blend. The delay follows the
+    // actual arrival rate: ~65 ms on a 30 Hz stream, more when updates are sparser/jittery.
+    const hist = this.history;
+    const gap =
+      hist.length > 2
+        ? (hist[hist.length - 1].at - hist[0].at) / (hist.length - 1)
+        : 33;
+    this.delay += (Math.min(220, Math.max(60, gap * 1.9)) - this.delay) * 0.05;
+    const target = now - this.delay;
     let a = this.history[0],
       b = a;
     for (const v of this.history) {

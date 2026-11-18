@@ -14,6 +14,8 @@ export type Input = {
   swing: boolean;
   sensors: boolean;
   calibrated: boolean;
+  /** Identifies one swing; repeated in a few packets so a late packet cannot lose it. */
+  swingId?: number;
   /** Sideways swing direction, player frame: +1 toward their right, -1 toward their left. */
   side?: number;
   /** Movement style chosen on the phone: 0 automatic, 1 keyboard on the display, 2 phone thumb pad. */

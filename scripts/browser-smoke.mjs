@@ -75,6 +75,20 @@ try {
   await swing(120);
   await phone.waitForTimeout(500);
   await swing(320);
+  await phone.waitForTimeout(500);
+  // "Swing to your RIGHT" step. Sent with the opposite sensor sign on purpose: the phone
+  // must learn that this grip reports right as negative and flip left/right itself.
+  await phone.evaluate(() =>
+    window.dispatchEvent(
+      new DeviceMotionEvent("devicemotion", {
+        acceleration: { x: 0, y: 0, z: 0 },
+        rotationRate: { alpha: 0, beta: 0, gamma: -260 },
+      }),
+    ),
+  );
+  await phone.waitForTimeout(500);
+  if (!(await phone.locator("#swapSides").isChecked()))
+    throw Error("Calibration did not learn the reversed left/right");
   await phone.locator("#ready").click();
   await display.locator("#start").click();
   const host = JSON.parse(

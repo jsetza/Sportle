@@ -56,8 +56,10 @@ export class MotionFilter {
       -1,
       1,
     );
+    // Sign matches the owner's first real-phone test (screen facing forward as the paddle
+    // face); the calibration "swing to your right" step then confirms it per phone and grip.
     this.side = clamp(
-      (-(rotation.gamma * Math.cos(a) - rotation.beta * Math.sin(a)) / 150) *
+      ((rotation.gamma * Math.cos(a) - rotation.beta * Math.sin(a)) / 150) *
         this.flip,
       -1,
       1,
