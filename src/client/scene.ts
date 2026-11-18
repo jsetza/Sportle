@@ -136,7 +136,26 @@ export class Scene {
   history: { state: Match; at: number }[] = [];
   raf = 0;
   lastEvent = -1;
-  delay = 65;
+  lastFrame = 0;
+  lastSnapAt = 0;
+  offsets = new Map<string, Vec>();
+  /** Where and when each player last struck the ball, so every view shows paddle meeting ball. */
+  contactAt = new Map<string, Vec & { at: number }>();
+  /** Pull a paddle toward its contact point around the moment of a hit (all camera views). */
+  reach(
+    id: string,
+    px: number,
+    py: number,
+    pz: number,
+  ): [number, number, number] {
+    const c = this.contactAt.get(id);
+    if (!c) return [px, py, pz];
+    const age = (performance.now() - c.at) / 1000;
+    if (age > 0.25) return [px, py, pz];
+    const w = (1 - age / 0.25) ** 2;
+    return [px + (c.x - px) * w, py + (c.y - py) * w, pz + (c.z - pz) * w];
+  }
+  shown = new Map<string, Vec>();
   lastContacts = -1;
   bursts: { x: number; y: number; z: number; at: number; col: V }[] = [];
   trail: Vec[] = [];
@@ -224,6 +243,7 @@ export class Scene {
     if (this.history.length > 8) this.history.shift();
     if (prev && state.contacts > this.lastContacts && this.lastContacts >= 0) {
       const p = state.players.find((q) => q.id === state.lastPlayer);
+      if (p) this.contactAt.set(p.id, { ...state.ball, at: performance.now() });
       this.burst(
         state.ball,
         p ? teamColor(p.team) : palette.ball,
@@ -698,9 +718,12 @@ export class Scene {
       );
     // paddle arm + paddle (orientation mirrors the phone)
     const swing = opts.swing;
-    const px = pos.x + hand * (0.52 + swing * 0.1),
-      py = y0 + 0.92 + swing * 0.22,
-      pz = pos.z - (0.28 + swing * 0.25) * facing;
+    const [px, py, pz] = this.reach(
+      p.id,
+      pos.x + hand * (0.52 + swing * 0.1),
+      y0 + 0.92 + swing * 0.22,
+      pos.z - (0.28 + swing * 0.25) * facing,
+    );
     this.box(
       (pos.x + hand * 0.3 + px) / 2,
       py - 0.05,
@@ -758,16 +781,19 @@ export class Scene {
   // ——— camera ———
   /** The paddle as seen from your own eyes: lower right, mirroring the phone's angle. */
   fpPaddle(
-    p: Pick<Player, "team" | "hand">,
+    p: Pick<Player, "team" | "hand" | "id">,
     pos: Vec,
     o: { swing: number; pitch: number; roll: number; yaw: number },
   ) {
     const facing = p.team ? -1 : 1,
       hand = (p.hand === "left" ? -1 : 1) * facing,
       col = teamColor(p.team);
-    const px = pos.x + hand * (0.44 - o.swing * 0.12),
-      py = 0.98 + o.swing * 0.25,
-      pz = pos.z - (0.85 + o.swing * 0.3) * facing;
+    const [px, py, pz] = this.reach(
+      p.id,
+      pos.x + hand * (0.44 - o.swing * 0.12),
+      0.98 + o.swing * 0.25,
+      pos.z - (0.85 + o.swing * 0.3) * facing,
+    );
     const rx = facing * ((o.pitch * Math.PI) / 180 + o.swing * 0.9),
       rz = (-o.roll * facing * Math.PI) / 180,
       ry = (o.yaw * Math.PI) / 180;
@@ -904,35 +930,42 @@ export class Scene {
     }
     const now = performance.now();
     this.vertices = [];
-    // Render slightly in the past so there are two snapshots to blend. The delay follows the
-    // actual arrival rate: ~65 ms on a 30 Hz stream, more when updates are sparser/jittery.
+    // Draw the present, not the past: extrapolate from the latest snapshot using the
+    // velocities it carries (capped), then ease out any correction when the next snapshot
+    // lands. Rendering ~65–220 ms in the past made first person feel laggy.
     const hist = this.history;
-    const gap =
-      hist.length > 2
-        ? (hist[hist.length - 1].at - hist[0].at) / (hist.length - 1)
-        : 33;
-    this.delay += (Math.min(220, Math.max(60, gap * 1.9)) - this.delay) * 0.05;
-    const target = now - this.delay;
-    let a = this.history[0],
-      b = a;
-    for (const v of this.history) {
-      if (v.at <= target) a = v;
-      if (v.at >= target) {
-        b = v;
-        break;
+    const latest = hist[hist.length - 1];
+    const m = latest?.state || this.state;
+    const frameDt = Math.min(0.1, (now - this.lastFrame) / 1000 || 0.016);
+    this.lastFrame = now;
+    const ahead = latest ? Math.min(0.15, (now - latest.at) / 1000) : 0;
+    const fresh = latest && latest.at !== this.lastSnapAt;
+    if (fresh) this.lastSnapAt = latest.at;
+    const decay = Math.exp(-frameDt * 14);
+    const smooth = (key: string, predicted: Vec): Vec => {
+      let o = this.offsets.get(key);
+      const shown = this.shown.get(key);
+      if (fresh && shown) {
+        // Correction = where we were drawing it minus where the new data says it is.
+        o = {
+          x: shown.x - predicted.x,
+          y: shown.y - predicted.y,
+          z: shown.z - predicted.z,
+        };
+        if (Math.hypot(o.x, o.y, o.z) > 1) o = { x: 0, y: 0, z: 0 }; // teleport (serve, feed)
       }
-      b = v;
-    }
-    const t =
-      a && b && b.at > a.at
-        ? Math.max(0, Math.min(1, (target - a.at) / (b.at - a.at)))
-        : 1;
-    const m = b?.state || this.state;
-    const mix = (v: Vec, u: Vec) => ({
-      x: v.x + (u.x - v.x) * t,
-      y: v.y + (u.y - v.y) * t,
-      z: v.z + (u.z - v.z) * t,
-    });
+      o = o
+        ? { x: o.x * decay, y: o.y * decay, z: o.z * decay }
+        : { x: 0, y: 0, z: 0 };
+      this.offsets.set(key, o);
+      const out = {
+        x: predicted.x + o.x,
+        y: predicted.y + o.y,
+        z: predicted.z + o.z,
+      };
+      this.shown.set(key, out);
+      return out;
+    };
     let ball: Vec | null = null;
     this.followPos = null;
     if (m) {
@@ -947,8 +980,11 @@ export class Scene {
         m.players.filter((p) => p.team === team).length > 1;
       for (const p of m.players) {
         if (p.id === "practice-feed") continue;
-        const previous = a?.state.players.find((q) => q.id === p.id);
-        const pos = previous ? mix(previous.pos, p.pos) : p.pos;
+        const pos = smooth("p:" + p.id, {
+          x: p.pos.x + p.velocity.x * Math.min(ahead, 0.1),
+          y: 0,
+          z: p.pos.z + p.velocity.z * Math.min(ahead, 0.1),
+        });
         if (p.id === this.follow) {
           this.followPos = pos;
           this.followTeam = p.team;
@@ -968,10 +1004,25 @@ export class Scene {
             m.phase === "rally" && doublesTeam(p.team) && owner?.id === p.id,
         });
       }
-      ball =
-        a && a.state.event === m.event ? mix(a.state.ball, m.ball) : m.ball;
+      // Ball: ballistic extrapolation during a rally (post-bounce at the slow-bounce speed).
+      const bt =
+        m.phase === "rally"
+          ? Math.min(ahead, 0.08) * (m.bounces > 0 ? 0.8 : 1)
+          : 0;
+      ball = smooth("ball", {
+        x: m.ball.x + m.velocity.x * bt,
+        y: Math.max(
+          COURT.radius,
+          m.ball.y + m.velocity.y * bt - 0.5 * (9.81 + m.spin) * bt * bt,
+        ),
+        z: m.ball.z + m.velocity.z * bt,
+      });
       // Enlarged, readable orientation mirror in practice/lobby.
-      if (m.mode === "practice" || m.phase === "lobby") {
+      // Only where it can be seen clearly: the lobby, or practice in the broadcast view.
+      if (
+        m.phase === "lobby" ||
+        (m.mode === "practice" && this.viewMode === "broadcast")
+      ) {
         const p = m.players.find((p) => !p.bot);
         if (p) {
           const rx = (p.input.pitch * Math.PI) / 180,
@@ -1063,10 +1114,13 @@ export class Scene {
       m.phase !== "lobby" &&
       this.followPos &&
       this.viewMode !== "broadcast";
-    const e = playerView ? (this.viewMode === "first" ? 0.4 : 0.14) : 0.06;
+    const e = playerView ? (this.viewMode === "first" ? 1 : 0.3) : 0.06;
     this.view = {
       eye: this.view.eye.map((v, i) => lerp(v, goal.eye[i], e)),
-      target: this.view.target.map((v, i) => lerp(v, goal.target[i], e)),
+      // Look direction eases a little even in first person, so it never jerks.
+      target: this.view.target.map((v, i) =>
+        lerp(v, goal.target[i], Math.min(e, 0.35)),
+      ),
       fov: lerp(this.view.fov, goal.fov, e),
       shift: lerp(this.view.shift, goal.shift, e),
     };
