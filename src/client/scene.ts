@@ -1,5 +1,7 @@
 import type { Match, Player, Vec } from "../shared/types.ts";
-import { COURT } from "../shared/types.ts";
+import { COURT, OUTFITS } from "../shared/types.ts";
+import type { MapId, Outfit } from "../shared/types.ts";
+import { LOOKS, buildMap } from "./maps.ts";
 type V = number[];
 const sub = (a: V, b: V) => a.map((v, i) => v - b[i]);
 const cross = (a: V, b: V) => [
@@ -113,15 +115,15 @@ varying vec3 vColor; varying vec3 vWorld; varying float vDepth;
 void main(){vColor=color;vWorld=position;gl_Position=camera*vec4(position,1.0);vDepth=gl_Position.w;}`;
 const FRAGMENT = `precision mediump float;
 varying vec3 vColor; varying vec3 vWorld; varying float vDepth;
-uniform vec3 fogColor; uniform vec4 spots[3];
+uniform vec3 fogColor; uniform vec4 spots[3]; uniform vec4 look;
 void main(){
-  float light = 0.78;
+  float light = look.x;
   for (int i = 0; i < 3; i++) {
     vec2 d = vWorld.xz - spots[i].xy;
-    light += spots[i].z * exp(-dot(d, d) / (spots[i].w * spots[i].w)) * (vWorld.y < 1.6 ? 1.0 : 0.45);
+    light += look.y * spots[i].z * exp(-dot(d, d) / (spots[i].w * spots[i].w)) * (vWorld.y < 1.6 ? 1.0 : 0.45);
   }
   vec3 c = vColor * light;
-  float fog = smoothstep(16.0, 46.0, vDepth);
+  float fog = smoothstep(look.z, look.w, vDepth);
   gl_FragColor = vec4(mix(c, fogColor, fog * 0.88), 1.0);
 }`;
 export class Scene {
@@ -219,6 +221,19 @@ export class Scene {
     this.program = program;
     this.buffer = gl.createBuffer()!;
     this.staticBuffer = gl.createBuffer()!;
+    this.build();
+    this.render();
+  }
+  map: MapId = "arena";
+  /** Switch the court's surroundings (owner request: choosable maps). */
+  setMap(id: MapId) {
+    if (id === this.map || !LOOKS[id]) return;
+    this.map = id;
+    this.build();
+  }
+  build() {
+    const gl = this.gl;
+    this.vertices = [];
     this.arena();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.staticBuffer);
     gl.bufferData(
@@ -228,7 +243,6 @@ export class Scene {
     );
     this.staticCount = this.vertices.length / 6;
     this.vertices = [];
-    this.render();
   }
   sound() {
     this.muted = !this.muted;
@@ -257,6 +271,7 @@ export class Scene {
     o.stop(a.currentTime + dur + 0.01);
   }
   update(state: Match) {
+    if (state.map) this.setMap(state.map);
     const prev = this.state;
     this.state = state;
     this.history.push({ state, at: performance.now() });
@@ -479,9 +494,10 @@ export class Scene {
   }
   // ——— static arena ———
   arena() {
-    const P = palette;
-    this.box(0, -0.06, 0, 90, 0.1, 90, P.floor);
-    this.box(0, -0.02, 0, 11, 0.04, 21, P.apron);
+    const P = palette,
+      look = LOOKS[this.map];
+    if (look.ground) this.box(0, -0.06, 0, 90, 0.1, 90, look.ground);
+    this.box(0, -0.02, 0, 11, 0.04, 21, look.apron);
     this.box(0, -0.005, 0, 6.096, 0.03, 13.4112, P.court);
     this.box(0, 0.012, 0, 6.096, 0.012, 4.2672, P.kitchen);
     for (const z of [-6.6802, -2.1082, 2.1082, 6.6802])
@@ -490,8 +506,9 @@ export class Scene {
       this.box(x, 0.022, 0, 0.0508, 0.012, 13.4112, P.line);
     for (const z of [-4.4196, 4.4196])
       this.box(0, 0.022, z, 0.0508, 0.012, 4.572, P.line);
-    // floor branding beside the court (subtle)
-    this.text("POVPICKLE", -9.6, 0.004, 5.4, 0.32, 0, -1, [0.27, 0.08, 0.14]);
+    if (this.map === "arena")
+      // floor branding beside the court (subtle)
+      this.text("POVPICKLE", -9.6, 0.004, 5.4, 0.32, 0, -1, [0.27, 0.08, 0.14]);
     // net
     for (const x of [-COURT.post, COURT.post]) {
       this.box(x, 0.5, 0, 0.09, 1.0, 0.09, P.dark);
@@ -512,6 +529,10 @@ export class Scene {
     for (let x = -3.3; x < 3.3; x += 0.33) {
       const h = COURT.netCenter + (Math.abs(x) / 3.048) * 0.0508;
       this.box(x, h, 0, 0.34, 0.05, 0.03, P.white);
+    }
+    if (this.map !== "arena") {
+      buildMap(this, this.map);
+      return;
     }
     // ad boards with original lettering on three sides
     const boardH = 0.95;
@@ -607,7 +628,7 @@ export class Scene {
   }
   // ——— characters ———
   mascot(
-    p: Pick<Player, "team" | "hand" | "bot" | "id">,
+    p: Pick<Player, "team" | "hand" | "bot" | "id"> & { outfit?: Outfit },
     pos: Vec,
     opts: {
       swing: number;
@@ -718,6 +739,7 @@ export class Scene {
       0.03,
       palette.dark,
     );
+    this.outfit(p.outfit ?? "classic", pos.x, y0, pos.z, facing, col);
     if (p.bot) {
       this.box(pos.x, y0 + 1.95, pos.z, 0.03, 0.28, 0.03, palette.dark);
       this.sphere(pos.x, y0 + 2.12, pos.z, 0.06, palette.orange);
@@ -796,6 +818,100 @@ export class Scene {
     if (opts.server) {
       this.blob(pos.x, y0 + 2.25, pos.z, 0.1, 0.1, 0.1, palette.ball);
       this.box(pos.x, y0 + 2.05, pos.z, 0.02, 0.2, 0.02, palette.ball);
+    }
+  }
+  /** Outfit accessories on top of the team-coloured body (owner request). */
+  outfit(o: Outfit, x: number, y0: number, z: number, facing: number, col: V) {
+    const front = z - 0.3 * facing,
+      back = z + 0.3 * facing;
+    const white = palette.white,
+      dark = palette.dark;
+    if (o === "cap") {
+      this.blob(
+        x,
+        y0 + 1.6,
+        z,
+        0.31,
+        0.15,
+        0.28,
+        col.map((v) => v * 0.6),
+        0,
+        4,
+        12,
+      );
+      this.box(
+        x,
+        y0 + 1.6,
+        front - 0.06 * facing,
+        0.34,
+        0.03,
+        0.24,
+        col.map((v) => v * 0.6),
+      );
+      this.sphere(x, y0 + 1.75, z, 0.04, white);
+    } else if (o === "headband") {
+      this.blob(x, y0 + 1.5, z, 0.35, 0.05, 0.315, white, 0, 2, 14);
+      this.blob(x, y0 + 1.5, z, 0.352, 0.018, 0.317, col, 0, 2, 14);
+      for (const s of [-1, 1])
+        this.box(
+          x + s * 0.06,
+          y0 + 1.42,
+          back + 0.04 * facing,
+          0.06,
+          0.18,
+          0.03,
+          white,
+          0.4 * facing,
+          s * 0.3,
+        );
+      // wristband on the paddle side
+      this.blob(x, y0 + 0.62, z, 0.36, 0.035, 0.32, white, 0, 2, 14);
+    } else if (o === "chef") {
+      this.blob(x, y0 + 1.66, z, 0.27, 0.06, 0.25, white, 0, 2, 14);
+      this.blob(x, y0 + 1.9, z, 0.24, 0.12, 0.22, white, 0.22, 5, 12);
+      for (const [dx, dz] of [
+        [0.12, 0],
+        [-0.12, 0],
+        [0, 0.11],
+        [0, -0.11],
+      ])
+        this.sphere(x + dx, y0 + 2.12, z + dz, 0.13, white);
+      // apron over the front
+      this.box(x, y0 + 0.82, front - 0.02 * facing, 0.42, 0.56, 0.03, white);
+      this.box(x, y0 + 0.96, front - 0.035 * facing, 0.12, 0.08, 0.02, col);
+    } else if (o === "astro") {
+      this.blob(x, y0 + 1.58, z, 0.37, 0.22, 0.34, white, 0, 5, 14);
+      this.blob(x, y0 + 1.4, z, 0.37, 0.04, 0.33, [0.75, 0.77, 0.8], 0, 2, 14);
+      // gold visor across the eyes
+      this.box(x, y0 + 1.33, z - 0.3 * facing, 0.38, 0.12, 0.05, palette.gold);
+      // life-support pack and a little antenna
+      this.box(x, y0 + 0.98, back + 0.08 * facing, 0.44, 0.56, 0.18, white);
+      this.box(x, y0 + 1.12, back + 0.175 * facing, 0.28, 0.12, 0.02, col);
+      this.box(x + 0.16, y0 + 1.4, back + 0.08 * facing, 0.02, 0.3, 0.02, dark);
+      this.sphere(
+        x + 0.16,
+        y0 + 1.56,
+        back + 0.08 * facing,
+        0.035,
+        palette.red,
+      );
+    } else if (o === "cowboy") {
+      const brown = [0.48, 0.3, 0.16];
+      this.blob(x, y0 + 1.6, z, 0.55, 0.03, 0.52, brown, 0, 2, 16);
+      this.blob(x, y0 + 1.74, z, 0.26, 0.16, 0.24, brown, 0.04, 4, 12);
+      this.blob(x, y0 + 1.66, z, 0.265, 0.03, 0.245, dark, 0, 2, 12);
+      // bandana at the neck
+      this.box(
+        x,
+        y0 + 1.1,
+        front - 0.03 * facing,
+        0.24,
+        0.14,
+        0.04,
+        palette.red,
+        0,
+        Math.PI / 4,
+      );
     }
   }
   // ——— camera ———
@@ -908,7 +1024,14 @@ export class Scene {
     this.demoNear = nearX;
     this.demoFar = farX;
     this.mascot(
-      { team: 0, hand: "right", bot: false, id: "d0" },
+      {
+        team: 0,
+        hand: "right",
+        bot: false,
+        id: "d0",
+        // show off the outfits on the menu court
+        outfit: OUTFITS[Math.floor(n / 3) % OUTFITS.length].id,
+      },
       { x: nearX, y: 0, z: near.z },
       {
         swing: nearSwing,
@@ -921,7 +1044,7 @@ export class Scene {
       },
     );
     this.mascot(
-      { team: 1, hand: "right", bot: true, id: "d1" },
+      { team: 1, hand: "right", bot: true, id: "d1", outfit: "astro" },
       { x: farX, y: 0, z: far.z },
       {
         swing: farSwing,
@@ -1057,11 +1180,18 @@ export class Scene {
     document.body.classList.toggle("split", split);
     gl.viewport(0, 0, w, h);
     gl.disable(gl.SCISSOR_TEST);
-    gl.clearColor(palette.fog[0], palette.fog[1], palette.fog[2], 1);
+    const look = LOOKS[this.map];
+    gl.clearColor(look.sky[0], look.sky[1], look.sky[2], 1);
     gl.enable(gl.DEPTH_TEST);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
-    gl.uniform3fv(gl.getUniformLocation(this.program, "fogColor"), palette.fog);
+    gl.uniform3fv(gl.getUniformLocation(this.program, "fogColor"), look.sky);
+    gl.uniform4fv(gl.getUniformLocation(this.program, "look"), [
+      look.ambient,
+      look.spots,
+      look.fogNear,
+      look.fogFar,
+    ]);
     gl.uniform4fv(
       gl.getUniformLocation(this.program, "spots"),
       // x, z, strength, radius — pools of light like arena spots

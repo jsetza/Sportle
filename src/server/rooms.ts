@@ -9,7 +9,14 @@ import {
 } from "./engine.ts";
 import { MOVE_STYLES } from "../shared/types.ts";
 import { slots, teamFor } from "../shared/types.ts";
-import type { Mode, Difficulty, Match, Input } from "../shared/types.ts";
+import type {
+  Mode,
+  Difficulty,
+  Match,
+  Input,
+  MapId,
+  Outfit,
+} from "../shared/types.ts";
 export const token = () => randomBytes(24).toString("base64url");
 export type Session = {
   role: "host" | "display" | "controller";
@@ -88,14 +95,18 @@ export function setTeam(r: Room, playerId: string, team: number) {
   p.team = team;
   return p;
 }
-export function createRoom(mode: Mode, difficulty: Difficulty): Room {
+export function createRoom(
+  mode: Mode,
+  difficulty: Difficulty,
+  map: MapId = "arena",
+): Room {
   let code: string;
   do {
     code = randomBytes(4).toString("hex").slice(0, 6).toUpperCase();
   } while (rooms.has(code));
   const r: Room = {
     code,
-    state: match(mode, difficulty),
+    state: match(mode, difficulty, map),
     host: token(),
     pair: token(),
     pairExpires: Date.now() + PAIR_TTL,
@@ -122,6 +133,7 @@ export function joinController(
   credential?: string,
   preferTeam: number | null = null,
   display = "",
+  outfit: Outfit = "classic",
 ) {
   if (credential) {
     const session = r.sessions.get(credential);
@@ -132,13 +144,15 @@ export function joinController(
     )
       throw Error("Reconnect expired. Ask the host to create a new room.");
     const p = r.state.players.find((p) => p.id === session.playerId)!;
+    p.outfit = outfit;
     p.connected = true;
-    p.ready = false;
     p.lastSeen = Date.now();
-    if (r.state.phase !== "lobby") {
-      r.state.paused = true;
-      r.state.message = p.name + " reconnected. Calibrate, ready, then resume.";
-    }
+    // Keep "ready": the phone remembers its swings. Play waits until its sensors are live
+    // again, then resumes by itself (see housekeeping).
+    dropPause(
+      r,
+      p.name + " is reconnecting · play resumes when their paddle is live",
+    );
     return { credential, player: p, seq: session.lastSeq };
   }
   if (r.state.phase !== "lobby") throw Error("Match already started");
@@ -158,6 +172,7 @@ export function joinController(
   const p = player(token().slice(0, 10), name, team);
   p.display = display;
   p.hand = hand;
+  p.outfit = outfit;
   r.state.players.push(p);
   const key = token();
   r.sessions.set(key, {
@@ -183,11 +198,13 @@ export function begin(r: Room) {
     if (humans.filter((p) => p.team === t).length !== capacity(m.mode, t))
       throw Error("Teams are uneven. Switch a player's team in the lobby.");
   m.players = humans;
-  if (m.mode === "solo") m.players.push(player("bot-1", "Orbit", 1, true));
+  const bot = (id: string, name: string, outfit: Outfit) =>
+    Object.assign(player(id, name, 1, true), { outfit });
+  if (m.mode === "solo") m.players.push(bot("bot-1", "Orbit", "astro"));
   if (m.mode === "coop")
     m.players.push(
-      player("bot-1", "Orbit", 1, true),
-      player("bot-2", "Nova", 1, true),
+      bot("bot-1", "Orbit", "astro"),
+      bot("bot-2", "Nova", "headband"),
     );
   if (m.mode === "practice")
     m.players.push(player("practice-feed", "Ball machine", 1, true));
@@ -246,13 +263,8 @@ export function acceptInput(
   p.lastSeen = now;
   p.connected = true;
   r.updated = now;
-  if (!a.sensors || !a.calibrated) {
-    p.ready = false;
-    if (r.state.phase !== "lobby" && r.state.phase !== "over") {
-      r.state.paused = true;
-      r.state.message = p.name + " needs live sensors and calibration";
-    }
-  }
+  if ((!a.sensors || !a.calibrated) && !r.state.paused)
+    dropPause(r, p.name + "'s paddle isn't live · resumes when it is");
   if (a.ctl !== undefined) {
     p.moveStyle = MOVE_STYLES[a.ctl];
     if (p.moveStyle === "auto") p.manual = false;
@@ -272,15 +284,14 @@ export function housekeeping(r: Room, now = Date.now()) {
   for (const p of r.state.players) {
     if (!p.bot && p.connected && now - p.lastSeen > 2500) {
       p.connected = false;
-      p.ready = false;
-      if (r.state.phase !== "lobby") {
-        r.state.paused = true;
-        r.state.message =
-          p.name + " disconnected. Reconnect, ready, then resume.";
-        r.state.event++;
-      }
+      dropPause(
+        r,
+        p.name + " lost connection · play resumes when they're back",
+        now,
+      );
     }
   }
+  autoResume(r, now);
   for (const [k, s] of r.sessions) if (s.expires < now) r.sessions.delete(k);
   if (now - r.updated > 3600000) rooms.delete(r.code);
 }
@@ -333,6 +344,92 @@ export function acceptMove(
   return true;
 }
 
+/** Is every phone in this match connected with a live, calibrated paddle? */
+export function everyoneBack(r: Room, now = Date.now()) {
+  return r.state.players.every(
+    (p) =>
+      p.bot ||
+      (p.connected &&
+        now - p.lastSeen < 1500 &&
+        p.input.sensors &&
+        p.input.calibrated),
+  );
+}
+/**
+ * A phone dropped (lost signal, locked screen, switched apps, reloaded): pause the match.
+ * Unlike a manual pause, this one lifts by itself when everyone is back.
+ */
+export function dropPause(r: Room, message: string, now = Date.now()) {
+  const m = r.state;
+  if (m.phase === "lobby" || m.phase === "over") return;
+  m.paused = true;
+  if (m.pauseReason !== "host") m.pauseReason = "drop";
+  m.resumeAt = 0;
+  m.message = message;
+  m.event++;
+}
+/** Resume a drop-pause 3 s after every phone is back (a countdown shows on screen). */
+export function autoResume(r: Room, now = Date.now()) {
+  const m = r.state;
+  if (!m.paused || m.pauseReason !== "drop") return;
+  if (!everyoneBack(r, now)) {
+    if (m.resumeAt) {
+      m.resumeAt = 0;
+      m.message = "Waiting for every phone to come back";
+      m.event++;
+    }
+    return;
+  }
+  if (!m.resumeAt) {
+    m.resumeAt = now + 3000;
+    m.message = "Everyone's back · resuming in 3";
+    m.event++;
+    return;
+  }
+  const left = Math.ceil((m.resumeAt - now) / 1000);
+  if (left > 0) {
+    const msg = "Everyone's back · resuming in " + left;
+    if (m.message !== msg) {
+      m.message = msg;
+      m.event++;
+    }
+    return;
+  }
+  m.paused = false;
+  m.pauseReason = "";
+  m.resumeAt = 0;
+  m.message = "Play resumed";
+  m.event++;
+}
+/** Pause / Resume buttons (big screen or any phone). */
+export function hostPause(r: Room) {
+  const m = r.state;
+  if (m.phase === "lobby" || m.phase === "over") return;
+  m.paused = true;
+  m.pauseReason = "host";
+  m.resumeAt = 0;
+  m.message = "Paused · press Resume to keep playing";
+  m.event++;
+}
+export function resume(r: Room) {
+  const m = r.state;
+  if (!m.paused) return;
+  // If a phone is still missing, hand over to the automatic resume instead of failing.
+  m.pauseReason = "drop";
+  m.resumeAt = 0;
+  if (!everyoneBack(r)) {
+    const missing = m.players
+      .filter((p) => !p.bot && (!p.connected || !p.input.calibrated))
+      .map((p) => p.name);
+    m.message =
+      "Resuming as soon as " +
+      (missing.join(" & ") || "every phone") +
+      " is back";
+    m.event++;
+    return;
+  }
+  autoResume(r);
+}
 /** Host action after a finished match: same players, same mode, fresh score. */
 export function rematch(r: Room) {
   const m = r.state;

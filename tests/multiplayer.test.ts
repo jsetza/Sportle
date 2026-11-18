@@ -263,11 +263,31 @@ test("cross-household four-phone doubles over real HTTP/SSE", async () => {
     const back = await call("join?room=" + room, { credential: phones[0].key });
     assert.equal(back.data.player.id, phones[0].id);
     assert.equal(back.data.player.team, 0);
-    // Resume is refused until every phone is ready again.
+    // Resume while a phone is still missing: no error, it hands over to the automatic resume.
     assert.equal(
       (await call("resume?room=" + room, {}, host.data.credential)).status,
-      400,
+      200,
     );
+    // Every phone streams a live paddle again → countdown → play resumes by itself.
+    const live = setInterval(() => {
+      for (const p of phones) {
+        const n = seq.get(p.key)! + 1;
+        seq.set(p.key, n);
+        call("input?room=" + room, input(n), p.key).catch(() => {});
+      }
+    }, 120);
+    try {
+      const resumed = await watch(
+        room,
+        remote.data.credential,
+        (s) => !s.state.paused,
+        9000,
+      );
+      assert.equal(resumed.state.paused, false);
+      assert.equal(resumed.state.message, "Play resumed");
+    } finally {
+      clearInterval(live);
+    }
   } finally {
     if (child.exitCode === null) {
       child.kill("SIGTERM");

@@ -102,7 +102,10 @@ test("real HTTP room flow, SSE snapshots, authority and reconnect", async () => 
       credential: players[0].credential,
     });
     assert.equal(again.data.player.id, players[0].player.id);
-    assert.equal(again.data.player.ready, false);
+    // Reconnecting keeps the seat and its readiness; play waits for a live paddle.
+    assert.equal(again.data.player.ready, true);
+    assert.equal(again.data.state.paused, true);
+    assert.equal(again.data.state.pauseReason, "drop");
     assert.equal(
       (await call("input?room=" + room, { seq: 2 }, "bad")).status,
       401,

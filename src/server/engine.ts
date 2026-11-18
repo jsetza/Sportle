@@ -8,6 +8,7 @@ import type {
   Match,
   Mode,
   Difficulty,
+  MapId,
   Player,
   Input,
   Vec,
@@ -54,6 +55,7 @@ export function player(
     manual: false,
     display: "",
     moveStyle: "keys",
+    outfit: "classic",
     reactionAt: 0,
     target: vec(),
   };
@@ -61,12 +63,16 @@ export function player(
 export function match(
   mode: Mode = "practice",
   difficulty: Difficulty = "easy",
+  map: MapId = "arena",
 ): Match {
   return {
     mode,
     difficulty,
+    map,
     phase: "lobby",
     paused: false,
+    pauseReason: "",
+    resumeAt: 0,
     score: [0, 0],
     serving: 0,
     serverNumber: 2,
@@ -230,6 +236,8 @@ export function start(m: Match) {
   m.serverId = rightPlayer(m, 0).id;
   m.winner = null;
   m.paused = false;
+  m.pauseReason = "";
+  m.resumeAt = 0;
   m.contacts = 0;
   prepare(m);
 }

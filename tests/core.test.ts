@@ -240,7 +240,20 @@ test("stale, duplicate, impossible input rejected and disconnect pauses", () => 
   begin(r);
   housekeeping(r, now + 3000);
   assert.equal(r.state.paused, true);
-  assert.equal(j.player.ready, false);
+  assert.equal(r.state.pauseReason, "drop");
+  // Readiness (the learned swings) survives a dropout: no setup again.
+  assert.equal(j.player.ready, true);
+  assert.equal(j.player.connected, false);
+  // Phone comes back with a live paddle: 3-second countdown, then play resumes by itself.
+  const back = now + 10000;
+  assert.equal(acceptInput(r, s, { ...a, seq: 10, t: back }, back), true);
+  housekeeping(r, back);
+  assert.equal(r.state.paused, true);
+  assert.match(r.state.message, /resuming in 3/);
+  acceptInput(r, s, { ...a, seq: 11, t: back + 3100 }, back + 3100);
+  housekeeping(r, back + 3100);
+  assert.equal(r.state.paused, false);
+  assert.equal(r.state.pauseReason, "");
   rooms.delete(r.code);
 });
 test("assisted serve lands diagonally and reaches rally", () => {
@@ -286,15 +299,34 @@ test("all modes build the correct roster and require exact human count", () => {
     rooms.delete(r.code);
   }
 });
-test("sensor loss pauses a live match and clears readiness", () => {
+test("sensor loss pauses a live match; a manual pause waits for Resume", async () => {
+  const { hostPause, resume } = await import("../src/server/rooms.ts");
   const r = createRoom("solo", "easy"),
     j = joinController(r, "P", "right");
   j.player.ready = true;
   begin(r);
   const s = r.sessions.get(j.credential)!;
-  acceptInput(r, s, { ...ZERO_INPUT, seq: 1, t: Date.now() }, Date.now());
+  const now = Date.now();
+  acceptInput(r, s, { ...ZERO_INPUT, seq: 1, t: now }, now);
   assert.equal(r.state.paused, true);
-  assert.equal(j.player.ready, false);
+  assert.equal(r.state.pauseReason, "drop");
+  assert.equal(j.player.ready, true);
+  // Manual pause: live paddle or not, it stays paused until someone presses Resume.
+  hostPause(r);
+  const live = { ...ZERO_INPUT, sensors: true, calibrated: true };
+  acceptInput(r, s, { ...live, seq: 2, t: now + 100 }, now + 100);
+  housekeeping(r, now + 100);
+  housekeeping(r, now + 5000);
+  assert.equal(r.state.paused, true);
+  assert.equal(r.state.pauseReason, "host");
+  // Resume with everyone back: short countdown, then play.
+  j.player.lastSeen = Date.now();
+  j.player.connected = true; // the phone is streaming again
+  resume(r);
+  assert.match(r.state.message, /resuming in 3/);
+  r.state.resumeAt = Date.now() - 1;
+  housekeeping(r);
+  assert.equal(r.state.paused, false);
   rooms.delete(r.code);
 });
 test("bots sustain rallies with bounded movement", () => {

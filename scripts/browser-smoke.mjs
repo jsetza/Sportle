@@ -33,6 +33,10 @@ try {
   for (const p of [display, phone])
     p.on("pageerror", (e) => errors.push(e.message));
   await display.goto("http://127.0.0.1:31492");
+  // Start screen: Play → Offline → (Motion lab is preselected) → Create game.
+  await display.locator("#play").click();
+  await display.locator("#goOffline").click();
+  await display.locator("label[for=map-tokyo]").click();
   await display.locator("#create").click();
   await display.locator("#lobby").waitFor({ state: "visible" });
   const room = await display.locator("#roomcode").textContent();
@@ -40,6 +44,10 @@ try {
   await phone.goto("http://127.0.0.1:31492/controller?room=" + room);
   await phone.locator("#nickname").fill("Test phone");
   await phone.locator("#connect").click();
+  // The typed-in fields are removed after joining (no iOS "Undo Typing" when swinging).
+  await phone.locator("#controls").waitFor({ state: "visible" });
+  if ((await phone.locator("#nickname, #code").count()) !== 0)
+    throw Error("Text fields still on the page after joining");
   await phone.locator("#enable").click();
   await phone.evaluate(() => {
     window.testSensors = setInterval(() => {
@@ -156,6 +164,42 @@ try {
   assert.equal(results.length, 2);
   assert.notDeepEqual(results[0].velocity, results[1].velocity);
   assert.notEqual(results[0].message, results[1].message);
+  // Phone reloads mid-match: it takes its seat back, one tap on Enable, play resumes itself.
+  const sensorsOn = () =>
+    phone.evaluate(() => {
+      window.testSensors = setInterval(() => {
+        window.dispatchEvent(
+          new DeviceOrientationEvent("deviceorientation", { alpha: 0, beta: 35, gamma: 0 }),
+        );
+        window.dispatchEvent(
+          new DeviceMotionEvent("devicemotion", {
+            acceleration: { x: 0, y: 0, z: 0 },
+            rotationRate: { alpha: 0, beta: 0, gamma: 0 },
+          }),
+        );
+      }, 16);
+    });
+  await phone.reload();
+  const state = async () =>
+    (
+      await (
+        await fetch("http://127.0.0.1:31492/api/state?room=" + room, {
+          headers: { authorization: "Bearer " + host.credential },
+        })
+      ).json()
+    ).state;
+  for (let i = 0; i < 40 && !(await state()).paused; i++)
+    await phone.waitForTimeout(100);
+  if (!(await state()).paused) throw Error("Reload did not pause the match");
+  await phone.locator("#enable").click();
+  await sensorsOn();
+  await phone.locator("#ingame").waitFor({ state: "visible", timeout: 5000 });
+  let resumed = false;
+  for (let i = 0; i < 80 && !resumed; i++) {
+    await phone.waitForTimeout(100);
+    resumed = !(await state()).paused;
+  }
+  if (!resumed) throw Error("Match did not resume after the phone came back");
   const qr = await display.evaluate(async () => {
     const { drawQR } = await import("/qr.js");
     const c = document.createElement("canvas"),
@@ -169,7 +213,7 @@ try {
   if (qr.supported) assert.equal(qr.decoded, qr.value);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: display → phone join → synthetic sensors → calibration → ready → practice → 2 distinct shots",
+    "PASS: display → phone join → synthetic sensors → calibration → ready → practice → 2 distinct shots → reload → one-tap rejoin → auto resume",
   );
   console.log(JSON.stringify({ results, qr }, null, 2));
   await phone.evaluate(() => {

@@ -14,6 +14,9 @@ import {
   acceptMove,
   rematch,
   begin,
+  dropPause,
+  hostPause,
+  resume,
   acceptInput,
   housekeeping,
   token,
@@ -22,7 +25,8 @@ import { step, announce } from "./engine.ts";
 import type { Room, Session } from "./rooms.ts";
 import { detectOrigin, detectPlatform, clientIp } from "./hosting.ts";
 import type { ServerResponse } from "node:http";
-import type { Mode, Difficulty } from "../shared/types.ts";
+import type { Mode, Difficulty, MapId, Outfit } from "../shared/types.ts";
+import { MAPS, OUTFITS } from "../shared/types.ts";
 const source = dirname(fileURLToPath(import.meta.url));
 const built = source.includes("/dist/");
 const root = resolve(source, "../client");
@@ -119,7 +123,10 @@ const server = createServer(async (req, res) => {
         )
           throw Error("Invalid mode");
         if (rooms.size >= 100) throw Error("Server room limit reached");
-        const r = createRoom(a.mode as Mode, a.difficulty as Difficulty);
+        const map = (
+          MAPS.some((m) => m.id === a.map) ? a.map : "arena"
+        ) as MapId;
+        const r = createRoom(a.mode as Mode, a.difficulty as Difficulty, map);
         return json(res, {
           ...view(r),
           credential: r.host,
@@ -203,6 +210,9 @@ const server = createServer(async (req, res) => {
           a.credential,
           preferTeam,
           display,
+          (OUTFITS.some((o) => o.id === a.outfit)
+            ? a.outfit
+            : "classic") as Outfit,
         );
         r.updated = Date.now();
         return json(res, { ...view(r), ...result });
@@ -233,6 +243,7 @@ const server = createServer(async (req, res) => {
         res.write(`data: ${JSON.stringify(view(r))}\n\n`);
         streams.set(res, { room: r, session });
         req.on("close", () => streams.delete(res));
+        res.on("error", () => streams.delete(res));
         return;
       }
       if (req.method !== "POST") return json(res, { error: "Not found" }, 404);
@@ -255,14 +266,18 @@ const server = createServer(async (req, res) => {
       }
       if (path === "/api/background" && p) {
         p.connected = false;
-        p.ready = false;
-        r.state.paused = r.state.phase !== "lobby";
-        announce(r.state, p.name + " paused their controller");
+        dropPause(
+          r,
+          p.name + " left the game screen · resumes when they're back",
+        );
         return json(res, { ok: true });
       }
       if (path === "/api/pause" && (session.role === "host" || p)) {
-        r.state.paused = true;
-        announce(r.state, "Paused");
+        hostPause(r);
+        return json(res, { ok: true });
+      }
+      if (path === "/api/resume" && (session.role === "host" || p)) {
+        resume(r);
         return json(res, { ok: true });
       }
       if (path === "/api/pair" && session.role !== "controller") {
@@ -281,19 +296,6 @@ const server = createServer(async (req, res) => {
       }
       if (path === "/api/start") {
         begin(r);
-        return json(res, { ok: true });
-      }
-      if (path === "/api/resume") {
-        if (
-          r.state.players.some(
-            (p) =>
-              !p.bot &&
-              (!p.connected || !p.ready || Date.now() - p.lastSeen > 2000),
-          )
-        )
-          throw Error("All phones must reconnect and ready");
-        r.state.paused = false;
-        announce(r.state, "Play resumed");
         return json(res, { ok: true });
       }
       return json(res, { error: "Unknown action" }, 404);
@@ -354,6 +356,7 @@ function safely(r: Room, fn: () => void) {
     console.error(`[room ${r.code}] simulation error:`, e);
     if (!r.state.paused) {
       r.state.paused = true;
+      r.state.pauseReason = "host";
       r.state.message =
         "Something went wrong in this match. Host: press Resume.";
       r.state.event++;
@@ -380,12 +383,27 @@ const interval = setInterval(() => {
         continue;
       }
       if (res.writableLength > 65536) continue;
-      res.write(`data: ${JSON.stringify(view(room))}\n\n`);
+      if (res.destroyed || res.writableEnded) {
+        streams.delete(res);
+        continue;
+      }
+      try {
+        res.write(`data: ${JSON.stringify(view(room))}\n\n`);
+      } catch {
+        streams.delete(res);
+      }
     }
   }
   if (tick % 7200 === 0)
     for (const [k, v] of rate) if (Date.now() - v.t > 60000) rate.delete(k);
 }, 8);
+// Last line of defence: a stray error (a dropped phone mid-write, a bad request) is logged,
+// never allowed to stop the process and end every game on the server.
+process.on("uncaughtException", (e) => console.error("[server] uncaught:", e));
+process.on("unhandledRejection", (e) =>
+  console.error("[server] unhandled:", e),
+);
+server.on("clientError", (_e, socket) => socket.destroy());
 server.listen(port, host, () =>
   console.log(
     `POVpickle listening on http://localhost:${port} • host: ${platform} • phone origin: ${publicURL || "not configured (set PUBLIC_ORIGIN to HTTPS deployment)"}`,

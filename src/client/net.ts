@@ -57,6 +57,11 @@ export class Connection {
     this.latency = Date.now() - start;
     this.offset = r.serverTime - (start + this.latency / 2);
   }
+  /** Drop a stream that may have gone stale (e.g. phone returning from the background). */
+  kick() {
+    this.controller?.abort();
+  }
+  lastData = 0;
   async stream() {
     if (this.running) return;
     this.running = true;
@@ -73,6 +78,12 @@ export class Connection {
         this.mode = "poll";
         controller.abort();
       }, 4000);
+      // A stream that was working but went quiet (server restart, network switch, phone
+      // asleep) is dropped and reopened instead of hanging forever.
+      this.lastData = Date.now();
+      const stall = setInterval(() => {
+        if (Date.now() - this.lastData > 3500) controller.abort();
+      }, 1000);
       try {
         this.onStatus("Connecting");
         const r = await fetch(
@@ -96,14 +107,17 @@ export class Connection {
             buffer = buffer.slice(end + 2);
             if (part.startsWith("data: ")) {
               clearTimeout(watchdog);
+              this.lastData = Date.now();
               failures = 0;
               this.onStatus("Connected");
               this.onState(JSON.parse(part.slice(6)));
             }
           }
         }
+        clearInterval(stall);
       } catch {
         clearTimeout(watchdog);
+        clearInterval(stall);
         if (++failures >= 2) this.mode = "poll";
         if (this.running) {
           this.onStatus("Reconnecting…");

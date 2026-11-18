@@ -100,6 +100,9 @@ Phones must stay visible. Backgrounding, lost sensor data, or a disconnected pho
 - **Swing strength sets speed:** weaker forehand/backhand swings send slower balls.
 - **Ball slowdown:** the ball leaves the paddle fastest (up to 3× its average speed) and loses 15% of its speed every 0.2 s, still landing where aimed.
 - **Difficulty** (every mode) sets your hitbox: Easy 2.3×, Medium 1.6×, Hard normal. In bot modes it also sets bot strength.
+- **Maps:** Arena, Tokyo, Manila rooftop, San Francisco rooftop, Central Park NY — pick one on the start screen.
+- **Outfits:** pick one on your phone when you join (jersey, cap, sweatband, chef, astronaut, cowboy).
+- **Dropouts:** if a phone drops out the game pauses and resumes by itself when it's back; a reloaded phone needs one tap to rejoin.
 - Each player's name floats above their head in their team colour (hidden for your own player in first person).
 - Sound is opt-in (contact and fault tones). The scoreboard and status banner announce service and faults visually.
 - The display is a full-screen 3D arena. The menu shows a cosmetic demo rally between two mascots; it is decoration only and never presented as a match. During play the panel tucks away behind a **Room** tab. Arrow keys + Enter navigate the menu (TV remotes).

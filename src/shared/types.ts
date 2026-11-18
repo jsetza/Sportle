@@ -4,6 +4,57 @@ export type Difficulty = "easy" | "medium" | "hard";
 export const SWING_RELOAD = 0.2;
 export type MoveStyle = "auto" | "keys" | "phone";
 export const MOVE_STYLES: MoveStyle[] = ["auto", "keys", "phone"];
+/** Courts to play on (owner request). "arena" is the original indoor arena. */
+export type MapId = "arena" | "tokyo" | "manila" | "sf" | "centralpark";
+export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
+  [
+    {
+      id: "arena",
+      name: "Arena",
+      short: "Arena",
+      note: "Indoor, packed stands",
+    },
+    {
+      id: "tokyo",
+      name: "Tokyo",
+      short: "Tokyo",
+      note: "Neon streets at night",
+    },
+    {
+      id: "manila",
+      name: "Manila rooftop",
+      short: "Manila",
+      note: "Sunset over the bay",
+    },
+    {
+      id: "sf",
+      name: "San Francisco rooftop",
+      short: "San Francisco",
+      note: "Bridge in the fog",
+    },
+    {
+      id: "centralpark",
+      name: "Central Park, New York",
+      short: "Central Park",
+      note: "Grass, trees, skyline",
+    },
+  ];
+/** Character outfits (owner request). Team colour still shows which side you're on. */
+export type Outfit =
+  | "classic"
+  | "cap"
+  | "headband"
+  | "chef"
+  | "astro"
+  | "cowboy";
+export const OUTFITS: { id: Outfit; name: string }[] = [
+  { id: "classic", name: "Classic jersey" },
+  { id: "cap", name: "Ball cap" },
+  { id: "headband", name: "Sweatband" },
+  { id: "chef", name: "Chef" },
+  { id: "astro", name: "Astronaut" },
+  { id: "cowboy", name: "Cowboy" },
+];
 export type Vec = { x: number; y: number; z: number };
 export type Input = {
   seq: number;
@@ -62,12 +113,21 @@ export type Player = {
   display: string;
   /** How this player moves: automatic positioning, display keyboard, or the phone's thumb pad. */
   moveStyle: MoveStyle;
+  outfit: Outfit;
 };
 export type Match = {
   mode: Mode;
   difficulty: Difficulty;
+  map: MapId;
   phase: "lobby" | "serve" | "rally" | "over";
   paused: boolean;
+  /**
+   * Why play is paused: "host" = someone pressed Pause (waits for Resume); "drop" = a phone
+   * dropped out (play resumes by itself once everyone is back). "" when not paused.
+   */
+  pauseReason: "" | "host" | "drop";
+  /** Epoch ms when an automatic resume happens (0 = none scheduled). */
+  resumeAt: number;
   score: number[];
   serving: number;
   serverNumber: number;
