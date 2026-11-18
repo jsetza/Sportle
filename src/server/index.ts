@@ -20,6 +20,7 @@ import {
 } from "./rooms.ts";
 import { step, announce } from "./engine.ts";
 import type { Room, Session } from "./rooms.ts";
+import { detectOrigin, detectPlatform, clientIp } from "./hosting.ts";
 import type { ServerResponse } from "node:http";
 import type { Mode, Difficulty } from "../shared/types.ts";
 const source = dirname(fileURLToPath(import.meta.url));
@@ -27,7 +28,8 @@ const built = source.includes("/dist/");
 const root = resolve(source, "../client");
 const port = Number(process.env.PORT || 3000),
   host = process.env.HOST || "0.0.0.0";
-const origin = (process.env.PUBLIC_ORIGIN || "").replace(/\/$/, "");
+const origin = detectOrigin(process.env).replace(/\/$/, "");
+const platform = detectPlatform(process.env);
 export function publicOrigin(value: string) {
   try {
     const u = new URL(value);
@@ -75,6 +77,13 @@ const server = createServer(async (req, res) => {
   try {
     const u = new URL(req.url || "/", `http://${req.headers.host}`),
       path = u.pathname;
+    // Health check for hosting platforms (Render healthCheckPath, Fly checks, uptime monitors).
+    if (path === "/healthz")
+      return json(res, {
+        ok: true,
+        rooms: rooms.size,
+        uptime: process.uptime(),
+      });
     if (path.startsWith("/api/")) {
       const requestOrigin = req.headers.origin;
       if (
@@ -87,7 +96,7 @@ const server = createServer(async (req, res) => {
       if (path === "/api/config")
         return json(res, { publicOrigin: publicURL, serverTime: Date.now() });
       if (path === "/api/clock") return json(res, { serverTime: Date.now() });
-      const ip = req.socket.remoteAddress || "unknown";
+      const ip = clientIp(req.headers, req.socket.remoteAddress, platform);
       const authed = /^Bearer ./.test(req.headers.authorization || "");
       // Per-IP limits apply to unauthenticated traffic only. Authenticated controller traffic is
       // budgeted per session below, so several households behind one NAT are not throttled together.
@@ -121,8 +130,28 @@ const server = createServer(async (req, res) => {
         });
       }
       const code = (u.searchParams.get("room") || "").toUpperCase();
+      // Room codes are short, so guessing them is rate limited per visitor: too many
+      // unknown codes in a minute blocks further lookups (checked before the lookup).
+      const missKey = "miss:" + ip;
+      const miss = rate.get(missKey);
+      if (!authed && miss && Date.now() - miss.t <= 60000 && miss.n >= 20)
+        return json(
+          res,
+          { error: "Too many wrong room codes; wait a minute" },
+          429,
+        );
       const r = rooms.get(code);
-      if (!r) return json(res, { error: "Room not found or expired" }, 404);
+      if (!r) {
+        if (!authed) {
+          const m0 =
+            miss && Date.now() - miss.t <= 60000
+              ? miss
+              : { t: Date.now(), n: 0 };
+          m0.n++;
+          rate.set(missKey, m0);
+        }
+        return json(res, { error: "Room not found or expired" }, 404);
+      }
       if (path === "/api/join" && req.method === "POST") {
         const a = await body(req);
         if (a.role === "display") {
@@ -359,7 +388,7 @@ const interval = setInterval(() => {
 }, 8);
 server.listen(port, host, () =>
   console.log(
-    `visual listening on http://localhost:${port} • phone origin: ${publicURL || "not configured (set PUBLIC_ORIGIN to HTTPS deployment)"}`,
+    `POVpickle listening on http://localhost:${port} • host: ${platform} • phone origin: ${publicURL || "not configured (set PUBLIC_ORIGIN to HTTPS deployment)"}`,
   ),
 );
 function stop() {

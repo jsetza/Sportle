@@ -1,0 +1,21 @@
+# Render Blueprint: one web service running the authoritative game server.
+# Deploy: Render Dashboard → New → Blueprint → pick this repo (or the README's Deploy button).
+# PUBLIC_ORIGIN is detected from RENDER_EXTERNAL_URL automatically; set it only for a custom domain.
+services:
+  - type: web
+    name: povpickle
+    runtime: node
+    # free sleeps after 15 idle minutes (first visit then takes ~1 minute);
+    # switch to "starter" for an always-on game.
+    plan: free
+    # --ignore-scripts skips Playwright's browser download (only needed for local tests).
+    buildCommand: npm ci --ignore-scripts && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+# Rooms live in memory: keep this at ONE instance (do not enable autoscaling).

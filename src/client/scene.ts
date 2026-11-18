@@ -89,6 +89,11 @@ export const teamColor = (team: number) => (team ? palette.red : palette.blue);
 /** 5×7 pixel letters for the arena boards (original lettering, drawn with boxes). */
 const GLYPHS: Record<string, string[]> = {
   V: ["10001", "10001", "10001", "10001", "01010", "01010", "00100"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  C: ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
   I: ["111", "010", "010", "010", "010", "010", "111"],
   S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
   U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
@@ -445,7 +450,7 @@ export class Scene {
     for (const z of [-4.4196, 4.4196])
       this.box(0, 0.022, z, 0.0508, 0.012, 4.572, P.line);
     // floor branding beside the court (subtle)
-    this.text("VISUAL", -9.6, 0.004, 3.6, 0.32, 0, -1, [0.27, 0.08, 0.14]);
+    this.text("POVPICKLE", -9.6, 0.004, 5.4, 0.32, 0, -1, [0.27, 0.08, 0.14]);
     // net
     for (const x of [-COURT.post, COURT.post]) {
       this.box(x, 0.5, 0, 0.09, 1.0, 0.09, P.dark);
@@ -474,7 +479,7 @@ export class Scene {
     this.box(-bx, boardH / 2, -0.3, 0.12, boardH, 22.4, P.board);
     this.box(bx, boardH / 2, -0.3, 0.12, boardH, 22.4, P.board);
     this.box(0, boardH / 2, -bz, 12.5, boardH, 0.12, P.board);
-    const slogan = "VISUAL >>|! ";
+    const slogan = "POVPICKLE >>|! ";
     const sw = this.text(slogan, 0, 0, 0, 0.09, 1, 0, P.ink, false) + 0.4;
     for (let z = 9.6; z - sw > -bz + 0.4; z -= sw) {
       this.text(slogan, -bx + 0.08, 0.14, z, 0.09, 0, -1, P.ink);

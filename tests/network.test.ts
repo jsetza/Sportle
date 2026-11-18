@@ -29,6 +29,9 @@ test("real HTTP room flow, SSE snapshots, authority and reconnect", async () => 
       });
       return { status: r.status, data: await r.json() };
     }
+    const health = await fetch(base + "/healthz");
+    assert.equal(health.status, 200);
+    assert.equal((await health.json()).ok, true);
     const c = await call("create", { mode: "singles", difficulty: "easy" });
     assert.equal(c.status, 200);
     const room = c.data.code,
@@ -110,4 +113,52 @@ test("real HTTP room flow, SSE snapshots, authority and reconnect", async () => 
       await new Promise<void>((resolve) => child.once("exit", () => resolve()));
     }
   }
+});
+
+test("hosting: origin and client address detection per platform", async () => {
+  const { detectOrigin, detectPlatform, clientIp } = await import(
+    "../src/server/hosting.ts"
+  );
+  assert.equal(
+    detectOrigin({
+      PUBLIC_ORIGIN: "https://a.example",
+      RENDER_EXTERNAL_URL: "https://b.onrender.com",
+    }),
+    "https://a.example",
+  );
+  assert.equal(
+    detectOrigin({ RENDER_EXTERNAL_URL: "https://b.onrender.com" }),
+    "https://b.onrender.com",
+  );
+  assert.equal(
+    detectOrigin({ RAILWAY_PUBLIC_DOMAIN: "c.up.railway.app" }),
+    "https://c.up.railway.app",
+  );
+  assert.equal(
+    detectOrigin({ FLY_APP_NAME: "povpickle" }),
+    "https://povpickle.fly.dev",
+  );
+  assert.equal(detectOrigin({}), "");
+  assert.equal(detectPlatform({ RENDER: "true" }), "render");
+  assert.equal(detectPlatform({ FLY_APP_NAME: "x" }), "fly");
+  assert.equal(
+    detectPlatform({ RAILWAY_ENVIRONMENT_NAME: "production" }),
+    "railway",
+  );
+  assert.equal(detectPlatform({ TRUST_PROXY: "1" }), "proxy");
+  assert.equal(detectPlatform({}), "direct");
+  const h = {
+    "x-forwarded-for": "6.6.6.6, 1.2.3.4, 10.0.0.9",
+    "true-client-ip": "1.2.3.4",
+    "fly-client-ip": "5.5.5.5",
+    "x-real-ip": "7.7.7.7",
+  };
+  assert.equal(clientIp(h, "10.0.0.1", "render"), "1.2.3.4");
+  assert.equal(clientIp(h, "10.0.0.1", "fly"), "5.5.5.5");
+  assert.equal(clientIp(h, "10.0.0.1", "railway"), "7.7.7.7");
+  assert.equal(clientIp(h, "10.0.0.1", "proxy"), "10.0.0.9");
+  // Running directly, client-supplied headers are ignored (spoofable).
+  assert.equal(clientIp(h, "10.0.0.1", "direct"), "10.0.0.1");
+  // Missing platform header falls back to the socket address.
+  assert.equal(clientIp({}, "10.0.0.1", "render"), "10.0.0.1");
 });

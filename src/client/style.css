@@ -1022,3 +1022,15 @@ kbd {
   font-weight: 800;
   font-size: 18px;
 }
+/* POVpickle wordmark: POV in ball yellow; sized so nine heavy letters fit the panel */
+.wordmark span {
+  font-size: clamp(40px, 4.9vw, 78px);
+}
+.wordmark b,
+.logo b {
+  color: var(--ball);
+  font-weight: inherit;
+}
+body.in-room .wordmark span {
+  font-size: clamp(34px, 3.6vw, 52px);
+}
