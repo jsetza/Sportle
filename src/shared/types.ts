@@ -13,6 +13,7 @@ export type MapId =
   | "centralpark"
   | "nyc"
   | "berkeley"
+  | "haas"
   | "ucla"
   | "usc";
 export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
@@ -58,6 +59,12 @@ export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
       name: "UC Berkeley campus",
       short: "Berkeley",
       note: "Blue and gold, clock tower",
+    },
+    {
+      id: "haas",
+      name: "UC Berkeley Haas courtyard",
+      short: "Berkeley Haas",
+      note: "Shingle-style courtyard in the hills",
     },
     {
       id: "ucla",

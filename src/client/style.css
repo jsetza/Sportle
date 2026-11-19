@@ -1378,3 +1378,90 @@ body.joined .phone > p {
 .status.bad {
   color: #ff4d42;
 }
+/* Comic timing pop-ups ("KABOOM!"-style burst): red EARLY!/LATE!, green GOOD!/GREAT! */
+.pow {
+  position: absolute;
+  width: 196px;
+  height: 124px;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  animation: pow 1.1s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+.pow svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.pow .pow-shadow {
+  fill: rgba(0, 0, 0, 0.28);
+}
+.pow .pow-fill {
+  stroke: #111;
+  stroke-width: 6;
+  stroke-linejoin: miter;
+}
+.pow span {
+  position: relative;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 31px;
+  letter-spacing: -0.01em;
+  transform: rotate(-7deg) skewX(-6deg);
+  -webkit-text-stroke: 2.5px #111;
+  paint-order: stroke fill;
+  text-shadow:
+    3px 3px 0 #111,
+    4px 4px 0 #111;
+}
+.pow-bad .pow-fill {
+  fill: #ffec1f;
+}
+.pow-bad span {
+  color: #ef3355;
+}
+.pow-good .pow-fill {
+  fill: #3ddc5f;
+}
+.pow-good span {
+  color: #ffffff;
+}
+@keyframes pow {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -100%) scale(0.2) rotate(-14deg);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1.18) rotate(4deg);
+  }
+  26% {
+    transform: translate(-50%, -100%) scale(0.96) rotate(-2deg);
+  }
+  36%,
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -112%) scale(0.9) rotate(0deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pow {
+    animation-duration: 1.1s;
+    animation-timing-function: linear;
+  }
+}
+body.split .pow {
+  width: 130px;
+  height: 87px;
+}
+body.split .pow span {
+  font-size: 26px;
+}

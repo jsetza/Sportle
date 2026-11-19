@@ -117,6 +117,15 @@ export const LOOKS: Record<MapId, Look> = {
     ground: [0.34, 0.58, 0.28],
     apron: [0.0, 0.2, 0.38],
   },
+  haas: {
+    sky: [0.66, 0.8, 0.95],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1.0,
+    spots: 0.15,
+    ground: null,
+    apron: [0.0, 0.2, 0.38],
+  },
   ucla: {
     sky: [0.55, 0.78, 0.98],
     fogNear: 60,
@@ -1198,6 +1207,229 @@ function berkeley(b: Builder) {
     );
 }
 
+/**
+ * Gabled courtyard wing in the Haas style: cream walls with brick-red bands, rows of
+ * many-paned windows, a steep dark slate roof with dormers, a covered walkway on the
+ * courtyard side. Runs along X (ry rotates it).
+ */
+function haasWing(
+  b: Builder,
+  x: number,
+  z: number,
+  len: number,
+  h: number,
+  depth: number,
+  ry: number,
+  facing: 1 | -1,
+) {
+  const cream = [0.9, 0.85, 0.74],
+    band = [0.64, 0.3, 0.22],
+    slate = [0.27, 0.32, 0.33],
+    timber = [0.42, 0.3, 0.2],
+    glass = [0.2, 0.24, 0.3],
+    cos = Math.cos(ry),
+    sin = Math.sin(ry);
+  // local (u along the wing, v across it) → world
+  const at = (u: number, v: number): [number, number] => [
+    x + cos * u + sin * v,
+    z - sin * u + cos * v,
+  ];
+  b.box(x, h / 2, z, len, h, depth, cream, 0, 0, ry);
+  for (const y of [0.6, h * 0.48, h - 0.3])
+    b.box(x, y, z, len + 0.06, 0.45, depth + 0.06, band, 0, 0, ry);
+  // windows on the courtyard face: two storeys, multi-paned (dark glass, cream mullions)
+  const n = Math.floor(len / 3.2);
+  const face = (depth / 2 + 0.05) * facing;
+  for (let i = 0; i < n; i++) {
+    const u = ((i + 0.5) / n - 0.5) * len;
+    for (const y of [h * 0.3, h * 0.72]) {
+      const [wx, wz] = at(u, face);
+      b.box(wx, y, wz, 1.5, 1.9, 0.1, glass, 0, 0, ry);
+      b.box(wx, y, wz, 1.55, 0.08, 0.14, cream, 0, 0, ry);
+      b.box(wx, y, wz, 0.08, 1.95, 0.14, cream, 0, 0, ry);
+    }
+  }
+  // steep gable roof: two slate planes meeting at a ridge, plus dormers on the court side
+  const pitch = 0.75,
+    half = depth / 2 + 0.6,
+    rise = Math.tan(pitch) * half;
+  for (const sd of [-1, 1]) {
+    const [rx, rz] = at(0, (sd * half) / 2);
+    b.box(
+      rx,
+      h + rise / 2,
+      rz,
+      len + 1,
+      0.3,
+      half / Math.cos(pitch) + 0.2,
+      slate,
+      sd * pitch,
+      0,
+      ry,
+    );
+  }
+  for (let i = 0; i < n; i += 2) {
+    const u = ((i + 0.5) / n - 0.5) * len;
+    const [dx, dz] = at(u, half * 0.45 * facing);
+    b.box(dx, h + rise * 0.55, dz, 1.6, 1.6, 1.4, cream, 0, 0, ry);
+    b.box(dx, h + rise * 0.55, dz, 1.0, 1.0, 1.46, glass, 0, 0, ry);
+    for (const sd of [-1, 1])
+      b.box(
+        dx + cos * sd * 0.5,
+        h + rise * 0.55 + 1.05,
+        dz - sin * sd * 0.5,
+        1.2,
+        0.18,
+        1.6,
+        slate,
+        0,
+        sd * -0.6,
+        ry,
+      );
+  }
+  // covered timber walkway along the courtyard side
+  const wv = (depth / 2 + 1.6) * facing;
+  for (let i = 0; i <= n; i++) {
+    const u = (i / n - 0.5) * len;
+    const [px, pz] = at(u, wv);
+    b.box(px, 1.5, pz, 0.3, 3, 0.3, timber, 0, 0, ry);
+  }
+  const [cx, cz] = at(0, wv - 0.6 * facing);
+  b.box(cx, 3.1, cz, len, 0.25, 3.4, slate, facing * 0.18, 0, ry);
+}
+
+/** UC Berkeley Haas School of Business: a hillside courtyard ringed by gabled wings. */
+function haas(b: Builder) {
+  seed = 97;
+  const blue = [0.0, 0.2, 0.38],
+    gold = [0.99, 0.71, 0.08],
+    pavers = [0.74, 0.64, 0.54];
+  // hillside lawn, the paved courtyard with a paver grid, and a few planters
+  b.box(0, -0.1, 0, 260, 0.1, 260, [0.36, 0.54, 0.28]);
+  b.box(0, -0.05, 0, 34, 0.06, 42, pavers);
+  for (let x = -16; x <= 16; x += 2)
+    b.box(x, -0.02, 0, 0.05, 0.02, 42, shade(pavers, 0.9));
+  for (let z = -20; z <= 20; z += 2)
+    b.box(0, -0.02, z, 34, 0.02, 0.05, shade(pavers, 0.9));
+  // the U of wings around the courtyard (north wing across the far end, east and west sides)
+  haasWing(b, 0, -27, 40, 11, 9, 0, 1);
+  haasWing(b, -19, -2, 34, 10, 9, Math.PI / 2, 1);
+  haasWing(b, 19, -2, 34, 10, 9, -Math.PI / 2, 1);
+  // a square tower with a copper pyramid roof at the north-west corner
+  const tx = -17,
+    tz = -24;
+  b.box(tx, 9, tz, 5.5, 18, 5.5, [0.9, 0.85, 0.74]);
+  b.box(tx, 17.2, tz, 5.7, 0.5, 5.7, [0.64, 0.3, 0.22]);
+  for (let i = 0; i < 5; i++)
+    b.box(
+      tx,
+      18.5 + i * 0.9,
+      tz,
+      6.2 - i * 1.3,
+      0.9,
+      6.2 - i * 1.3,
+      [0.36, 0.55, 0.48],
+    );
+  b.blob(tx, 13, tz + 2.8, 1.1, 1.1, 0.12, [0.96, 0.94, 0.86], 0, 4, 12);
+  // terraced steps up the hill behind the north wing
+  for (let i = 0; i < 6; i++)
+    b.box(
+      0,
+      0.4 + i * 0.8,
+      -36 - i * 2.2,
+      46 - i * 2,
+      0.8 + i * 1.6,
+      2.4,
+      i % 2 ? [0.62, 0.6, 0.56] : [0.4, 0.56, 0.3],
+    );
+  // Chou Hall-style modern glass block beyond the south-east corner
+  b.box(27, 9, 26, 16, 18, 12, [0.86, 0.88, 0.88]);
+  for (let y = 2.5; y < 18; y += 3)
+    b.box(27, y, 26, 16.1, 2.1, 12.1, [0.48, 0.66, 0.78]);
+  for (let u = -7; u <= 7; u += 1.4)
+    b.box(27 + u, 9, 19.9, 0.18, 18, 0.4, [0.95, 0.95, 0.94]);
+  // stadium bowl next door (tiered rim), and the campus clock tower far to the west
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2,
+      r = 34;
+    b.box(
+      70 + Math.cos(a) * r,
+      6 + (i % 2) * 0.4,
+      70 + Math.sin(a) * r * 0.7,
+      9,
+      12,
+      4,
+      [0.78, 0.74, 0.66],
+      0,
+      0.25,
+      -a + Math.PI / 2,
+    );
+  }
+  b.box(-95, 26, 40, 9, 52, 9, [0.88, 0.86, 0.8]);
+  for (let i = 0; i < 5; i++)
+    b.box(-95, 54 + i * 2, 40, 8 - i * 1.5, 2, 8 - i * 1.5, [0.32, 0.48, 0.42]);
+  // blue-and-gold banners along the walkways, benches in the courtyard
+  for (let z = -12; z <= 12; z += 6)
+    for (const sd of [-1, 1]) banner(b, sd * 13.5, z, blue, gold);
+  for (const [x, z] of [
+    [-10, 15],
+    [10, 15],
+    [-10, -16],
+    [10, -16],
+  ]) {
+    b.box(x, 0.45, z, 2, 0.1, 0.55, [0.45, 0.3, 0.18]);
+    b.box(x, 0.2, z, 0.12, 0.4, 0.5, [0.2, 0.2, 0.2]);
+  }
+  // eucalyptus (tall, thin, grey-green) and oaks on the hills around
+  for (let i = 0; i < 140; i++) {
+    const x = (rnd() * 2 - 1) * 85,
+      z = (rnd() * 2 - 1) * 85;
+    if (Math.abs(x) < 26 && Math.abs(z) < 34) continue;
+    if (Math.abs(x - 27) < 11 && Math.abs(z - 26) < 9) continue;
+    if (Math.hypot(x - 70, (z - 70) / 0.7) < 42) continue;
+    if (rnd() < 0.55) {
+      const s = 1 + rnd() * 0.8;
+      b.box(x, 4 * s, z, 0.35 * s, 8 * s, 0.35 * s, [0.72, 0.68, 0.6]);
+      b.blob(
+        x,
+        8.5 * s,
+        z,
+        1.4 * s,
+        2.4 * s,
+        1.4 * s,
+        [0.42, 0.52, 0.42],
+        0,
+        5,
+        8,
+      );
+    } else
+      tree(
+        b,
+        x,
+        z,
+        1 + rnd() * 0.7,
+        pick([
+          [0.24, 0.42, 0.2],
+          [0.3, 0.46, 0.24],
+        ]),
+      );
+  }
+  // Berkeley hills behind
+  for (let i = 0; i < 9; i++)
+    b.blob(
+      -120 + i * 30,
+      0,
+      -150 - rnd() * 20,
+      45 + rnd() * 20,
+      30 + rnd() * 18,
+      30,
+      i % 2 ? [0.56, 0.58, 0.32] : [0.38, 0.5, 0.28],
+      0,
+      5,
+      12,
+    );
+}
+
 function ucla(b: Builder) {
   seed = 97;
   const blue = [0.15, 0.45, 0.68],
@@ -1354,6 +1586,7 @@ export function buildMap(b: Builder, id: MapId) {
   else if (id === "centralpark") centralpark(b);
   else if (id === "nyc") nyc(b);
   else if (id === "berkeley") berkeley(b);
+  else if (id === "haas") haas(b);
   else if (id === "ucla") ucla(b);
   else if (id === "usc") usc(b);
 }

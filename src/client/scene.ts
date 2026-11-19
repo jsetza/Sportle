@@ -113,6 +113,21 @@ const GLYPHS: Record<string, string[]> = {
   ">": ["0000", "1100", "0110", "0011", "0110", "1100", "0000"],
 };
 type View = { eye: V; target: V; fov: number; shift: number };
+/** Jagged comic starburst outline (fixed shape), in a -120..120 × -80..80 box. */
+const STARBURST = (() => {
+  const pts: string[] = [];
+  const n = 13;
+  for (let i = 0; i < n * 2; i++) {
+    const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2;
+    // Spikes of uneven length, like a hand-drawn "POW".
+    const r = i % 2 ? 0.62 : 0.9 + 0.1 * Math.sin(i * 2.7);
+    pts.push(
+      `${(Math.cos(a) * 112 * r).toFixed(1)},${(Math.sin(a) * 72 * r).toFixed(1)}`,
+    );
+  }
+  return pts.join(" ");
+})();
+
 export type ViewMode = "third" | "first" | "broadcast";
 export const VIEW_LABELS: Record<ViewMode, string> = {
   third: "Third person",
@@ -443,6 +458,16 @@ export class Scene {
             : [0.2, 0.85, 0.35]
           : [1, 0.18, 0.15];
         this.burst(state.ball, col, 0, true);
+        this.pops.push({
+          id: t.at,
+          by: t.by,
+          kind: t.kind,
+          x: state.ball.x,
+          y: state.ball.y,
+          z: state.ball.z,
+          at: performance.now(),
+        });
+        if (this.pops.length > 4) this.pops.shift();
         if (t.kind === "great")
           this.burst(state.ball, [0.85, 1, 0.85], 0, true, 90);
       } else
@@ -1280,6 +1305,63 @@ export class Scene {
   demoFar = 0;
   demoHit = -1;
   /** Project each tag's 3D head point to the screen and move its label there. */
+  /**
+   * Comic-style timing pop-ups (owner request, like a "KABOOM!" burst): a jagged starburst with
+   * a thick black outline. Yellow with red "EARLY!"/"LATE!" for a mistimed swing, green with
+   * "GOOD!"/"GREAT!" for a clean one. Shown just above the contact point for ~1.1 s.
+   */
+  pops: {
+    id: number;
+    by: string;
+    kind: "great" | "good" | "early" | "late";
+    x: number;
+    y: number;
+    z: number;
+    at: number;
+  }[] = [];
+  popEls = new Map<string, HTMLDivElement>();
+  placePops(
+    vp: V,
+    ox: number,
+    cw: number,
+    pass: number,
+    split: boolean,
+    seen: Set<string>,
+  ) {
+    const ch = this.canvas.clientHeight,
+      now = performance.now();
+    this.pops = this.pops.filter((p) => now - p.at < 1100);
+    for (const p of this.pops) {
+      // In split screen, only the hitter's own half shows their pop-up.
+      if (split && this.follows[pass] !== p.by) continue;
+      const y = p.y + 0.5;
+      const cx = vp[0] * p.x + vp[4] * y + vp[8] * p.z + vp[12],
+        cy = vp[1] * p.x + vp[5] * y + vp[9] * p.z + vp[13],
+        w4 = vp[3] * p.x + vp[7] * y + vp[11] * p.z + vp[15];
+      if (w4 <= 0.1) continue;
+      // Keep it fully on screen even when the contact is near an edge.
+      const sx = Math.min(
+          ox + cw - 90,
+          Math.max(ox + 90, ox + ((cx / w4 + 1) / 2) * cw),
+        ),
+        sy = Math.min(ch - 70, Math.max(70, ((1 - cy / w4) / 2) * ch));
+      const key = p.id + "@" + pass;
+      let el = this.popEls.get(key);
+      if (!el) {
+        el = document.createElement("div");
+        const good = p.kind === "great" || p.kind === "good";
+        el.className = "pow " + (good ? "pow-good" : "pow-bad");
+        el.innerHTML =
+          `<svg viewBox="-120 -80 240 160" aria-hidden="true"><polygon class="pow-shadow" points="${STARBURST}" transform="translate(9 9)"/><polygon class="pow-fill" points="${STARBURST}"/></svg>` +
+          `<span>${{ great: "GREAT!", good: "GOOD!", early: "EARLY!", late: "LATE!" }[p.kind]}</span>`;
+        this.tagLayer.appendChild(el);
+        this.popEls.set(key, el);
+      }
+      el.style.left = sx.toFixed(1) + "px";
+      el.style.top = sy.toFixed(1) + "px";
+      seen.add(key);
+    }
+  }
   placeTags(vp: V, ox: number, cw: number, pass: number, seen: Set<string>) {
     const ch = this.canvas.clientHeight;
     for (const t of this.tags) {
@@ -1425,7 +1507,8 @@ export class Scene {
       }
       gl.drawArrays(gl.TRIANGLES, 0, count);
     };
-    const seenTags = new Set<string>();
+    const seenTags = new Set<string>(),
+      seenPops = new Set<string>();
     const passes = split ? 2 : 1;
     for (let pass = 0; pass < passes; pass++) {
       // Each pass: geometry for this viewer (their own body hidden in first person) and
@@ -1703,6 +1786,14 @@ export class Scene {
         pass,
         seenTags,
       );
+      this.placePops(
+        vp,
+        (vx / w) * canvas.clientWidth,
+        (vw / w) * canvas.clientWidth,
+        pass,
+        split,
+        seenPops,
+      );
       draw(this.staticBuffer, this.staticCount);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
       gl.bufferData(
@@ -1715,5 +1806,10 @@ export class Scene {
     gl.disable(gl.SCISSOR_TEST);
     for (const [key, el] of this.tagEls)
       if (!seenTags.has(key)) el.style.display = "none";
+    for (const [key, el] of this.popEls)
+      if (!seenPops.has(key)) {
+        el.remove();
+        this.popEls.delete(key);
+      }
   };
 }
