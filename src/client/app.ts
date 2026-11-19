@@ -14,7 +14,8 @@ import type { Match, Input, MapId } from "../shared/types.ts";
 import { Scene, VIEW_LABELS } from "./scene.ts";
 import type { ViewMode } from "./scene.ts";
 import { drawQR } from "./qr.ts";
-import { Music } from "./music.ts";
+import { Music, MUSIC_STYLES } from "./music.ts";
+import type { MusicStyle } from "./music.ts";
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -68,7 +69,7 @@ function display() {
   ) =>
     `<input type="radio" name="mode" id="m-${group}-${mode}" value="${mode}" data-group="${group}" ${checked ? "checked" : ""}><label class="item" for="m-${group}-${mode}"><span class="ball"></span><b>${name}</b><small>${hint}</small></label>`;
   app.innerHTML = `<canvas id="court" aria-label="3D pickleball arena"></canvas><div class="beams" aria-hidden="true"></div>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music">Music on</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="POVpickle"><span><b>POV</b>PICKLE</span><i></i></div>
   <p class="tagline">Pickleball. <b>Your phone is the paddle.</b></p>
@@ -281,7 +282,10 @@ function display() {
   }
   syncMap();
   // Test hook (automated browser checks only): open the page with #test.
-  if (location.hash === "#test") (window as any).__povScene = scene;
+  if (location.hash === "#test") {
+    (window as any).__povScene = scene;
+    (window as any).__povMusic = Music;
+  }
   // Sound effects (paddle hits, bounces, calls): on by default, remembered per browser.
   let soundOn = true;
   try {
@@ -554,17 +558,25 @@ function display() {
       setView(VIEWS[(VIEWS.indexOf(view) + 1) % 3]);
   });
   setView(view);
-  // ——— Background music: on by default, starts on the first click/key (browser rule) ———
+  // ——— Background music: House by default; the button cycles styles and Off. Starts on the
+  // first click/key (browser rule). ———
   const music = new Music();
-  let musicOn = true;
+  type Pick = MusicStyle | "off";
+  const order: Pick[] = [...MUSIC_STYLES.map((m) => m.id), "off"];
+  let choice: Pick = "house";
   try {
-    musicOn = localStorage.getItem("visual-music") !== "off";
+    const saved = localStorage.getItem("visual-music");
+    // Older saves were "on"/"off"; "on" becomes House.
+    if (saved && (order as string[]).includes(saved)) choice = saved as Pick;
+    else if (saved === "off") choice = "off";
   } catch {
-    /* default on */
+    /* default House */
   }
   const syncMusic = () => {
-    $("music").textContent = musicOn ? "Music on" : "Music off";
-    if (musicOn && userActed) music.start();
+    const name = MUSIC_STYLES.find((m) => m.id === choice)?.name;
+    $("music").textContent = name ? "Music: " + name : "Music off";
+    if (choice !== "off") music.setStyle(choice);
+    if (choice !== "off" && userActed) music.start();
     else music.stop();
   };
   let userActed = false;
@@ -577,9 +589,9 @@ function display() {
   addEventListener("pointerdown", firstGesture);
   addEventListener("keydown", firstGesture);
   $("music").onclick = () => {
-    musicOn = !musicOn;
+    choice = order[(order.indexOf(choice) + 1) % order.length];
     try {
-      localStorage.setItem("visual-music", musicOn ? "on" : "off");
+      localStorage.setItem("visual-music", choice);
     } catch {
       /* ignore */
     }
