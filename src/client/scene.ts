@@ -84,9 +84,18 @@ export const palette = {
   gold: [0.93, 0.74, 0.32],
   white: [0.97, 0.96, 0.93],
   dark: [0.05, 0.05, 0.08],
-  ball: [0.92, 0.96, 0.22],
+  /** Optic yellow of a typical outdoor pickleball. */
+  ball: [0.86, 0.95, 0.16],
+  ballHole: [0.2, 0.24, 0.05],
   fog: [0.035, 0.035, 0.07],
 };
+/** 40 evenly spread hole directions (Fibonacci sphere), like an outdoor pickleball. */
+const BALL_HOLES: number[][] = Array.from({ length: 40 }, (_, i) => {
+  const y = 1 - ((i + 0.5) / 40) * 2,
+    rr = Math.sqrt(1 - y * y),
+    a = i * Math.PI * (3 - Math.sqrt(5));
+  return [Math.cos(a) * rr, y, Math.sin(a) * rr];
+});
 export const teamColor = (team: number) => (team ? palette.red : palette.blue);
 /** 5×7 pixel letters for the arena boards (original lettering, drawn with boxes). */
 const GLYPHS: Record<string, string[]> = {
@@ -139,6 +148,66 @@ export class Scene {
   raf = 0;
   lastEvent = -1;
   lastBounceAt = 0;
+  /** Ball orientation (3×3 row-major) so the holes roll with the flight. */
+  ballRot = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  lastBallPos: Vec | null = null;
+  /** Spin the ball's holes by the distance it travelled (scaled down so it stays readable). */
+  rollBall(ball: Vec) {
+    const last = this.lastBallPos;
+    this.lastBallPos = { ...ball };
+    if (!last) return;
+    const dx = ball.x - last.x,
+      dz = ball.z - last.z,
+      d = Math.hypot(dx, dz);
+    if (d < 1e-4 || d > 1.5) return; // still, or a jump to a new serve
+    const ax = dz / d,
+      az = -dx / d, // axis = up × direction of travel
+      a = Math.min(0.9, (d / 0.11) * 0.12),
+      c = Math.cos(a),
+      sn = Math.sin(a),
+      t = 1 - c;
+    // Rodrigues rotation about (ax, 0, az), then apply to the current orientation.
+    const R = [
+      t * ax * ax + c,
+      -sn * az,
+      t * ax * az,
+      sn * az,
+      c,
+      -sn * ax,
+      t * ax * az,
+      sn * ax,
+      t * az * az + c,
+    ];
+    const M = this.ballRot,
+      out = new Array(9).fill(0);
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++)
+        for (let k = 0; k < 3; k++)
+          out[i * 3 + j] += R[i * 3 + k] * M[k * 3 + j];
+    this.ballRot = out;
+  }
+  /** A pickleball: optic-yellow shell with 40 round holes (generic; no brand markings). */
+  pickleball(x: number, y: number, z: number, r: number) {
+    this.blob(x, y, z, r, r, r, palette.ball, 0, 10, 16);
+    const M = this.ballRot;
+    for (const [hx, hy, hz] of BALL_HOLES) {
+      const wx = M[0] * hx + M[1] * hy + M[2] * hz,
+        wy = M[3] * hx + M[4] * hy + M[5] * hz,
+        wz = M[6] * hx + M[7] * hy + M[8] * hz;
+      this.blob(
+        x + wx * r * 0.86,
+        y + wy * r * 0.86,
+        z + wz * r * 0.86,
+        r * 0.155,
+        r * 0.155,
+        r * 0.155,
+        palette.ballHole,
+        0,
+        4,
+        8,
+      );
+    }
+  }
   /**
    * Swing look (owner request, VR-like): each player's own camera turns toward their swing —
    * forehand looks left, backhand looks right (mirrored for left-handers) — then eases back.
@@ -1460,6 +1529,7 @@ export class Scene {
             this.trail = [];
           this.trail.push({ ...ball });
           if (this.trail.length > 6) this.trail.shift();
+          this.rollBall(ball);
         }
         this.trail.forEach((q, i) => {
           if (i < this.trail.length - 1)
@@ -1483,7 +1553,7 @@ export class Scene {
           2,
           10,
         );
-        this.sphere(ball.x, ball.y, ball.z, 0.11, palette.ball);
+        this.pickleball(ball.x, ball.y, ball.z, 0.11);
       }
       // Pop-up target: pulsing rings where the ball drops through smash height.
       if (m && m.popup && m.bounces === 0 && m.popupAt && m.phase === "rally") {
