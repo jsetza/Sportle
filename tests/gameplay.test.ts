@@ -970,3 +970,63 @@ test("difficulty sets the human hitbox: easy 2.3x, medium 1.6x, hard 1x", async 
     );
   }
 });
+
+test("timing spark: red (early/late) exactly when the shot pops up or finds the net, green otherwise", () => {
+  let checked = 0,
+    red = 0,
+    green = 0,
+    wrong = 0;
+  for (let i = 0; i < 400; i++) {
+    const m = singles();
+    m.difficulty = "hard";
+    m.seed = 5000 + i;
+    const p = m.players[0];
+    rally(m, 1);
+    m.bounces = 1;
+    p.pos = { x: 0, y: 0, z: 5 };
+    freeze(m);
+    // Contact anywhere from well in front (early) to behind (late), varied heights and sides.
+    const dz = -0.9 + (i % 19) * 0.1,
+      dx = forehandSide(p) * (0.2 + ((i * 7) % 9) * 0.1),
+      y = 0.3 + ((i * 3) % 7) * 0.12;
+    m.ball = { x: dx, y, z: 5 + dz };
+    p.lastHit = -10;
+    const strength = 0.25 + ((i * 11) % 8) * 0.1;
+    if (!hit(m, p, { ...ZERO_INPUT, strength, side: ((i % 5) - 2) * 0.3 }))
+      continue;
+    const t = m.timing;
+    assert.ok(t && t.at === m.contacts && t.by === p.id);
+    const popup = m.popup;
+    // Fly the ball until it crosses the net plane or lands.
+    let netted = false;
+    for (let k = 0; k < 600 && m.phase === "rally"; k++) {
+      const before = m.velocity.z;
+      step(m);
+      if (
+        Math.sign(m.velocity.z) !== Math.sign(before) &&
+        Math.abs(m.ball.z) < 0.1
+      )
+        netted = true;
+      if (m.ball.z < -0.1 || m.bounces > 0) break;
+    }
+    const shortOrNet = netted || m.ball.z > -0.1;
+    const bad = popup || shortOrNet;
+    if (bad !== (t!.kind === "early" || t!.kind === "late")) wrong++;
+    if (bad) red++;
+    else green++;
+    if (bad && !popup)
+      assert.equal(
+        t!.kind,
+        dz < 0 ? "early" : "late",
+        `contact ${dz.toFixed(1)} m`,
+      );
+    checked++;
+  }
+  assert.ok(checked > 300);
+  assert.ok(red > 10 && green > 100, `red ${red}, green ${green}`);
+  assert.equal(
+    wrong,
+    0,
+    `${wrong} of ${checked} sparks disagreed with the actual shot`,
+  );
+});

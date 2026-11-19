@@ -233,6 +233,20 @@ export type Match = {
    * keyed by a display's id or a phone's player id → the room to switch to.
    */
   moves: Record<string, { code: string; displayId?: string }>;
+  /**
+   * Screens whose two local players are swapped (owner request: choose left or right half in
+   * split screen). Keyed by display id ("host" for the host screen). Left half = WASD seat.
+   */
+  swapped: string[];
+  /**
+   * Timing verdict for the latest human contact (owner request: red/green spark).
+   * great/good = clean swing that clears the net; early/late = mistimed into the net or a pop-up.
+   */
+  timing: {
+    at: number;
+    by: string;
+    kind: "great" | "good" | "early" | "late";
+  } | null;
   /** Epoch ms when an automatic resume happens (0 = none scheduled). */
   resumeAt: number;
   score: number[];

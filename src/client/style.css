@@ -1327,3 +1327,54 @@ body.joined .phone > p {
 .servepick {
   margin-bottom: 12px;
 }
+
+/* Split screen: choose your half */
+.swapbtn {
+  margin-top: 10px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+.keys .swapbtn {
+  margin: 0 0 0 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.keys small {
+  opacity: 0.7;
+  margin-right: 4px;
+}
+.sidepick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.sidepick.hidden {
+  display: none;
+}
+.sidepick span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 14px;
+}
+.sidepick button {
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+}
+.sidepick button.on {
+  background: var(--ball);
+  color: #0b0b12;
+  border-color: var(--ball);
+}
+
+/* Phone: timing of your last swing */
+.status.good {
+  color: #57f27a;
+}
+.status.bad {
+  color: #ff4d42;
+}

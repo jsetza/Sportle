@@ -80,6 +80,8 @@ export function match(
     resumeAt: 0,
     ranked: null,
     moves: {},
+    swapped: [],
+    timing: null,
     score: [0, 0],
     serving: 0,
     serverNumber: 2,
@@ -660,6 +662,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     m.quality = quality;
     m.hits++;
     m.shot = strokeSide(m, p, side) + " pop-up";
+    judge(m, p, true);
     announce(m, "Pop-up! • " + m.shot + " • smash it!");
     return true;
   }
@@ -699,6 +702,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   );
   m.quality = quality;
   m.hits++;
+  judge(m, p, false);
   m.shot =
     strokeSide(m, p, side) +
     " " +
@@ -716,6 +720,48 @@ export function hit(m: Match, p: Player, input: Input): boolean {
           : ""),
   );
   return true;
+}
+/**
+ * Will the ball just launched clear the net? Answered by running the real physics step on a
+ * copy of the match until the ball crosses the net plane, hits the net or lands short, so the
+ * spark can never disagree with what the ball then does.
+ */
+export function clearsNet(m: Match) {
+  const side = Math.sign(m.ball.z);
+  if (!side || Math.sign(m.velocity.z) === side) return true;
+  const sim = structuredClone(m);
+  for (const p of sim.players) p.reactionAt = 1e9; // nobody reaches for it in the copy
+  for (let k = 0; k < 600; k++) {
+    const vz = sim.velocity.z;
+    step(sim);
+    if (sim.phase !== "rally") return false; // net post / didn't cross
+    if (Math.sign(sim.velocity.z) !== Math.sign(vz)) return false; // bounced off the net
+    if (Math.sign(sim.ball.z) === -side) return true;
+    if (sim.bounces > 0) return false; // landed short on its own side
+  }
+  return false;
+}
+/**
+ * Timing verdict for a human swing, shown as a red or green spark: mistimed contact that pops
+ * up or finds the net is "early"/"late" (was the ball still in front of you, or behind?);
+ * anything else is "good", or "great" on the sweet spot.
+ */
+function judge(m: Match, p: Player, popup: boolean) {
+  if (p.bot) return;
+  const bad = popup || !clearsNet(m);
+  // m.ball is the contact point; in front of the player means the swing came early.
+  const front = (p.pos.z - m.ball.z) * (p.team ? -1 : 1);
+  m.timing = {
+    at: m.contacts,
+    by: p.id,
+    kind: bad
+      ? front > 0
+        ? "early"
+        : "late"
+      : m.quality > 0.85
+        ? "great"
+        : "good",
+  };
 }
 /** Bot contact: occasional mistimed hits (unforced errors), rarer on harder settings. */
 const BOT_ERROR = { easy: 0.09, medium: 0.07, hard: 0.045 };

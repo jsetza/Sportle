@@ -32,7 +32,7 @@ try {
   const errors = [];
   for (const p of [display, phone])
     p.on("pageerror", (e) => errors.push(e.message));
-  await display.goto("http://127.0.0.1:31492");
+  await display.goto("http://127.0.0.1:31492/#test");
   // Start screen: Play → Offline → (Motion lab is preselected) → Create game.
   await display.locator("#play").click();
   await display.locator("#goOffline").click();
@@ -165,6 +165,48 @@ try {
   assert.equal(results.length, 2);
   assert.notDeepEqual(results[0].velocity, results[1].velocity);
   assert.notEqual(results[0].message, results[1].message);
+  // Ball lock: in first- and third-person views the ball stays near the middle of the screen
+  // while it is in front of the player (measured as the angle off the view's centre line).
+  const lock = {};
+  for (const mode of ["first", "third"]) {
+    lock[mode] = await display.evaluate(
+      (mode) =>
+        new Promise((done) => {
+          const s = window.__povScene;
+          s.viewMode = mode;
+          const out = [];
+          const end = performance.now() + 4000;
+          const tick = () => {
+            const v = s.views[0] || s.view,
+              b = s.lastBallPos,
+              facing = s.followTeam ? -1 : 1;
+            if (b && (v.eye[2] - b.z) * facing > 2.2) {
+              const d = v.target.map((t, i) => t - v.eye[i]),
+                e = [b.x - v.eye[0], b.y - v.eye[1], b.z - v.eye[2]];
+              const dot = d[0] * e[0] + d[1] * e[1] + d[2] * e[2];
+              const cos = dot / (Math.hypot(...d) * Math.hypot(...e));
+              out.push((Math.acos(Math.min(1, cos)) * 180) / Math.PI);
+            }
+            if (performance.now() < end) requestAnimationFrame(tick);
+            else {
+              out.sort((a, b) => a - b);
+              done({
+                frames: out.length,
+                median: out[Math.floor(out.length / 2)],
+                p90: out[Math.floor(out.length * 0.9)],
+              });
+            }
+          };
+          tick();
+        }),
+      mode,
+    );
+    if (!(lock[mode].frames > 10)) throw Error("Ball lock: no frames with the ball ahead");
+    // Headless Chrome renders slowly (few frames), so allow some lag; on real screens it's tighter.
+    if (lock[mode].median > 12)
+      throw Error(`Ball lock (${mode}): ball ${lock[mode].median.toFixed(1)}° off centre`);
+  }
+  console.log("ball lock (degrees off centre):", JSON.stringify(lock));
   // Phone reloads mid-match: it takes its seat back, one tap on Enable, play resumes itself.
   const sensorsOn = () =>
     phone.evaluate(() => {

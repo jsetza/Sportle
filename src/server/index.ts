@@ -14,6 +14,8 @@ import {
   acceptMove,
   rematch,
   begin,
+  chooseSide,
+  swapSides,
   dropPause,
   hostPause,
   resume,
@@ -290,6 +292,14 @@ const server = createServer(async (req, res) => {
           r,
           p.name + " left the game screen · resumes when they're back",
         );
+        return json(res, { ok: true });
+      }
+      if (path === "/api/side" && p) {
+        chooseSide(r, p.id, a.side);
+        return json(res, { ok: true });
+      }
+      if (path === "/api/swap" && session.role !== "controller") {
+        swapSides(r, session.displayId || "host");
         return json(res, { ok: true });
       }
       if (path === "/api/pause" && (session.role !== "controller" || p)) {

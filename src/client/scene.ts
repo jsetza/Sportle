@@ -208,33 +208,6 @@ export class Scene {
       );
     }
   }
-  /**
-   * Swing look (owner request, VR-like): each player's own camera turns toward their swing —
-   * forehand looks left, backhand looks right (mirrored for left-handers) — then eases back.
-   * dir: -1 = the player's left, +1 = their right.
-   */
-  sway = new Map<
-    string,
-    { id: number; dir: number; at: number; amp: number }
-  >();
-  /** Current swing-look offset for a player: 0 at rest, ±1 at the peak. */
-  swayAmount(id: string | null) {
-    const s = id ? this.sway.get(id) : undefined;
-    if (!s || !s.dir) return 0;
-    const t = (performance.now() - s.at) / 1000;
-    if (t < 0) return 0;
-    // Quick turn (0.14 s), short hold, then a smooth return to neutral (~0.8 s).
-    const k =
-      t < 0.14
-        ? Math.sin(((t / 0.14) * Math.PI) / 2)
-        : t < 0.24
-          ? 1
-          : Math.exp(-(((t - 0.24) / 0.28) ** 2));
-    const reduce =
-      typeof matchMedia === "function" &&
-      matchMedia("(prefers-reduced-motion: reduce)").matches;
-    return s.dir * s.amp * k * (reduce ? 0.3 : 1);
-  }
   lastFrame = 0;
   lastSnapAt = 0;
   offsets = new Map<string, Vec>();
@@ -256,7 +229,14 @@ export class Scene {
   }
   shown = new Map<string, Vec>();
   lastContacts = -1;
-  bursts: { x: number; y: number; z: number; at: number; col: V }[] = [];
+  bursts: {
+    x: number;
+    y: number;
+    z: number;
+    at: number;
+    col: V;
+    big?: boolean;
+  }[] = [];
   trail: Vec[] = [];
   audio: AudioContext | null = null;
   muted = true;
@@ -452,39 +432,27 @@ export class Scene {
     if (hit) {
       const p = state.players.find((q) => q.id === state.lastPlayer);
       if (p) this.contactAt.set(p.id, { ...state.ball, at: performance.now() });
-      this.burst(
-        state.ball,
-        p ? teamColor(p.team) : palette.ball,
-        state.quality,
-      );
+      const t = state.timing?.at === state.contacts ? state.timing : null;
+      if (t) {
+        // Timing spark (owner request): green for a clean swing over the net, red for an
+        // early/late one that pops up or finds the net. Bigger and longer than a normal burst.
+        const good = t.kind === "great" || t.kind === "good";
+        const col: V = good
+          ? t.kind === "great"
+            ? [0.35, 1, 0.45]
+            : [0.2, 0.85, 0.35]
+          : [1, 0.18, 0.15];
+        this.burst(state.ball, col, 0, true);
+        if (t.kind === "great")
+          this.burst(state.ball, [0.85, 1, 0.85], 0, true, 90);
+      } else
+        this.burst(
+          state.ball,
+          p ? teamColor(p.team) : palette.ball,
+          state.quality,
+        );
     }
     this.lastContacts = state.contacts;
-    // New swing from a phone → start that player's swing look.
-    for (const p of state.players) {
-      if (p.bot) continue;
-      const id = p.input?.swingId ?? -1;
-      const prevSway = this.sway.get(p.id);
-      if (!prevSway) {
-        this.sway.set(p.id, { id, dir: 0, at: 0, amp: 0 });
-        continue;
-      }
-      if (id === prevSway.id || !p.input.swing) continue;
-      const handSign = p.hand === "left" ? -1 : 1;
-      let dir =
-        Math.abs(p.input.side ?? 0) > 0.2 ? Math.sign(p.input.side!) : 0;
-      if (!dir) {
-        // No clear sideways path: decide forehand/backhand from where the ball is.
-        const facing = p.team ? -1 : 1;
-        const lateral = (state.ball.x - p.pos.x) * facing * handSign;
-        dir = lateral >= 0 ? -handSign : handSign; // forehand → left (righty)
-      }
-      this.sway.set(p.id, {
-        id,
-        dir,
-        at: performance.now(),
-        amp: 0.6 + 0.4 * clamp(p.input.strength, 0, 1),
-      });
-    }
     if (state.event !== this.lastEvent) {
       this.lastEvent = state.event;
       const msg = state.message;
@@ -492,8 +460,15 @@ export class Scene {
         this.tone(330, 220, 0.25, 0.05, "triangle");
     }
   }
-  burst(at: Vec, col: V, quality = 1) {
-    this.bursts.push({ x: at.x, y: at.y, z: at.z, at: performance.now(), col });
+  burst(at: Vec, col: V, quality = 1, big = false, delay = 0) {
+    this.bursts.push({
+      x: at.x,
+      y: at.y,
+      z: at.z,
+      at: performance.now() + delay,
+      col,
+      big,
+    });
     if (quality > 0.85)
       this.bursts.push({
         x: at.x,
@@ -1165,35 +1140,48 @@ export class Scene {
     const t = performance.now() / 1000;
     const f = this.followPos;
     if (m && m.phase !== "lobby" && f && this.viewMode !== "broadcast") {
-      const facing = this.followTeam ? -1 : 1,
-        b = ball || { x: 0, y: 1, z: 0 };
-      // Swing look: shift the view toward the swing (world X; the far team's left is +X).
-      const sw = this.swayAmount(this.follow) * facing;
-      if (this.viewMode === "first") {
-        // Eyes at head height looking down-court. Only a gentle pull toward the ball, so your
-        // paddle stays put at the lower right instead of swinging around the screen.
-        const ahead = (f.z - b.z) * facing > 0.5;
-        return {
-          eye: [f.x + sw * 0.12, 1.5, f.z],
-          target: [
-            f.x + (ahead ? (b.x - f.x) * 0.15 : 0) + sw * 2.4,
-            ahead ? lerp(1.0, b.y, 0.25) : 0.95,
-            f.z - 6 * facing,
-          ],
-          fov: 74,
-          shift: 0,
-        };
+      const facing = this.followTeam ? -1 : 1;
+      // Ball lock (owner request): the camera keeps the ball in the middle of the screen,
+      // the same way every time. It only lets go when the ball is behind you or right at
+      // your eyes, where looking at it would spin the view around; then it looks down-court.
+      const live =
+        !!ball &&
+        (m.phase === "serve" || m.phase === "rally" || m.phase === "point");
+      const third = this.viewMode === "third";
+      const eye: V =
+        this.viewMode === "first"
+          ? [f.x, 1.5, f.z]
+          : this.aspect < 1.2
+            ? [f.x, 3.8, f.z + 6.3 * facing]
+            : [f.x * 0.7, 3.4, f.z + 5.4 * facing];
+      const ahead: V = [
+        third ? f.x * 0.85 : f.x,
+        third ? 0.85 : 1.0,
+        f.z - 6 * facing,
+      ];
+      let w = 0;
+      if (live) {
+        const b = ball!;
+        // How far in front of the camera the ball is, along the court.
+        const front = (eye[2] - b.z) * facing;
+        const dist = Math.hypot(b.x - eye[0], b.y - eye[1], b.z - eye[2]);
+        w = clamp((front - 0.4) / 1.2, 0, 1) * clamp((dist - 0.6) / 1.0, 0, 1);
       }
-      // Third person: chase camera over the shoulder, nudged toward the ball.
+      const b = ball || { x: 0, y: 1, z: 0 };
+      // Keep the view from tipping too far up on lobs or down at the feet.
+      const by = clamp(
+        b.y,
+        0.15,
+        eye[1] + Math.max(2, Math.abs(eye[2] - b.z) * 0.9),
+      );
       return {
-        // On a narrow view (a split-screen half) sit directly behind and a bit further back,
-        // so the player stays in frame.
-        eye:
-          this.aspect < 1.2
-            ? [f.x + sw * 0.6, 3.8, f.z + 6.3 * facing]
-            : [f.x * 0.7 + sw * 0.6, 3.4, f.z + 5.4 * facing],
-        target: [lerp(f.x, b.x, 0.35) + sw * 2.6, 0.85, f.z - 5.5 * facing],
-        fov: 56,
+        eye,
+        target: [
+          lerp(ahead[0], b.x, w),
+          lerp(ahead[1], by, w),
+          lerp(ahead[2], b.z, w),
+        ],
+        fov: third ? 56 : 74,
         shift: 0,
       };
     }
@@ -1398,7 +1386,7 @@ export class Scene {
         z: m.ball.z + m.velocity.z * bt,
       });
     }
-    this.bursts = this.bursts.filter((s) => now - s.at < 420);
+    this.bursts = this.bursts.filter((s) => now - s.at < (s.big ? 650 : 420));
     // Split screen: two players on this screen, a player camera, and a match in progress.
     const split =
       !!m &&
@@ -1637,12 +1625,13 @@ export class Scene {
         }
       // Contact bursts: expanding ring and shards.
       for (const s of this.bursts) {
-        const k = (now - s.at) / 420;
+        const k = (now - s.at) / (s.big ? 650 : 420);
         if (k < 0) continue;
-        const r = 0.15 + k * 0.85,
-          size = 0.07 * (1 - k);
-        for (let i = 0; i < 10; i++) {
-          const ang = (i / 10) * Math.PI * 2 + s.at;
+        const r = (0.15 + k * 0.85) * (s.big ? 1.5 : 1),
+          size = (s.big ? 0.11 : 0.07) * (1 - k),
+          shards = s.big ? 16 : 10;
+        for (let i = 0; i < shards; i++) {
+          const ang = (i / shards) * Math.PI * 2 + s.at;
           this.box(
             s.x + Math.cos(ang) * r,
             s.y + Math.sin(ang) * r * 0.8,
@@ -1678,16 +1667,10 @@ export class Scene {
       this.view = {
         eye: this.view.eye.map((v, i) => lerp(v, goal.eye[i], e)),
         // Look direction eases a little even in first person, so it never jerks.
+        // The look point follows the ball closely (so it stays centred) but is still
+        // smoothed, so server corrections and bounces never jerk the view.
         target: this.view.target.map((v, i) =>
-          lerp(
-            v,
-            goal.target[i],
-            // A swing look must turn quickly to read as a head turn.
-            Math.min(
-              e,
-              Math.abs(this.swayAmount(this.follow)) > 0.05 ? 0.6 : 0.35,
-            ),
-          ),
+          lerp(v, goal.target[i], playerView ? 0.4 : e),
         ),
         fov: lerp(this.view.fov, goal.fov, e),
         shift: lerp(this.view.shift, goal.shift, e),

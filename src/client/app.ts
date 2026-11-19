@@ -280,6 +280,8 @@ function display() {
     return;
   }
   syncMap();
+  // Test hook (automated browser checks only): open the page with #test.
+  if (location.hash === "#test") (window as any).__povScene = scene;
   // Sound effects (paddle hits, bounces, calls): on by default, remembered per browser.
   let soundOn = true;
   try {
@@ -402,14 +404,18 @@ function display() {
           ? 1
           : 2
         : slots(state.mode);
-    ui("players").html = Array.from({ length: seats }, (_, i) => {
-      const p = state.players.filter((p) => !p.bot)[i];
-      const swap =
-        p && host && choice && state.phase === "lobby"
-          ? `<button class="swap" data-team="${p.id}:${1 - p.team}">→ ${p.team ? "Blue" : "Red"}</button>`
-          : "";
-      return `<div class="player team${p ? p.team : ""}"><span>${p ? escape(p.name) : "Waiting for player " + (i + 1)}<br><small>${p ? (state.ranked ? p.rr + " RR" : (p.team ? "Red" : "Blue") + " · " + p.hand + " handed") : state.ranked && i > 0 ? "Optional: a friend on this screen" : "Scan to claim this slot"}</small></span>${swap}<span class="status">${p ? (p.connected ? (p.ready ? "Ready ✓" : "Calibrate") : "Offline") : "○"}</span></div>`;
-    }).join("");
+    ui("players").html =
+      Array.from({ length: seats }, (_, i) => {
+        const p = state.players.filter((p) => !p.bot)[i];
+        const swap =
+          p && host && choice && state.phase === "lobby"
+            ? `<button class="swap" data-team="${p.id}:${1 - p.team}">→ ${p.team ? "Blue" : "Red"}</button>`
+            : "";
+        return `<div class="player team${p ? p.team : ""}"><span>${p ? escape(p.name) : "Waiting for player " + (i + 1)}<br><small>${p ? (state.ranked ? p.rr + " RR" : (p.team ? "Red" : "Blue") + " · " + p.hand + " handed") : state.ranked && i > 0 ? "Optional: a friend on this screen" : "Scan to claim this slot"}</small></span>${swap}<span class="status">${p ? (p.connected ? (p.ready ? "Ready ✓" : "Calibrate") : "Offline") : "○"}</span></div>`;
+      }).join("") +
+      (localPlayers(state).length === 2 && state.phase === "lobby"
+        ? `<button class="ghost swapbtn" data-swap>⇄ Swap sides · ${escape(localPlayers(state)[0].name)} on the left</button>`
+        : "");
     const p = state.players.find((p) => !p.bot);
     ui("telemetry").html = p
       ? `<span>Sensors<strong>${p.input.sensors ? "Live" : "Waiting"}</strong></span><span>Swing intent<strong>${Math.round(p.input.strength * 100)}%</strong></span><span>Pitch / roll<strong>${Math.round(p.input.pitch)}° / ${Math.round(p.input.roll)}°</strong></span><span>Direction<strong>${p.input.strength < 0.1 ? "Neutral" : p.input.direction > 0.25 ? "Upward" : p.input.direction < -0.25 ? "Downward" : "Across"}</strong></span>`
@@ -443,10 +449,13 @@ function display() {
   const held = new Set<string>();
   let moveSeq = 0,
     lastSent = "";
-  const localPlayers = (state: Match) =>
-    state.players.filter(
+  // This screen's players in left-half/right-half order (left half also has WASD).
+  const localPlayers = (state: Match) => {
+    const list = state.players.filter(
       (p) => !p.bot && (p.display === displayId || (host && p.display === "")),
     );
+    return state.swapped?.includes(displayId || "host") ? list.reverse() : list;
+  };
   const sendMove = (force = false) => {
     if (
       !net.credential ||
@@ -691,24 +700,37 @@ function display() {
       .slice(0, 2)
       .map((p) => p.id);
     const local = localPlayers(state);
-    ui("keys").html = local
-      .map((p, slot) => {
-        const how =
-          p.moveStyle === "phone"
-            ? "<kbd>📱 pad</kbd>"
-            : p.moveStyle === "auto" || slot > 1
-              ? "<kbd>AUTO</kbd>"
-              : `<kbd>${slot ? "← ↑ ↓ →" : "W A S D"}</kbd>`;
-        const note =
-          p.moveStyle === "auto" || slot > 1 || p.manual
-            ? ""
-            : p.moveStyle === "phone"
-              ? " · auto until you use the pad"
-              : " · auto until you move";
-        return `<span class="team${p.team}">${how}${escape(p.name)}${note}</span>`;
-      })
-      .join("");
+    ui("keys").html =
+      local
+        .map((p, slot) => {
+          const how =
+            p.moveStyle === "phone"
+              ? "<kbd>📱 pad</kbd>"
+              : p.moveStyle === "auto" || slot > 1
+                ? "<kbd>AUTO</kbd>"
+                : `<kbd>${slot ? "← ↑ ↓ →" : "W A S D"}</kbd>`;
+          const note =
+            p.moveStyle === "auto" || slot > 1 || p.manual
+              ? ""
+              : p.moveStyle === "phone"
+                ? " · auto until you use the pad"
+                : " · auto until you move";
+          const half =
+            local.length === 2 && scene.viewMode !== "broadcast"
+              ? `<small>${slot ? "right" : "left"} screen</small> `
+              : "";
+          return `<span class="team${p.team}">${how}${half}${escape(p.name)}${note}</span>`;
+        })
+        .join("") +
+      (local.length === 2
+        ? '<button class="ghost swapbtn" data-swap>⇄ Swap sides</button>'
+        : "");
   };
+  // Swap which player gets the left/right half of the split screen (and WASD/arrows).
+  document.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("[data-swap]"))
+      net.api("swap", {}).catch(error);
+  });
   action("create", async () => {
     const mode = document.querySelector<HTMLInputElement>(
       "input[name=mode]:checked",
@@ -810,7 +832,7 @@ function display() {
   }
 }
 function phone() {
-  app.innerHTML = `<div class="phone"><div class="row"><div class="logo"><b>POV</b>pickle</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A quick movement test learns your swings. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><details class="gear" open><summary>Your gear</summary><label for="gearPaddle">Paddle</label><select id="gearPaddle">${PADDLES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearShoes">Shoes</label><select id="gearShoes">${SHOES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearEyes">Eyewear</label><select id="gearEyes">${EYEWEAR.map((g, i) => `<option value="${i}">${g}</option>`).join("")}</select></details><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div id="setup" class="card"><div class="number" id="stage">02 / MOVEMENT TEST</div><h2 id="instruction">Let’s test your swings.</h2><p id="guidance">Tap Enable, then hold the phone like a paddle. Screen forward or back, either is fine.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary hidden" id="useSaved">Use my saved swings</button><button class="full secondary" id="calibrate" disabled>Hold still · start the test</button><ol class="checks" id="checks"><li data-k="right"><i>→</i>Swing right<b></b></li><li data-k="left"><i>←</i>Swing left<b></b></li><li data-k="up"><i>↑</i>Swing up<b></b></li><li data-k="down"><i>↓</i>Swing down<b></b></li></ol><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Small, comfortable swings work best.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div class="telemetry"><span>Sensors<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Live swing<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><button class="link" id="reconnect">Reconnect</button></div><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div class="movepick servepick hidden" id="servePick" role="radiogroup" aria-label="Your serve"><span>Your serve</span><input type="radio" name="sv" id="sv-0" value="0" checked><label for="sv-0">Drive<small>straight</small></label><input type="radio" name="sv" id="sv-1" value="1"><label for="sv-1">Roll<small>topspin dip</small></label><input type="radio" name="sv" id="sv-2" value="2"><label for="sv-2">Slice<small>curves back in</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><button class="full secondary" id="phonePause">Pause</button><button class="link" id="redo">Redo movement test</button></div></div><div id="error" role="alert"></div></div>`;
+  app.innerHTML = `<div class="phone"><div class="row"><div class="logo"><b>POV</b>pickle</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A quick movement test learns your swings. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><details class="gear" open><summary>Your gear</summary><label for="gearPaddle">Paddle</label><select id="gearPaddle">${PADDLES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearShoes">Shoes</label><select id="gearShoes">${SHOES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearEyes">Eyewear</label><select id="gearEyes">${EYEWEAR.map((g, i) => `<option value="${i}">${g}</option>`).join("")}</select></details><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div id="setup" class="card"><div class="number" id="stage">02 / MOVEMENT TEST</div><h2 id="instruction">Let’s test your swings.</h2><p id="guidance">Tap Enable, then hold the phone like a paddle. Screen forward or back, either is fine.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary hidden" id="useSaved">Use my saved swings</button><button class="full secondary" id="calibrate" disabled>Hold still · start the test</button><ol class="checks" id="checks"><li data-k="right"><i>→</i>Swing right<b></b></li><li data-k="left"><i>←</i>Swing left<b></b></li><li data-k="up"><i>↑</i>Swing up<b></b></li><li data-k="down"><i>↓</i>Swing down<b></b></li></ol><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Small, comfortable swings work best.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div class="telemetry"><span>Sensors<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Live swing<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><button class="link" id="reconnect">Reconnect</button></div><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div class="movepick servepick hidden" id="servePick" role="radiogroup" aria-label="Your serve"><span>Your serve</span><input type="radio" name="sv" id="sv-0" value="0" checked><label for="sv-0">Drive<small>straight</small></label><input type="radio" name="sv" id="sv-1" value="1"><label for="sv-1">Roll<small>topspin dip</small></label><input type="radio" name="sv" id="sv-2" value="2"><label for="sv-2">Slice<small>curves back in</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><div class="sidepick hidden" id="sidePick" role="radiogroup" aria-label="Your half of the screen"><span>Your side of the screen</span><button data-side="left">Left</button><button data-side="right">Right</button></div><button class="full secondary" id="phonePause">Pause</button><button class="link" id="redo">Redo movement test</button></div></div><div id="error" role="alert"></div></div>`;
   // Gripping the phone like a paddle presses on the screen: no text selection, look-up or
   // copy pop-ups anywhere on the controller.
   document.body.classList.add("controller");
@@ -1208,6 +1230,10 @@ function phone() {
       "Hold the phone like a paddle and tap the button to start the test.";
     $("stage").textContent = "02 / MOVEMENT TEST";
   });
+  $("sidePick").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-side]");
+    if (b) net.api("side", { side: b.dataset.side }).catch(() => {});
+  });
   action("phonePause", () => net.api(current?.paused ? "resume" : "pause", {}));
   $<HTMLInputElement>("sensitivity").oninput = () => {
     filter.sensitivity = Number($<HTMLInputElement>("sensitivity").value);
@@ -1301,6 +1327,9 @@ function phone() {
   });
   ring.addEventListener("pointerup", padEnd);
   ring.addEventListener("pointercancel", padEnd);
+  let timingSeen = -1,
+    timingUntil = 0,
+    timingKind: "great" | "good" | "early" | "late" = "good";
   net.onState = ({ state }: { state: Match }) => {
     // Ranked matchmaking moves this phone into its match and back to the lobby afterwards.
     const mv = state.moves?.[playerId];
@@ -1325,6 +1354,21 @@ function phone() {
       ui("igTitle").text =
         p.name + (state.ranked && p.rr ? " · " + p.rr + " RR" : " · Ready ✓");
     ui("phonePause").text = state.paused ? "Resume" : "Pause";
+    // Two players on one screen (split screen): pick the left or right half.
+    if (p) {
+      const screen = p.display || "host";
+      let mates = state.players.filter(
+        (q) => !q.bot && (q.display || "host") === screen,
+      );
+      if (state.swapped?.includes(screen)) mates = mates.reverse();
+      const pick = $("sidePick");
+      pick.classList.toggle("hidden", mates.length !== 2);
+      const mySide = mates[0]?.id === p.id ? "left" : "right";
+      for (const b of Array.from(
+        pick.querySelectorAll<HTMLElement>("[data-side]"),
+      ))
+        b.classList.toggle("on", b.dataset.side === mySide);
+    }
     const mineRes = state.ranked?.results.find((r) => r.name === p?.name);
     ui("matchStatus").text =
       state.phase === "over" && state.ranked
@@ -1340,6 +1384,30 @@ function phone() {
                 ? "You're ready. Waiting for the big screen to start the game."
                 : state.message
               : (state.paused ? "Paused · " : "") + state.message;
+    // Timing of my own last swing: green good/great, red early/late (with a short buzz).
+    const tm = state.timing;
+    if (tm && tm.by === playerId && tm.at !== timingSeen) {
+      timingSeen = tm.at;
+      timingUntil = Date.now() + 1300;
+      timingKind = tm.kind;
+      if (tm.kind === "early" || tm.kind === "late") navigator.vibrate?.(140);
+    }
+    const showTiming = Date.now() < timingUntil;
+    if (showTiming)
+      ui("matchStatus").text = {
+        great: "✓ Great timing!",
+        good: "✓ Good timing",
+        early: "✗ Too early",
+        late: "✗ Too late",
+      }[timingKind];
+    $("matchStatus").classList.toggle(
+      "good",
+      showTiming && (timingKind === "great" || timingKind === "good"),
+    );
+    $("matchStatus").classList.toggle(
+      "bad",
+      showTiming && (timingKind === "early" || timingKind === "late"),
+    );
     // Pop-up coming to my team: tell me (and buzz on phones that support it).
     const mine = state.players.find((q) => q.id === playerId);
     const myPopup =

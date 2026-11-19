@@ -311,12 +311,36 @@ export function housekeeping(r: Room, now = Date.now()) {
  * Humans this display controls with its keyboard: phones it paired, in join order.
  * The host also controls phones that joined by manual room code.
  */
-export function localPlayers(r: Room, s: Session) {
-  return r.state.players.filter(
-    (p) =>
-      !p.bot &&
-      (p.display === s.displayId || (s.role === "host" && p.display === "")),
+/** A screen's id for its local players ("host" for the host screen). */
+const screenOf = (s: Session) => s.displayId || "host";
+/** Players on one screen, in left-half/right-half order (the left half also has WASD). */
+export function playersOn(r: Room, screen: string) {
+  const list = r.state.players.filter(
+    (p) => !p.bot && (p.display || "host") === screen,
   );
+  return r.state.swapped.includes(screen) ? list.reverse() : list;
+}
+export function localPlayers(r: Room, s: Session) {
+  return playersOn(r, screenOf(s));
+}
+/** Swap which player gets the left/right half (and WASD/arrows) on a screen. */
+export function swapSides(r: Room, screen: string) {
+  const i = r.state.swapped.indexOf(screen);
+  if (i >= 0) r.state.swapped.splice(i, 1);
+  else r.state.swapped.push(screen);
+  r.state.event++;
+}
+/** A phone picks its half of the split screen: "left" or "right". */
+export function chooseSide(r: Room, playerId: string, side: unknown) {
+  if (side !== "left" && side !== "right") throw Error("Pick left or right");
+  const p = r.state.players.find((q) => q.id === playerId);
+  if (!p) throw Error("Unknown player");
+  const screen = p.display || "host";
+  const order = playersOn(r, screen);
+  if (order.length < 2)
+    throw Error("Sides only matter with two players on one screen");
+  const at = order.findIndex((q) => q.id === playerId);
+  if ((side === "left") !== (at === 0)) swapSides(r, screen);
 }
 /** Keyboard movement from a display: slot 0 = WASD, slot 1 = arrow keys. */
 export function acceptMove(
