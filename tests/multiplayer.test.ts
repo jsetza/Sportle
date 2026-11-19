@@ -187,12 +187,19 @@ test("cross-household four-phone doubles over real HTTP/SSE", async () => {
       (await call("start?room=" + room, {}, host.data.credential)).status,
       200,
     );
-    // Keep phones alive (lastSeen) like real controllers do.
+    // Keep phones alive (lastSeen) like real controllers do. Players hit their own serve,
+    // so every phone keeps swinging; only the server's swing counts during the serve phase.
+    let swingId = 0;
     const keepAlive = setInterval(() => {
+      swingId++;
       for (const p of phones) {
         const n = seq.get(p.key)! + 1;
         seq.set(p.key, n);
-        call("input?room=" + room, input(n), p.key).catch(() => {});
+        call(
+          "input?room=" + room,
+          input(n, { swing: true, swingId, strength: 0.5 }),
+          p.key,
+        ).catch(() => {});
       }
     }, 120);
     try {
@@ -208,6 +215,10 @@ test("cross-household four-phone doubles over real HTTP/SSE", async () => {
       assert.equal(a.state.players.length, 4);
       assert.ok(a.state.players.every((p: any) => !p.bot));
 
+      // The serve is in: stop the background swings so they cannot race the packets below
+      // (inputs closer than 15 ms apart are rejected by design).
+      clearInterval(keepAlive);
+      await new Promise((r) => setTimeout(r, 40));
       // Jitter: a late, out-of-order packet is rejected; a far-stale timestamp is rejected.
       const ben = phones[2];
       const n = seq.get(ben.key)! + 50;

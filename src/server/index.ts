@@ -36,7 +36,7 @@ import type { Room, Session } from "./rooms.ts";
 import { detectOrigin, detectPlatform, clientIp } from "./hosting.ts";
 import type { ServerResponse } from "node:http";
 import type { Mode, Difficulty, MapId, Outfit } from "../shared/types.ts";
-import { MAPS, OUTFITS } from "../shared/types.ts";
+import { MAPS, OUTFITS, cleanGear } from "../shared/types.ts";
 const source = dirname(fileURLToPath(import.meta.url));
 const built = source.includes("/dist/");
 const root = resolve(source, "../client");
@@ -230,6 +230,7 @@ const server = createServer(async (req, res) => {
           (OUTFITS.some((o) => o.id === a.outfit)
             ? a.outfit
             : "classic") as Outfit,
+          cleanGear(a.gear),
         );
         // Ranked identity: the phone's own random key (only a hash is kept on the server).
         if (r.state.ranked) setRank(r, result.player.id, rankId(a.rankKey));

@@ -1312,3 +1312,18 @@ body.joined .phone > h1,
 body.joined .phone > p {
   display: none;
 }
+/* Custom gear on the phone join screen (owner request) */
+.gear {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px 12px 12px;
+}
+.gear summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 0;
+}
+.servepick {
+  margin-bottom: 12px;
+}

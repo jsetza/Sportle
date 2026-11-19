@@ -1,5 +1,5 @@
 import type { Match, Player, Vec } from "../shared/types.ts";
-import { COURT, OUTFITS, clamp } from "../shared/types.ts";
+import { COURT, OUTFITS, PADDLES, SHOES, clamp } from "../shared/types.ts";
 import type { MapId, Outfit } from "../shared/types.ts";
 import { LOOKS, buildMap } from "./maps.ts";
 type V = number[];
@@ -341,7 +341,7 @@ export class Scene {
       const v = state.velocity,
         speed = Math.hypot(v.x, v.y, v.z);
       this.hitSound(0.6 * clamp((speed - 4) / 18, 0, 1) + 0.4 * state.quality);
-    } else if (prev && prev.phase === "rally") {
+    } else if (prev && (prev.phase === "rally" || prev.phase === "point")) {
       // Ground contact: the server counted a bounce, or the ball was falling low and stopped
       // falling (also catches a landing that ends the rally as a fault before it is counted).
       const counted = state.bounces > prev.bounces,
@@ -699,7 +699,10 @@ export class Scene {
   }
   // ——— characters ———
   mascot(
-    p: Pick<Player, "team" | "hand" | "bot" | "id"> & { outfit?: Outfit },
+    p: Pick<Player, "team" | "hand" | "bot" | "id"> & {
+      outfit?: Outfit;
+      gear?: Player["gear"];
+    },
     pos: Vec,
     opts: {
       swing: number;
@@ -792,15 +795,39 @@ export class Scene {
     // face plate + shades
     const fz = pos.z - 0.21 * facing;
     this.blob(pos.x, y0 + 1.28, fz, 0.22, 0.25, 0.12, palette.white);
+    const eyes = p.gear?.eyes ?? 0;
     this.box(
       pos.x,
       y0 + 1.33,
       fz - 0.1 * facing,
       0.34,
-      0.075,
+      eyes === 2 ? 0.1 : 0.075,
       0.05,
-      palette.dark,
+      eyes === 1 ? palette.gold : eyes === 2 ? palette.orange : palette.dark,
     );
+    if (eyes === 1)
+      this.box(
+        pos.x,
+        y0 + 1.36,
+        fz - 0.11 * facing,
+        0.36,
+        0.02,
+        0.05,
+        palette.dark,
+      );
+    if (eyes === 2)
+      this.blob(
+        pos.x,
+        y0 + 1.33,
+        pos.z,
+        0.335,
+        0.035,
+        0.3,
+        palette.dark,
+        0,
+        2,
+        14,
+      );
     this.box(
       pos.x,
       y0 + 1.19,
@@ -824,11 +851,13 @@ export class Scene {
         0.11,
         0.08,
         0.15,
-        palette.dark,
+        (SHOES[p.gear?.shoes ?? 0] ?? SHOES[0]).color as unknown as V,
         0,
         4,
         8,
       );
+    const paddleColor = (PADDLES[p.gear?.paddle ?? 0] ?? PADDLES[0])
+      .color as unknown as V;
     // paddle arm + paddle (orientation mirrors the phone)
     const swing = opts.swing;
     const [px, py, pz] = this.reach(
@@ -881,7 +910,7 @@ export class Scene {
       0.32,
       0.4,
       0.05,
-      col,
+      paddleColor,
       facing * ((opts.pitch * Math.PI) / 180 + swing * 0.9),
       (-opts.roll * facing * Math.PI) / 180,
       (opts.yaw * Math.PI) / 180,
@@ -988,7 +1017,7 @@ export class Scene {
   // ——— camera ———
   /** The paddle as seen from your own eyes: lower right, mirroring the phone's angle. */
   fpPaddle(
-    p: Pick<Player, "team" | "hand" | "id">,
+    p: Pick<Player, "team" | "hand" | "id"> & Partial<Pick<Player, "gear">>,
     pos: Vec,
     o: { swing: number; pitch: number; roll: number; yaw: number },
   ) {
@@ -1006,7 +1035,9 @@ export class Scene {
       ry = (o.yaw * Math.PI) / 180;
     this.box(px, py - 0.24, pz, 0.05, 0.22, 0.05, palette.dark, rx, rz, ry);
     this.box(px, py + 0.06, pz, 0.34, 0.42, 0.035, palette.dark, rx, rz, ry);
-    this.box(px, py + 0.06, pz, 0.3, 0.38, 0.045, col, rx, rz, ry);
+    const face = (PADDLES[p.gear?.paddle ?? 0] ?? PADDLES[0])
+      .color as unknown as V;
+    this.box(px, py + 0.06, pz, 0.3, 0.38, 0.045, face, rx, rz, ry);
   }
   targetView(m: Match | null, ball: Vec | null): View {
     const t = performance.now() / 1000;
@@ -1231,7 +1262,9 @@ export class Scene {
       const bt =
         m.phase === "rally"
           ? Math.min(ahead, 0.08) * (m.bounces > 0 ? 0.8 : 1)
-          : 0;
+          : m.phase === "point"
+            ? Math.min(ahead, 0.08)
+            : 0;
       ball = smooth("ball", {
         x: m.ball.x + m.velocity.x * bt,
         y: Math.max(
@@ -1410,6 +1443,44 @@ export class Scene {
           0.045,
           0.05,
           12,
+        );
+      }
+      // Ball mark (owner request): a dark smudge where an out ball touched down, with a red
+      // ring, so everyone can judge the call. Shown until the next serve.
+      if (m && m.mark && (m.phase === "point" || m.phase === "serve")) {
+        const k = (Math.sin(now / 160) + 1) / 2;
+        this.blob(
+          m.mark.x,
+          0.028,
+          m.mark.z,
+          0.075,
+          0.003,
+          0.11,
+          [0.06, 0.05, 0.05],
+          0,
+          2,
+          12,
+        );
+        this.blob(
+          m.mark.x,
+          0.026,
+          m.mark.z,
+          0.13,
+          0.002,
+          0.17,
+          [0.2, 0.17, 0.15],
+          0,
+          2,
+          12,
+        );
+        this.ring(
+          m.mark.x,
+          m.mark.z,
+          0.32 + k * 0.08,
+          m.mark.out ? palette.red : palette.white,
+          0.035,
+          0.04,
+          16,
         );
       }
       // Tokyo: cherry petals drifting down over the court.

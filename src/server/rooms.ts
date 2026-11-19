@@ -7,7 +7,8 @@ import {
   setMove,
   setPhoneMove,
 } from "./engine.ts";
-import { MOVE_STYLES } from "../shared/types.ts";
+import { MOVE_STYLES, SERVE_STYLES, DEFAULT_GEAR } from "../shared/types.ts";
+import type { Gear } from "../shared/types.ts";
 import { slots, teamFor } from "../shared/types.ts";
 import type {
   Mode,
@@ -134,6 +135,7 @@ export function joinController(
   preferTeam: number | null = null,
   display = "",
   outfit: Outfit = "classic",
+  gear: Gear = { ...DEFAULT_GEAR },
 ) {
   if (credential) {
     const session = r.sessions.get(credential);
@@ -145,6 +147,7 @@ export function joinController(
       throw Error("Reconnect expired. Ask the host to create a new room.");
     const p = r.state.players.find((p) => p.id === session.playerId)!;
     p.outfit = outfit;
+    p.gear = gear;
     p.connected = true;
     p.lastSeen = Date.now();
     // Keep "ready": the phone remembers its swings. Play waits until its sensors are live
@@ -177,6 +180,7 @@ export function joinController(
   p.display = display;
   p.hand = hand;
   p.outfit = outfit;
+  p.gear = gear;
   r.state.players.push(p);
   const key = token();
   r.sessions.set(key, {
@@ -258,6 +262,8 @@ export function acceptInput(
       return false;
   if (a.ctl !== undefined && a.ctl !== 0 && a.ctl !== 1 && a.ctl !== 2)
     return false;
+  if (a.sv !== undefined && a.sv !== 0 && a.sv !== 1 && a.sv !== 2)
+    return false;
   if (now - s.lastInput < 15) return false;
   s.lastSeq = a.seq;
   s.lastInput = now;
@@ -269,6 +275,7 @@ export function acceptInput(
   r.updated = now;
   if ((!a.sensors || !a.calibrated) && !r.state.paused)
     dropPause(r, p.name + "'s paddle isn't live · resumes when it is");
+  if (a.sv !== undefined) p.serveStyle = SERVE_STYLES[a.sv];
   if (a.ctl !== undefined) {
     p.moveStyle = MOVE_STYLES[a.ctl];
     if (p.moveStyle === "auto") p.manual = false;

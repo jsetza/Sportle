@@ -1,4 +1,6 @@
-// Map scenery (owner request): Tokyo, Manila rooftop, San Francisco rooftop, Central Park.
+// Map scenery (owner request): Tokyo, Manila rooftop, San Francisco rooftop, Central Park,
+// New York rooftop at night, and UC Berkeley / UCLA / USC campus impressions (school colours
+// and campus-style buildings only: no logos, mascots, seals or lettering).
 // Original low-poly impressions of each place, built from the scene's box/blob primitives.
 // No real logos, signs or brand lettering — only shapes, colours and lights.
 import type { MapId } from "../shared/types.ts";
@@ -96,6 +98,42 @@ export const LOOKS: Record<MapId, Look> = {
     spots: 0.15,
     ground: [0.3, 0.56, 0.26],
     apron: [0.3, 0.33, 0.38],
+  },
+  nyc: {
+    sky: [0.02, 0.025, 0.07],
+    fogNear: 50,
+    fogFar: 190,
+    ambient: 0.74,
+    spots: 1,
+    ground: null,
+    apron: [0.12, 0.13, 0.2],
+  },
+  berkeley: {
+    sky: [0.62, 0.8, 0.97],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1.02,
+    spots: 0.15,
+    ground: [0.34, 0.58, 0.28],
+    apron: [0.0, 0.2, 0.38],
+  },
+  ucla: {
+    sky: [0.55, 0.78, 0.98],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1.04,
+    spots: 0.15,
+    ground: [0.36, 0.6, 0.28],
+    apron: [0.15, 0.45, 0.68],
+  },
+  usc: {
+    sky: [0.98, 0.78, 0.55],
+    fogNear: 55,
+    fogFar: 190,
+    ambient: 1.0,
+    spots: 0.2,
+    ground: [0.38, 0.56, 0.27],
+    apron: [0.55, 0.05, 0.07],
   },
 };
 
@@ -764,9 +802,558 @@ function centralpark(b: Builder) {
   b.box(dx, 94, dz, 0.6, 16, 0.6, [0.8, 0.8, 0.82]);
 }
 
+/** Palm tree: slightly leaning segmented trunk and a crown of drooping fronds. */
+function palm(b: Builder, x: number, z: number, s: number) {
+  const lean = (rnd() - 0.5) * 0.25,
+    h = (7 + rnd() * 3) * s;
+  for (let i = 0; i < 8; i++) {
+    const y = (i + 0.5) * (h / 8);
+    b.box(
+      x + lean * y,
+      y,
+      z,
+      0.42 * s,
+      h / 8 + 0.05,
+      0.42 * s,
+      i % 2 ? [0.5, 0.38, 0.26] : [0.44, 0.33, 0.22],
+    );
+  }
+  const tx = x + lean * h;
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    b.box(
+      tx + Math.cos(a) * 1.3 * s,
+      h - 0.2 * s,
+      z + Math.sin(a) * 1.3 * s,
+      2.8 * s,
+      0.08,
+      0.55 * s,
+      [0.2, 0.5, 0.2],
+      0,
+      0.45,
+      -a,
+    );
+  }
+  b.blob(tx, h, z, 0.5 * s, 0.4 * s, 0.5 * s, [0.3, 0.42, 0.18], 0, 4, 8);
+}
+/** Campus quad ground: lawn, crossing paths and a low hedge around the court. */
+function quad(b: Builder, lawn: V, path: V) {
+  b.box(0, -0.1, 0, 240, 0.1, 240, lawn);
+  b.box(0, -0.03, -14, 80, 0.04, 3, path);
+  b.box(0, -0.03, 14, 80, 0.04, 3, path);
+  b.box(-12, -0.03, 0, 3, 0.04, 80, path);
+  b.box(12, -0.03, 0, 3, 0.04, 80, path);
+  for (const sd of [-1, 1]) {
+    b.box(sd * 8.6, 0.45, 0, 0.8, 0.9, 20, shade(lawn, 0.7));
+    b.box(0, 0.45, sd * 11.2, 16, 0.9, 0.8, shade(lawn, 0.7));
+  }
+}
+/** Classical hall: base, a row of columns, an entablature and a low pitched roof. */
+function hall(
+  b: Builder,
+  x: number,
+  z: number,
+  w: number,
+  h: number,
+  d: number,
+  wall: V,
+  roof: V,
+  ry = 0,
+) {
+  b.box(x, h / 2, z, w, h, d, wall, 0, 0, ry);
+  const cos = Math.cos(ry),
+    sin = Math.sin(ry),
+    face = d / 2 + 0.9;
+  // Columns go on whichever long face looks toward the court (the origin).
+  const toward =
+    Math.hypot(x - sin * face, z - cos * face) <
+    Math.hypot(x + sin * face, z + cos * face)
+      ? 1
+      : -1;
+  const fx = -sin * face * toward,
+    fz = -cos * face * toward;
+  for (let i = 0; i < 8; i++) {
+    const u = (i / 7 - 0.5) * w * 0.8;
+    b.box(
+      x + cos * u + fx,
+      h * 0.42,
+      z - sin * u + fz,
+      0.7,
+      h * 0.84,
+      0.7,
+      shade(wall, 1.08),
+      0,
+      0,
+      ry,
+    );
+  }
+  b.box(
+    x + fx,
+    h * 0.86,
+    z + fz,
+    w * 0.88,
+    h * 0.1,
+    1.6,
+    shade(wall, 0.95),
+    0,
+    0,
+    ry,
+  );
+  b.box(x, h + 0.5, z, w + 0.6, 1, d + 0.6, roof, 0, 0, ry);
+  b.box(x, h + 1.4, z, w * 0.8, 0.9, d * 0.5, shade(roof, 0.9), 0, 0, ry);
+}
+/** Brick building with a row of arched windows/arcade along its front. */
+function brick(
+  b: Builder,
+  x: number,
+  z: number,
+  w: number,
+  h: number,
+  d: number,
+  wall: V,
+  trim: V,
+  ry = 0,
+) {
+  b.box(x, h / 2, z, w, h, d, wall, 0, 0, ry);
+  const cos = Math.cos(ry),
+    sin = Math.sin(ry),
+    n = Math.max(3, Math.floor(w / 2.4));
+  for (const fs of [-1, 1]) {
+    const fx = -sin * (d / 2 + 0.05) * fs,
+      fz = -cos * (d / 2 + 0.05) * fs;
+    for (let i = 0; i < n; i++) {
+      const u = ((i + 0.5) / n - 0.5) * w;
+      for (const y of [1.6, h * 0.62]) {
+        b.box(
+          x + cos * u + fx,
+          y,
+          z - sin * u + fz,
+          1.1,
+          1.9,
+          0.12,
+          [0.16, 0.12, 0.12],
+          0,
+          0,
+          ry,
+        );
+        b.blob(
+          x + cos * u + fx,
+          y + 0.95,
+          z - sin * u + fz,
+          0.55,
+          0.45,
+          0.07,
+          [0.16, 0.12, 0.12],
+          0,
+          3,
+          8,
+        );
+        b.box(
+          x + cos * u + fx,
+          y - 1.05,
+          z - sin * u + fz,
+          1.3,
+          0.14,
+          0.2,
+          trim,
+          0,
+          0,
+          ry,
+        );
+      }
+    }
+  }
+  b.box(x, h + 0.2, z, w + 0.4, 0.4, d + 0.4, trim, 0, 0, ry);
+  b.box(x, h + 1.1, z, w + 0.2, 1.4, d * 0.6, [0.62, 0.28, 0.2], 0, 0, ry);
+}
+/** Plain coloured pennant banner on a lamp post (school colours, no lettering). */
+function banner(b: Builder, x: number, z: number, c1: V, c2: V) {
+  b.box(x, 2.6, z, 0.12, 5.2, 0.12, [0.15, 0.16, 0.18]);
+  b.box(x + 0.45, 3.9, z, 0.8, 1.6, 0.05, c1);
+  b.box(x + 0.45, 3.0, z, 0.8, 0.25, 0.06, c2);
+  b.blob(x, 5.3, z, 0.25, 0.25, 0.25, [0.98, 0.96, 0.85], 0, 4, 8);
+}
+/** Classic rooftop water tank on legs. */
+function waterTank(b: Builder, x: number, y: number, z: number) {
+  const wood = [0.36, 0.25, 0.18];
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    b.box(
+      x + sx * 1.1,
+      y + 1.2,
+      z + sz * 1.1,
+      0.2,
+      2.4,
+      0.2,
+      [0.15, 0.15, 0.16],
+    );
+  b.blob(x, y + 4, z, 1.7, 1.6, 1.7, wood, 1.4, 4, 10);
+  b.blob(x, y + 6.2, z, 1.8, 0.9, 1.8, [0.2, 0.18, 0.18], 0, 4, 10);
+}
+
+function nyc(b: Builder) {
+  seed = 71;
+  const lit = [
+    [1, 0.86, 0.55],
+    [0.95, 0.95, 0.85],
+    [0.6, 0.8, 1],
+    [1, 0.7, 0.4],
+  ];
+  const facade = [0.07, 0.07, 0.1];
+  rooftop(b, [0.2, 0.2, 0.23], facade, lit, 120);
+  // string lights over the deck and a few planters
+  for (const sd of [-1, 1]) {
+    for (let z = -15; z <= 15; z += 1.5)
+      b.blob(
+        sd * 10.5,
+        3.2 + Math.sin(z * 0.6) * 0.15,
+        z,
+        0.09,
+        0.09,
+        0.09,
+        [1, 0.88, 0.55],
+        0,
+        3,
+        6,
+      );
+    b.box(sd * 10.5, 1.6, -15.5, 0.1, 3.2, 0.1, [0.12, 0.12, 0.14]);
+    b.box(sd * 10.5, 1.6, 15.5, 0.1, 3.2, 0.1, [0.12, 0.12, 0.14]);
+    for (const z of [-13, 13]) {
+      b.box(sd * 10, 0.4, z, 1.6, 0.8, 1.6, [0.3, 0.22, 0.16]);
+      b.blob(sd * 10, 1.2, z, 0.9, 0.7, 0.9, [0.16, 0.36, 0.18], 0, 4, 8);
+    }
+  }
+  waterTank(b, -9, 0, 18.5);
+  // the street grid far below and the skyline all around (the court is ~120 m up)
+  b.box(0, -120.5, 0, 500, 0.5, 500, [0.05, 0.05, 0.07]);
+  for (let i = -6; i <= 6; i++) {
+    b.box(i * 32, -120, 0, 1.2, 0.2, 500, [0.95, 0.75, 0.4]);
+    b.box(0, -120, i * 32, 500, 0.2, 1.2, [0.95, 0.75, 0.4]);
+  }
+  city(b, {
+    ground: -120,
+    clearX: 20,
+    clearZ: 26,
+    reach: 150,
+    minH: 70,
+    maxH: 230,
+    colors: [
+      [0.08, 0.08, 0.12],
+      [0.11, 0.1, 0.14],
+      [0.06, 0.07, 0.1],
+      [0.13, 0.12, 0.13],
+    ],
+    lit,
+    count: 160,
+  });
+  // neighbouring rooftops close by, with their own water tanks
+  for (const [x, z, h] of [
+    [-30, -10, 112],
+    [32, 8, 108],
+    [-26, 34, 104],
+    [30, -38, 116],
+  ]) {
+    tower(b, x, -120, z, 16, h, 16, [0.12, 0.11, 0.14], lit);
+    waterTank(b, x + 3, h - 120 + 0.6, z - 2);
+  }
+  // a tall art-deco spire on the skyline (stepped setbacks, generic) with a red beacon
+  const sx = -40,
+    sz = -120;
+  let y = -120;
+  for (const [w, h] of [
+    [30, 150],
+    [22, 50],
+    [15, 35],
+    [10, 25],
+    [6, 18],
+  ]) {
+    tower(b, sx, y, sz, w, h, w, [0.62, 0.6, 0.58], lit, 2.6, 0.5);
+    y += h;
+  }
+  for (let i = 0; i < 6; i++)
+    b.box(
+      sx,
+      y + 4 + i * 3,
+      sz,
+      4 - i * 0.6,
+      3,
+      4 - i * 0.6,
+      [0.85, 0.85, 0.8],
+    );
+  b.box(sx, y + 30, sz, 0.5, 18, 0.5, [0.8, 0.8, 0.82]);
+  b.blob(sx, y + 40, sz, 0.8, 0.8, 0.8, [1, 0.15, 0.1], 0, 4, 8);
+  // a crowned tower with a lit, stepped top on the other side
+  const cx = 70,
+    cz = -90;
+  tower(b, cx, -120, cz, 20, 190, 20, [0.18, 0.18, 0.22], lit);
+  for (let i = 0; i < 7; i++)
+    b.box(
+      cx,
+      74 + i * 3.2,
+      cz,
+      18 - i * 2.4,
+      2.6,
+      18 - i * 2.4,
+      [0.95, 0.85, 0.6],
+    );
+  // moon
+  b.blob(60, 120, -260, 10, 10, 2, [0.95, 0.95, 0.88], 0, 6, 14);
+}
+
+function berkeley(b: Builder) {
+  seed = 83;
+  const blue = [0.0, 0.2, 0.38],
+    gold = [0.99, 0.71, 0.08],
+    granite = [0.88, 0.86, 0.8];
+  quad(b, [0.34, 0.58, 0.28], [0.85, 0.8, 0.68]);
+  // the campus clock tower (campanile-style: tall shaft, open belfry, pyramid roof)
+  const tx = 12,
+    tz = -112;
+  b.box(tx, 1, tz, 14, 2, 14, shade(granite, 0.9));
+  b.box(tx, 27, tz, 10, 50, 10, granite);
+  for (let i = 0; i < 4; i++)
+    b.box(tx, 8 + i * 10, tz, 10.3, 0.4, 10.3, shade(granite, 0.92));
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    b.box(tx + sx * 4.4, 57, tz + sz * 4.4, 1.2, 10, 1.2, granite);
+  b.box(tx, 55, tz, 7, 6, 7, [0.25, 0.22, 0.2]);
+  b.box(tx, 62.5, tz, 11, 1.2, 11, granite);
+  for (let i = 0; i < 6; i++)
+    b.box(
+      tx,
+      64 + i * 2.2,
+      tz,
+      9 - i * 1.5,
+      2.2,
+      9 - i * 1.5,
+      [0.32, 0.48, 0.42],
+    );
+  b.box(tx, 79, tz, 0.4, 4, 0.4, [0.75, 0.62, 0.3]);
+  for (const sd of [-1, 1])
+    b.blob(tx, 46, tz + sd * 5.1, 2.2, 2.2, 0.15, [0.95, 0.93, 0.85], 0, 4, 12);
+  // white classical halls around the quad
+  hall(b, -42, -55, 30, 14, 14, granite, [0.55, 0.4, 0.32], -0.4);
+  hall(b, 40, -58, 30, 14, 14, granite, [0.55, 0.4, 0.32], 0.4);
+  hall(
+    b,
+    -36,
+    18,
+    26,
+    12,
+    14,
+    shade(granite, 0.97),
+    [0.55, 0.4, 0.32],
+    -Math.PI / 2,
+  );
+  hall(
+    b,
+    36,
+    18,
+    26,
+    12,
+    14,
+    shade(granite, 0.97),
+    [0.55, 0.4, 0.32],
+    Math.PI / 2,
+  );
+  // blue-and-gold banners along the paths
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1]) banner(b, sd * 13.8, z, blue, gold);
+  // oaks and eucalyptus, then golden hills behind
+  const greens = [
+    [0.22, 0.45, 0.2],
+    [0.3, 0.5, 0.3],
+    [0.38, 0.52, 0.36],
+  ];
+  for (let i = 0; i < 120; i++) {
+    const x = (rnd() * 2 - 1) * 70,
+      z = (rnd() * 2 - 1) * 70;
+    if (Math.abs(x) < 16 && Math.abs(z) < 18) continue;
+    if (Math.abs(x - tx) < 10 && Math.abs(z - tz) < 10) continue;
+    if (Math.abs(z + 56) < 12 && Math.abs(Math.abs(x) - 41) < 18) continue;
+    if (Math.abs(z - 18) < 10 && Math.abs(Math.abs(x) - 50) < 12) continue;
+    if (z < -20 && Math.abs(x) < 14) continue;
+    tree(b, x, z, 1 + rnd() * 0.9, pick(greens));
+  }
+  for (let i = 0; i < 9; i++)
+    b.blob(
+      -120 + i * 30,
+      0,
+      -140 - rnd() * 20,
+      40 + rnd() * 20,
+      25 + rnd() * 18,
+      30,
+      i % 2 ? [0.62, 0.6, 0.32] : [0.42, 0.52, 0.28],
+      0,
+      5,
+      12,
+    );
+}
+
+function ucla(b: Builder) {
+  seed = 97;
+  const blue = [0.15, 0.45, 0.68],
+    gold = [1, 0.82, 0.0],
+    brickC = [0.7, 0.32, 0.22],
+    trim = [0.92, 0.86, 0.72];
+  quad(b, [0.36, 0.6, 0.28], [0.9, 0.82, 0.66]);
+  // big brick hall with twin towers facing the court (Romanesque style)
+  const hz = -78;
+  brick(b, 0, hz, 52, 14, 14, brickC, trim);
+  for (const sd of [-1, 1]) {
+    const x = sd * 9;
+    b.box(x, 15, hz + 2, 7, 30, 7, brickC);
+    for (const y of [12, 18, 24])
+      b.box(x, y, hz - 1.55, 2, 3, 0.12, [0.16, 0.12, 0.12]);
+    b.box(x, 30.6, hz + 2, 8, 1.2, 8, trim);
+    for (const [sx, sz] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ])
+      b.box(x + sx * 2.8, 33.5, hz + 2 + sz * 2.8, 0.9, 5, 0.9, brickC);
+    b.box(x, 36.6, hz + 2, 8, 1.2, 8, trim);
+    for (let i = 0; i < 4; i++)
+      b.box(
+        x,
+        38 + i * 1.6,
+        hz + 2,
+        7 - i * 1.7,
+        1.6,
+        7 - i * 1.7,
+        [0.62, 0.28, 0.2],
+      );
+  }
+  // matching hall opposite and long wings down the sides
+  brick(b, 0, 60, 46, 13, 12, shade(brickC, 0.95), trim, Math.PI);
+  brick(b, -52, -20, 40, 11, 12, shade(brickC, 1.05), trim, -Math.PI / 2);
+  brick(b, 52, -20, 40, 11, 12, shade(brickC, 1.05), trim, Math.PI / 2);
+  // wide brick steps and planters in front of the hall
+  for (let i = 0; i < 5; i++)
+    b.box(0, 0.15 + i * 0.3, -66 - i * 0.9, 20, 0.3, 1, [0.66, 0.36, 0.28]);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1]) banner(b, sd * 13.8, z, blue, gold);
+  // palms down the walks and shade trees around
+  for (let z = -26; z <= 26; z += 6)
+    for (const sd of [-1, 1]) palm(b, sd * 16.5, z, 1 + rnd() * 0.2);
+  const greens = [
+    [0.25, 0.5, 0.22],
+    [0.32, 0.55, 0.28],
+  ];
+  for (let i = 0; i < 60; i++) {
+    const x = (rnd() * 2 - 1) * 80,
+      z = (rnd() * 2 - 1) * 80;
+    if (Math.abs(x) < 62 && Math.abs(z) < 86) continue;
+    tree(b, x, z, 1.1 + rnd() * 0.6, pick(greens));
+  }
+  for (let i = 0; i < 8; i++)
+    b.blob(
+      -110 + i * 32,
+      0,
+      -150,
+      45,
+      22 + rnd() * 16,
+      30,
+      [0.45, 0.5, 0.32],
+      0,
+      5,
+      12,
+    );
+}
+
+function usc(b: Builder) {
+  seed = 109;
+  const cardinal = [0.6, 0.0, 0.0],
+    gold = [1, 0.8, 0.0],
+    brickC = [0.66, 0.28, 0.2],
+    trim = [0.93, 0.87, 0.74];
+  quad(b, [0.38, 0.56, 0.27], [0.88, 0.8, 0.66]);
+  // brick buildings with arcades on every side of the quad
+  brick(b, -34, -70, 34, 13, 14, brickC, trim);
+  brick(b, 34, -72, 30, 11, 14, shade(brickC, 0.95), trim);
+  brick(b, -54, -10, 44, 12, 12, shade(brickC, 1.05), trim, -Math.PI / 2);
+  brick(b, 54, -10, 44, 12, 12, shade(brickC, 1.05), trim, Math.PI / 2);
+  brick(b, 0, 60, 50, 12, 12, brickC, trim, Math.PI);
+  // tall brick bell tower with a pointed cap (generic campus tower)
+  const tx = 6,
+    tz = -80;
+  b.box(tx, 22, tz, 7, 44, 7, brickC);
+  for (const y of [14, 22, 30, 38])
+    b.box(tx, y, tz - 3.55, 1.6, 3.4, 0.12, [0.16, 0.12, 0.12]);
+  b.box(tx, 44.6, tz, 8, 1.2, 8, trim);
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    b.box(tx + sx * 2.9, 48, tz + sz * 2.9, 0.9, 6, 0.9, trim);
+  b.box(tx, 51.6, tz, 8, 1.2, 8, trim);
+  for (let i = 0; i < 8; i++)
+    b.box(
+      tx,
+      53 + i * 1.8,
+      tz,
+      6.5 - i * 0.8,
+      1.8,
+      6.5 - i * 0.8,
+      [0.3, 0.42, 0.38],
+    );
+  b.box(tx, 69, tz, 0.3, 3, 0.3, gold);
+  // round fountain at the end of the walk
+  b.blob(0, 0.3, -34, 4.5, 0.6, 4.5, trim, 0, 3, 18);
+  b.blob(0, 0.55, -34, 4, 0.2, 4, [0.4, 0.6, 0.8], 0, 2, 18);
+  b.box(0, 1.4, -34, 0.8, 2.6, 0.8, trim);
+  b.blob(0, 3, -34, 1.2, 0.5, 1.2, [0.7, 0.85, 0.95], 0, 3, 10);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1]) banner(b, sd * 13.8, z, cardinal, gold);
+  for (let z = -28; z <= 30; z += 6.5)
+    for (const sd of [-1, 1]) palm(b, sd * 17, z, 1.05 + rnd() * 0.2);
+  const greens = [
+    [0.26, 0.48, 0.22],
+    [0.34, 0.52, 0.26],
+  ];
+  for (let i = 0; i < 70; i++) {
+    const x = (rnd() * 2 - 1) * 85,
+      z = (rnd() * 2 - 1) * 85;
+    if (Math.abs(x) < 62 && Math.abs(z) < 86) continue;
+    tree(b, x, z, 1.1 + rnd() * 0.6, pick(greens));
+  }
+  // downtown skyline in the distance
+  city(b, {
+    ground: 0,
+    clearX: 90,
+    clearZ: 110,
+    reach: 200,
+    minH: 30,
+    maxH: 110,
+    colors: [
+      [0.72, 0.72, 0.74],
+      [0.55, 0.6, 0.68],
+      [0.8, 0.76, 0.7],
+    ],
+    lit: [[0.95, 0.9, 0.75]],
+    count: 60,
+    skip: (_x, z) => z > -100,
+  });
+}
+
 export function buildMap(b: Builder, id: MapId) {
   if (id === "tokyo") tokyo(b);
   else if (id === "manila") manila(b);
   else if (id === "sf") sf(b);
   else if (id === "centralpark") centralpark(b);
+  else if (id === "nyc") nyc(b);
+  else if (id === "berkeley") berkeley(b);
+  else if (id === "ucla") ucla(b);
+  else if (id === "usc") usc(b);
 }

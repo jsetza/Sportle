@@ -1,7 +1,15 @@
 import { Connection } from "./net.ts";
 import { MotionFilter, learnAxes, wrap } from "../shared/motion.ts";
 import type { TestSwings, Vec3 } from "../shared/motion.ts";
-import { slots, MAPS, OUTFITS } from "../shared/types.ts";
+import {
+  slots,
+  MAPS,
+  OUTFITS,
+  PADDLES,
+  SHOES,
+  EYEWEAR,
+  cleanGear,
+} from "../shared/types.ts";
 import type { Match, Input, MapId } from "../shared/types.ts";
 import { Scene, VIEW_LABELS } from "./scene.ts";
 import type { ViewMode } from "./scene.ts";
@@ -109,7 +117,7 @@ function display() {
     <div class="telemetry" id="telemetry"></div>
     <button id="start" class="cta">Start practice <span>→</span></button>
     <div class="row"><button id="pause" class="ghost">Pause</button><button id="resume" class="ghost">Resume</button></div>
-    <p class="fine">Move with <kbd>WASD</kbd> (player 1) and the <kbd>arrow keys</kbd> (player 2), or let characters position themselves. Compact phone swings control timing, angle and power. Serves are assisted.</p>
+    <p class="fine">Move with <kbd>WASD</kbd> (player 1) and the <kbd>arrow keys</kbd> (player 2), or let characters position themselves. Compact phone swings control timing, angle and power. When it’s your serve, pick Drive, Roll or Slice on your phone and swing to serve.</p>
     <button id="new" class="link">← Leave court</button>
   </div>
   <div id="error" role="alert"></div>
@@ -120,7 +128,7 @@ function display() {
 <div class="keys" id="keys" aria-live="polite"></div>
 <div class="callout hidden" id="callout" aria-live="assertive"><b>POP-UP!</b><span>Swing down to smash</span></div>
 <div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small id="goMode">MATCH</small><h2 id="goTitle">Blue wins</h2><div class="goscore" id="goScore">11 : 7</div><p id="goNames"></p><button class="cta" id="again">Play again <span>↻</span></button><button class="link" id="goMenu">Change mode</button><p class="fine" id="goWait"></p></div>
-<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand and outfit.</li><li><b>Enable motion</b> and take the <b>movement test</b>: swing right, left, up and down when asked. Your phone learns your swings and remembers them. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Serves are assisted. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
+<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Enable motion</b> and take the <b>movement test</b>: swing right, left, up and down when asked. Your phone learns your swings and remembers them. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
     "here-practice": "Practice feeds and a live paddle mirror. Start here.",
     "here-solo": "One phone. Choose the bot level below.",
@@ -575,7 +583,11 @@ function display() {
     const over = state.phase === "over" && state.winner !== null;
     $("gameover").classList.toggle("hidden", !over);
     music.intensity =
-      state.phase === "rally" || state.phase === "serve" ? 1 : 0;
+      state.phase === "rally" ||
+      state.phase === "serve" ||
+      state.phase === "point"
+        ? 1
+        : 0;
     if (!over) return;
     const w = state.winner!;
     $("goTitle").textContent = (w ? "Red" : "Blue") + " wins!";
@@ -798,7 +810,7 @@ function display() {
   }
 }
 function phone() {
-  app.innerHTML = `<div class="phone"><div class="row"><div class="logo"><b>POV</b>pickle</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A quick movement test learns your swings. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div id="setup" class="card"><div class="number" id="stage">02 / MOVEMENT TEST</div><h2 id="instruction">Let’s test your swings.</h2><p id="guidance">Tap Enable, then hold the phone like a paddle. Screen forward or back, either is fine.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary hidden" id="useSaved">Use my saved swings</button><button class="full secondary" id="calibrate" disabled>Hold still · start the test</button><ol class="checks" id="checks"><li data-k="right"><i>→</i>Swing right<b></b></li><li data-k="left"><i>←</i>Swing left<b></b></li><li data-k="up"><i>↑</i>Swing up<b></b></li><li data-k="down"><i>↓</i>Swing down<b></b></li></ol><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Small, comfortable swings work best.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div class="telemetry"><span>Sensors<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Live swing<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><button class="link" id="reconnect">Reconnect</button></div><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><button class="full secondary" id="phonePause">Pause</button><button class="link" id="redo">Redo movement test</button></div></div><div id="error" role="alert"></div></div>`;
+  app.innerHTML = `<div class="phone"><div class="row"><div class="logo"><b>POV</b>pickle</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A quick movement test learns your swings. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><details class="gear" open><summary>Your gear</summary><label for="gearPaddle">Paddle</label><select id="gearPaddle">${PADDLES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearShoes">Shoes</label><select id="gearShoes">${SHOES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearEyes">Eyewear</label><select id="gearEyes">${EYEWEAR.map((g, i) => `<option value="${i}">${g}</option>`).join("")}</select></details><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div id="setup" class="card"><div class="number" id="stage">02 / MOVEMENT TEST</div><h2 id="instruction">Let’s test your swings.</h2><p id="guidance">Tap Enable, then hold the phone like a paddle. Screen forward or back, either is fine.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary hidden" id="useSaved">Use my saved swings</button><button class="full secondary" id="calibrate" disabled>Hold still · start the test</button><ol class="checks" id="checks"><li data-k="right"><i>→</i>Swing right<b></b></li><li data-k="left"><i>←</i>Swing left<b></b></li><li data-k="up"><i>↑</i>Swing up<b></b></li><li data-k="down"><i>↓</i>Swing down<b></b></li></ol><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Small, comfortable swings work best.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div class="telemetry"><span>Sensors<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Live swing<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><button class="link" id="reconnect">Reconnect</button></div><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div class="movepick servepick hidden" id="servePick" role="radiogroup" aria-label="Your serve"><span>Your serve</span><input type="radio" name="sv" id="sv-0" value="0" checked><label for="sv-0">Drive<small>straight</small></label><input type="radio" name="sv" id="sv-1" value="1"><label for="sv-1">Roll<small>topspin dip</small></label><input type="radio" name="sv" id="sv-2" value="2"><label for="sv-2">Slice<small>curves back in</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><button class="full secondary" id="phonePause">Pause</button><button class="link" id="redo">Redo movement test</button></div></div><div id="error" role="alert"></div></div>`;
   // Gripping the phone like a paddle presses on the screen: no text selection, look-up or
   // copy pop-ups anywhere on the controller.
   document.body.classList.add("controller");
@@ -807,7 +819,43 @@ function phone() {
     const saved = localStorage.getItem("pov-outfit");
     if (OUTFITS.some((x) => x.id === saved)) o.value = saved!;
     o.onchange = () => localStorage.setItem("pov-outfit", o.value);
+    // Custom gear (owner request): remembered on the phone, sent when joining.
+    let g = cleanGear({});
+    try {
+      g = cleanGear(JSON.parse(localStorage.getItem("pov-gear") || "{}"));
+    } catch {
+      /* default gear */
+    }
+    const sel = {
+      paddle: $<HTMLSelectElement>("gearPaddle"),
+      shoes: $<HTMLSelectElement>("gearShoes"),
+      eyes: $<HTMLSelectElement>("gearEyes"),
+    };
+    for (const k of ["paddle", "shoes", "eyes"] as const) {
+      sel[k].value = String(g[k]);
+      sel[k].onchange = () => {
+        try {
+          localStorage.setItem(
+            "pov-gear",
+            JSON.stringify({
+              paddle: Number(sel.paddle.value),
+              shoes: Number(sel.shoes.value),
+              eyes: Number(sel.eyes.value),
+            }),
+          );
+        } catch {
+          /* ignore */
+        }
+      };
+    }
   }
+  const savedGear = () => {
+    try {
+      return cleanGear(JSON.parse(localStorage.getItem("pov-gear") || "{}"));
+    } catch {
+      return cleanGear({});
+    }
+  };
   $<HTMLInputElement>("code").value = params.get("room") || "";
   const filter = new MotionFilter();
   let orientationAt = 0,
@@ -978,6 +1026,7 @@ function phone() {
       name: info.name,
       hand: info.hand,
       outfit: info.outfit,
+      gear: savedGear(),
       pair: hash.get("pair") || undefined,
       credential: saved || undefined,
     });
@@ -1192,6 +1241,28 @@ function phone() {
       if (current) net.onState({ state: current });
     }),
   );
+  // ——— Serve picker (owner request): shown while it's your serve ———
+  const serveStyle = () =>
+    Number(
+      document.querySelector<HTMLInputElement>("input[name=sv]:checked")
+        ?.value ?? 0,
+    );
+  try {
+    const sv = localStorage.getItem("pov-serve");
+    if (sv !== null)
+      (document.getElementById("sv-" + sv) as HTMLInputElement | null)?.click();
+  } catch {
+    /* default: drive */
+  }
+  document.querySelectorAll<HTMLInputElement>("input[name=sv]").forEach((r) =>
+    r.addEventListener("change", () => {
+      try {
+        localStorage.setItem("pov-serve", r.value);
+      } catch {
+        /* ignore */
+      }
+    }),
+  );
   let popupBuzz = -1;
   const padVec = { x: 0, z: 0 };
   const ring = document.querySelector<HTMLElement>(".padring")!;
@@ -1285,7 +1356,20 @@ function phone() {
       }
     }
     $("matchStatus").classList.toggle("alert", myPopup);
-    const inPlay = state.phase === "serve" || state.phase === "rally";
+    const myServe =
+      !!mine &&
+      state.phase === "serve" &&
+      state.mode !== "practice" &&
+      state.serverId === mine.id &&
+      !state.paused;
+    $("servePick").classList.toggle("hidden", !myServe);
+    if (myServe)
+      ui("matchStatus").text =
+        "🎾 Your serve · pick a serve below, then swing to serve";
+    const inPlay =
+      state.phase === "serve" ||
+      state.phase === "rally" ||
+      state.phase === "point";
     $("pad").classList.toggle("hidden", !(inPlay && moveStyle() === 2));
   };
   setInterval(() => {
@@ -1379,6 +1463,7 @@ function phone() {
       sensors: live,
       calibrated: filter.calibrated && live,
       ctl: moveStyle(),
+      sv: serveStyle(),
       mx: padVec.x,
       mz: padVec.z,
     };

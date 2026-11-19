@@ -5,7 +5,16 @@ export const SWING_RELOAD = 0.2;
 export type MoveStyle = "auto" | "keys" | "phone";
 export const MOVE_STYLES: MoveStyle[] = ["auto", "keys", "phone"];
 /** Courts to play on (owner request). "arena" is the original indoor arena. */
-export type MapId = "arena" | "tokyo" | "manila" | "sf" | "centralpark";
+export type MapId =
+  | "arena"
+  | "tokyo"
+  | "manila"
+  | "sf"
+  | "centralpark"
+  | "nyc"
+  | "berkeley"
+  | "ucla"
+  | "usc";
 export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
   [
     {
@@ -38,6 +47,30 @@ export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
       short: "Central Park",
       note: "Grass, trees, skyline",
     },
+    {
+      id: "nyc",
+      name: "New York rooftop",
+      short: "NYC night",
+      note: "Skyscraper roof at night",
+    },
+    {
+      id: "berkeley",
+      name: "UC Berkeley campus",
+      short: "Berkeley",
+      note: "Blue and gold, clock tower",
+    },
+    {
+      id: "ucla",
+      name: "UCLA campus",
+      short: "UCLA",
+      note: "Brick towers, palm trees",
+    },
+    {
+      id: "usc",
+      name: "USC campus",
+      short: "USC",
+      note: "Cardinal and gold, brick arches",
+    },
   ];
 /** Character outfits (owner request). Team colour still shows which side you're on. */
 export type Outfit =
@@ -55,6 +88,48 @@ export const OUTFITS: { id: Outfit; name: string }[] = [
   { id: "astro", name: "Astronaut" },
   { id: "cowboy", name: "Cowboy" },
 ];
+/** Serve types a player picks on the phone (owner request). */
+export type ServeStyle = "drive" | "roll" | "slice";
+export const SERVE_STYLES: ServeStyle[] = ["drive", "roll", "slice"];
+/** Custom gear chosen on the phone before playing (owner request). Cosmetic only. */
+export type Gear = { paddle: number; shoes: number; eyes: number };
+export const PADDLES = [
+  { name: "Graphite", color: [0.16, 0.17, 0.2] },
+  { name: "Lime", color: [0.62, 0.86, 0.2] },
+  { name: "Hot pink", color: [0.95, 0.3, 0.62] },
+  { name: "Sky blue", color: [0.32, 0.7, 0.98] },
+  { name: "Sunset orange", color: [0.98, 0.52, 0.16] },
+  { name: "Gold", color: [0.95, 0.76, 0.2] },
+  { name: "Purple", color: [0.55, 0.36, 0.9] },
+  { name: "White", color: [0.95, 0.95, 0.93] },
+] as const;
+export const SHOES = [
+  { name: "White", color: [0.94, 0.94, 0.92] },
+  { name: "Black", color: [0.1, 0.1, 0.12] },
+  { name: "Neon green", color: [0.4, 0.95, 0.3] },
+  { name: "Red", color: [0.9, 0.18, 0.2] },
+  { name: "Teal", color: [0.15, 0.75, 0.72] },
+  { name: "Yellow", color: [0.98, 0.85, 0.2] },
+] as const;
+export const EYEWEAR = [
+  "Classic shades",
+  "Mirror shades",
+  "Sport goggles",
+] as const;
+export const DEFAULT_GEAR: Gear = { paddle: 0, shoes: 0, eyes: 0 };
+/** Clamp a client-supplied gear choice to valid indexes. */
+export function cleanGear(g: unknown): Gear {
+  const o = (g ?? {}) as Record<string, unknown>;
+  const pick = (v: unknown, n: number) =>
+    Number.isInteger(v) && (v as number) >= 0 && (v as number) < n
+      ? (v as number)
+      : 0;
+  return {
+    paddle: pick(o.paddle, PADDLES.length),
+    shoes: pick(o.shoes, SHOES.length),
+    eyes: pick(o.eyes, EYEWEAR.length),
+  };
+}
 export type RankedQueue = "1v1" | "2v2";
 export type Ranked = {
   queue: RankedQueue;
@@ -88,6 +163,8 @@ export type Input = {
   swingId?: number;
   /** Sideways swing direction, player frame: +1 toward their right, -1 toward their left. */
   side?: number;
+  /** Serve type chosen on the phone: 0 drive, 1 roll (topspin), 2 slice (curves back in). */
+  sv?: number;
   /** Movement style chosen on the phone: 0 automatic, 1 keyboard on the display, 2 phone thumb pad. */
   ctl?: number;
   /** Thumb-pad movement, player-relative: mx = right(+)/left(-), mz = forward toward the net (+). */
@@ -131,6 +208,9 @@ export type Player = {
   /** How this player moves: automatic positioning, display keyboard, or the phone's thumb pad. */
   moveStyle: MoveStyle;
   outfit: Outfit;
+  gear: Gear;
+  /** Serve this player will hit next time they serve. */
+  serveStyle: ServeStyle;
   /** Ranked rating, shown in ranked rooms (0 when the phone has no ranked profile). */
   rr: number;
 };
@@ -138,7 +218,8 @@ export type Match = {
   mode: Mode;
   difficulty: Difficulty;
   map: MapId;
-  phase: "lobby" | "serve" | "rally" | "over";
+  /** point = the rally just ended: the ball keeps flying for a moment before the reset. */
+  phase: "lobby" | "serve" | "rally" | "point" | "over";
   paused: boolean;
   /**
    * Why play is paused: "host" = someone pressed Pause (waits for Resume); "drop" = a phone
@@ -184,6 +265,12 @@ export type Match = {
   popup: boolean;
   /** Where that pop-up comes down through smash height (~2 m), for positioning and the target ring. */
   popupAt: Vec | null;
+  /** Where the ball touched down when a landing ended the rally (shown as a ball mark). */
+  mark: { x: number; z: number; out: boolean } | null;
+  /** Sideways acceleration (m/s², world X) of a slice serve; 0 otherwise. */
+  curve: number;
+  /** Serve type of the ball in play ("" once anyone else has hit it). */
+  serveKind: "" | ServeStyle;
 };
 export const ZERO_INPUT: Input = {
   seq: -1,

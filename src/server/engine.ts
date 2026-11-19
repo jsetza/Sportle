@@ -2,6 +2,7 @@ import {
   SWING_RELOAD,
   COURT as C,
   ZERO_INPUT,
+  DEFAULT_GEAR,
   clamp,
 } from "../shared/types.ts";
 import type {
@@ -12,6 +13,7 @@ import type {
   Player,
   Input,
   Vec,
+  ServeStyle,
 } from "../shared/types.ts";
 import {
   rotateService,
@@ -56,6 +58,8 @@ export function player(
     display: "",
     moveStyle: "keys",
     outfit: "classic",
+    gear: { ...DEFAULT_GEAR },
+    serveStyle: "drive",
     rr: 0,
     reactionAt: 0,
     target: vec(),
@@ -102,8 +106,16 @@ export function match(
     quality: 0,
     popup: false,
     popupAt: null,
+    mark: null,
+    curve: 0,
+    serveKind: "",
   };
 }
+/** Owner request: pause (s) after each point while the ball finishes its flight. */
+export const POINT_PAUSE = 2;
+/** After the reset, a bot server waits this long (s); a human may swing after HUMAN_SERVE_READY. */
+export const SERVE_DELAY = 1.5;
+export const HUMAN_SERVE_READY = 0.5;
 /** mulberry32 on match state: deterministic bot variety without Math.random. */
 export function rand(m: Match) {
   m.seed = (m.seed + 0x6d2b79f5) | 0;
@@ -244,9 +256,13 @@ export function start(m: Match) {
   m.contacts = 0;
   prepare(m);
 }
+const scoreLine = (m: Match) =>
+  `${m.score[m.serving]} – ${m.score[1 - m.serving]}${doubles(m) ? " – " + m.serverNumber : ""}`;
 export function prepare(m: Match) {
   m.phase = "serve";
-  m.nextServe = m.time + 2;
+  m.nextServe = m.time + SERVE_DELAY;
+  m.curve = 0;
+  m.serveKind = "";
   m.hits = 0;
   m.bounces = 0;
   m.spin = 0;
@@ -260,6 +276,10 @@ export function prepare(m: Match) {
     p.moveUntil = 0;
   }
   const s = m.players.find((p) => p.id === m.serverId)!;
+  // Singles (owner report: receivers in the wrong square): both sides follow the server's
+  // score, so the receiver always stands diagonally across from the server.
+  if (!doubles(m))
+    for (const p of m.players) if (p.team !== m.serving) p.pos.x = -s.pos.x;
   m.serveX = s.pos.x;
   m.receiverId = m.players
     .filter((p) => p.team !== m.serving)
@@ -269,14 +289,18 @@ export function prepare(m: Match) {
   m.ball = vec(s.pos.x, 0.7, s.pos.z);
   announce(
     m,
-    `${m.score[m.serving]} – ${m.score[1 - m.serving]}${doubles(m) ? " – " + m.serverNumber : ""} • ${s.name} serves`,
+    `${scoreLine(m)} • ${s.name} ${s.bot ? "serves" : "· swing to serve"}`,
   );
 }
 export function fault(m: Match, loser: number, reason: string) {
   holds.delete(m);
+  for (const p of m.players) {
+    p.velocity = vec();
+    p.swingUntil = 0;
+  }
   if (m.mode === "practice") {
-    m.phase = "serve";
-    m.nextServe = m.time + 1.6;
+    m.phase = "point";
+    m.nextServe = m.time + POINT_PAUSE;
     announce(m, reason + " • next practice ball");
     return;
   }
@@ -288,17 +312,109 @@ export function fault(m: Match, loser: number, reason: string) {
     );
     return;
   }
-  prepare(m);
-  announce(m, reason + " • " + m.message);
+  // Owner request: a short pause after each point; the ball finishes its flight first.
+  m.phase = "point";
+  m.nextServe = m.time + POINT_PAUSE;
+  announce(m, reason + " • " + scoreLine(m));
 }
-// Assisted serve: legal feet and low underhand contact are generated, not inferred from phone position.
-export function serve(m: Match) {
+/** Dead ball during the post-point pause: keeps flying, bouncing and rolling. No rules. */
+function deadBall(m: Match, dt: number) {
+  const b = m.ball,
+    v = m.velocity;
+  if (b.y <= C.radius + 1e-4 && Math.hypot(v.x, v.y, v.z) < 0.03) return;
+  const old = { ...b };
+  v.y -= (9.81 + m.spin) * dt;
+  v.x += m.curve * dt;
+  const drag = Math.exp(-BALL_DRAG * dt);
+  v.x *= drag;
+  v.z *= drag;
+  b.x += v.x * dt;
+  b.y += v.y * dt;
+  b.z += v.z * dt;
+  if (
+    old.z * b.z <= 0 &&
+    old.z !== b.z &&
+    Math.abs(b.x) < C.post &&
+    b.y - C.radius < C.netSide
+  ) {
+    b.z = Math.sign(old.z || 1) * 0.045;
+    v.z *= -0.16;
+    v.x *= 0.6;
+    v.y *= 0.6;
+  }
+  if (b.y <= C.radius) {
+    b.y = C.radius;
+    if (v.y < 0) {
+      v.y = Math.abs(v.y) * 0.62;
+      v.x *= 0.86;
+      v.z *= 0.86;
+      if (v.y < 0.35) v.y = 0;
+    }
+  }
+}
+/** Serve shape per type: flight-time scale, topspin (extra gravity) and side curve (m/s²). */
+const SERVE_SHAPE: Record<
+  ServeStyle,
+  { t: number; spin: number; curve: number }
+> = {
+  drive: { t: 1, spin: 0, curve: 0 },
+  roll: { t: 0.92, spin: 4, curve: 0 },
+  slice: { t: 1.08, spin: 0, curve: 2.6 },
+};
+function botServeStyle(m: Match): ServeStyle {
+  if (m.difficulty === "easy") return "drive";
+  const r = rand(m);
+  return r < 0.5 ? "drive" : r < 0.75 ? "roll" : "slice";
+}
+/**
+ * Serve. Bots (and tests) call it without input; human servers swing their phone, and the
+ * swing's strength sets pace/depth while a sideways swing steers within the service box.
+ * Legal feet and an underhand contact point are still generated, not inferred from the phone.
+ */
+export function serve(m: Match, input?: Input) {
   const p = m.players.find((p) => p.id === m.serverId)!;
+  const style: ServeStyle = p.bot ? botServeStyle(m) : p.serveStyle;
+  const shape = SERVE_SHAPE[style];
+  const power = input ? clamp(input.strength, 0.2, 1) : 0.55;
+  const side = input ? clamp(input.side ?? 0, -1, 1) : 0;
   m.ball = vec(p.pos.x, 0.65, p.pos.z);
-  launch(m, p, -p.pos.x, (p.team ? 1 : -1) * 4.9, 1.35, 0);
+  m.mark = null;
+  m.serveX = p.pos.x;
+  // Aim at the diagonal service box (centre x = -server x); harder swings are less exact.
+  const miss = input ? power * power * 0.45 : 0;
+  const tx =
+    -p.pos.x + side * 0.9 * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * miss;
+  const depth = 3.9 + power * 1.9 + (rand(m) * 2 - 1) * miss;
+  const t = (1.5 - power * 0.45) * shape.t;
+  // Slice: curves back toward the centre line, so it starts out wide of the target.
+  const curve = shape.curve * Math.sign(p.pos.x || 1);
+  launch(
+    m,
+    p,
+    tx - 0.5 * curve * t * t * 0.85,
+    (p.team ? 1 : -1) * depth,
+    t,
+    shape.spin,
+    true,
+  );
+  m.curve = curve;
+  m.serveKind = style;
   m.hits = 1;
   m.phase = "rally";
-  m.serveX = p.pos.x;
+  if (!p.bot)
+    announce(
+      m,
+      p.name +
+        " · " +
+        (style === "roll"
+          ? "roll serve"
+          : style === "slice"
+            ? "slice serve"
+            : "serve") +
+        " • " +
+        Math.round(power * 100) +
+        "%",
+    );
 }
 function launch(
   m: Match,
@@ -307,6 +423,8 @@ function launch(
   z: number,
   t: number,
   spin: number,
+  /** Serves: account for topspin in the arc so the ball still lands on target. */
+  exact = false,
 ) {
   // Start fast enough that, slowing down under BALL_DRAG, the ball reaches (x, z) in t.
   const boost = Math.min(
@@ -315,10 +433,12 @@ function launch(
   );
   m.velocity = vec(
     ((x - m.ball.x) / t) * boost,
-    (0.07 - m.ball.y + 4.905 * t * t) / t,
+    (0.07 - m.ball.y + (exact ? (9.81 + spin) / 2 : 4.905) * t * t) / t,
     ((z - m.ball.z) / t) * boost,
   );
   m.spin = spin;
+  m.curve = 0;
+  m.serveKind = "";
   m.shotAt = m.time;
   m.bounces = 0;
   m.popup = false;
@@ -421,6 +541,20 @@ function lateChance(m: Match, p: Player, bounces = m.bounces) {
   return best;
 }
 export function queueSwing(m: Match, p: Player, input: Input) {
+  // Owner request: players hit their own serve with a swing.
+  if (
+    !m.paused &&
+    m.phase === "serve" &&
+    m.mode !== "practice" &&
+    !p.bot &&
+    p.id === m.serverId &&
+    m.time >= m.nextServe - SERVE_DELAY + HUMAN_SERVE_READY &&
+    m.time - p.swingAt >= SWING_RELOAD
+  ) {
+    p.swingAt = m.time;
+    serve(m, input);
+    return;
+  }
   if (m.paused || m.phase !== "rally" || m.time - p.swingAt < SWING_RELOAD)
     return;
   p.swingAt = m.time;
@@ -625,6 +759,9 @@ export function strokeSide(m: Match, p: Player, swingSide = 0) {
 export function feed(m: Match) {
   const p = m.players.find((p) => !p.bot)!;
   m.phase = "rally";
+  m.mark = null;
+  m.curve = 0;
+  m.serveKind = "";
   p.pos = vec(0, 0, 4.8);
   m.ball = vec(0, 1.2, -2);
   m.velocity = vec(0, 4.1, 5.2);
@@ -696,10 +833,20 @@ export function movementTarget(m: Match, p: Player): Vec {
 export function step(m: Match, dt = 1 / 120) {
   if (m.paused || m.phase === "lobby" || m.phase === "over") return;
   m.time += dt;
+  if (m.phase === "point") {
+    deadBall(m, dt);
+    if (m.time >= m.nextServe) {
+      if (m.mode === "practice") {
+        m.phase = "serve";
+        m.nextServe = m.time + 0.3;
+      } else prepare(m);
+    }
+    return;
+  }
   if (m.phase === "serve") {
     if (m.time >= m.nextServe) {
       if (m.mode === "practice") feed(m);
-      else serve(m);
+      else if (m.players.find((p) => p.id === m.serverId)?.bot) serve(m);
     }
     return;
   }
@@ -761,6 +908,7 @@ export function step(m: Match, dt = 1 / 120) {
   // hitting zone twice as long (same height, same spot). Players and bots move at normal speed.
   const bdt = m.bounces > 0 ? dt * BOUNCE_TIME_SCALE : dt;
   m.velocity.y -= (9.81 + m.spin) * bdt;
+  m.velocity.x += m.curve * bdt;
   // Owner request: the ball is fastest right off the paddle and loses 15% of its speed
   // every 0.2 s (horizontal). Launches compensate, so shots still land where aimed.
   const drag = Math.exp(-BALL_DRAG * bdt);
@@ -801,6 +949,13 @@ export function step(m: Match, dt = 1 / 120) {
     if (m.bounces === 0) {
       const f = landingFault(m, m.ball.x, m.ball.z);
       if (f) {
+        // Ball mark (owner request) so everyone can see whether it was really out.
+        if (f === "Out" || f === "Service court fault")
+          m.mark = { x: m.ball.x, z: m.ball.z, out: true };
+        // The ball carries on past the line during the pause.
+        m.velocity.y = Math.abs(m.velocity.y) * 0.76;
+        m.velocity.x *= 0.86;
+        m.velocity.z *= 0.86;
         fault(m, m.lastTeam, f);
         return;
       }
@@ -818,6 +973,17 @@ export function step(m: Match, dt = 1 / 120) {
     m.velocity.y = Math.abs(m.velocity.y) * 0.76;
     m.velocity.x *= 0.86;
     m.velocity.z *= 0.86;
+    // Serve spin on the bounce: a roll serve skips low and kicks forward; a slice skids low
+    // and breaks further sideways.
+    if (m.serveKind === "roll") {
+      m.velocity.y *= 0.75;
+      m.velocity.x *= 1.15;
+      m.velocity.z *= 1.15;
+    } else if (m.serveKind === "slice") {
+      m.velocity.y *= 0.72;
+      m.velocity.x += m.curve * 0.45;
+      m.curve = 0;
+    }
   }
   const team = m.bounces ? 1 - m.lastTeam : m.lastTeam;
   if (
