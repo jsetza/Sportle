@@ -139,6 +139,33 @@ export class Scene {
   raf = 0;
   lastEvent = -1;
   lastBounceAt = 0;
+  /**
+   * Swing look (owner request, VR-like): each player's own camera turns toward their swing —
+   * forehand looks left, backhand looks right (mirrored for left-handers) — then eases back.
+   * dir: -1 = the player's left, +1 = their right.
+   */
+  sway = new Map<
+    string,
+    { id: number; dir: number; at: number; amp: number }
+  >();
+  /** Current swing-look offset for a player: 0 at rest, ±1 at the peak. */
+  swayAmount(id: string | null) {
+    const s = id ? this.sway.get(id) : undefined;
+    if (!s || !s.dir) return 0;
+    const t = (performance.now() - s.at) / 1000;
+    if (t < 0) return 0;
+    // Quick turn (0.14 s), short hold, then a smooth return to neutral (~0.8 s).
+    const k =
+      t < 0.14
+        ? Math.sin(((t / 0.14) * Math.PI) / 2)
+        : t < 0.24
+          ? 1
+          : Math.exp(-(((t - 0.24) / 0.28) ** 2));
+    const reduce =
+      typeof matchMedia === "function" &&
+      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return s.dir * s.amp * k * (reduce ? 0.3 : 1);
+  }
   lastFrame = 0;
   lastSnapAt = 0;
   offsets = new Map<string, Vec>();
@@ -363,6 +390,32 @@ export class Scene {
       );
     }
     this.lastContacts = state.contacts;
+    // New swing from a phone → start that player's swing look.
+    for (const p of state.players) {
+      if (p.bot) continue;
+      const id = p.input?.swingId ?? -1;
+      const prevSway = this.sway.get(p.id);
+      if (!prevSway) {
+        this.sway.set(p.id, { id, dir: 0, at: 0, amp: 0 });
+        continue;
+      }
+      if (id === prevSway.id || !p.input.swing) continue;
+      const handSign = p.hand === "left" ? -1 : 1;
+      let dir =
+        Math.abs(p.input.side ?? 0) > 0.2 ? Math.sign(p.input.side!) : 0;
+      if (!dir) {
+        // No clear sideways path: decide forehand/backhand from where the ball is.
+        const facing = p.team ? -1 : 1;
+        const lateral = (state.ball.x - p.pos.x) * facing * handSign;
+        dir = lateral >= 0 ? -handSign : handSign; // forehand → left (righty)
+      }
+      this.sway.set(p.id, {
+        id,
+        dir,
+        at: performance.now(),
+        amp: 0.6 + 0.4 * clamp(p.input.strength, 0, 1),
+      });
+    }
     if (state.event !== this.lastEvent) {
       this.lastEvent = state.event;
       const msg = state.message;
@@ -1045,14 +1098,16 @@ export class Scene {
     if (m && m.phase !== "lobby" && f && this.viewMode !== "broadcast") {
       const facing = this.followTeam ? -1 : 1,
         b = ball || { x: 0, y: 1, z: 0 };
+      // Swing look: shift the view toward the swing (world X; the far team's left is +X).
+      const sw = this.swayAmount(this.follow) * facing;
       if (this.viewMode === "first") {
         // Eyes at head height looking down-court. Only a gentle pull toward the ball, so your
         // paddle stays put at the lower right instead of swinging around the screen.
         const ahead = (f.z - b.z) * facing > 0.5;
         return {
-          eye: [f.x, 1.5, f.z],
+          eye: [f.x + sw * 0.12, 1.5, f.z],
           target: [
-            f.x + (ahead ? (b.x - f.x) * 0.15 : 0),
+            f.x + (ahead ? (b.x - f.x) * 0.15 : 0) + sw * 2.4,
             ahead ? lerp(1.0, b.y, 0.25) : 0.95,
             f.z - 6 * facing,
           ],
@@ -1066,9 +1121,9 @@ export class Scene {
         // so the player stays in frame.
         eye:
           this.aspect < 1.2
-            ? [f.x, 3.8, f.z + 6.3 * facing]
-            : [f.x * 0.7, 3.4, f.z + 5.4 * facing],
-        target: [lerp(f.x, b.x, 0.35), 0.85, f.z - 5.5 * facing],
+            ? [f.x + sw * 0.6, 3.8, f.z + 6.3 * facing]
+            : [f.x * 0.7 + sw * 0.6, 3.4, f.z + 5.4 * facing],
+        target: [lerp(f.x, b.x, 0.35) + sw * 2.6, 0.85, f.z - 5.5 * facing],
         fov: 56,
         shift: 0,
       };
@@ -1554,7 +1609,15 @@ export class Scene {
         eye: this.view.eye.map((v, i) => lerp(v, goal.eye[i], e)),
         // Look direction eases a little even in first person, so it never jerks.
         target: this.view.target.map((v, i) =>
-          lerp(v, goal.target[i], Math.min(e, 0.35)),
+          lerp(
+            v,
+            goal.target[i],
+            // A swing look must turn quickly to read as a head turn.
+            Math.min(
+              e,
+              Math.abs(this.swayAmount(this.follow)) > 0.05 ? 0.6 : 0.35,
+            ),
+          ),
         ),
         fov: lerp(this.view.fov, goal.fov, e),
         shift: lerp(this.view.shift, goal.shift, e),
