@@ -272,8 +272,23 @@ function display() {
     return;
   }
   syncMap();
+  // Sound effects (paddle hits, bounces, calls): on by default, remembered per browser.
+  let soundOn = true;
+  try {
+    soundOn = localStorage.getItem("visual-sound") !== "off";
+  } catch {
+    /* default on */
+  }
+  scene.muted = !soundOn;
+  $("sound").textContent = soundOn ? "Sound on" : "Sound off";
   action("sound", () => {
-    $("sound").textContent = scene.sound() ? "Sound on" : "Sound off";
+    soundOn = scene.sound();
+    $("sound").textContent = soundOn ? "Sound on" : "Sound off";
+    try {
+      localStorage.setItem("visual-sound", soundOn ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
   });
   let host = false,
     displayId = "",
@@ -540,6 +555,7 @@ function display() {
     if (userActed) return;
     userActed = true;
     syncMusic();
+    scene.wakeAudio();
   };
   addEventListener("pointerdown", firstGesture);
   addEventListener("keydown", firstGesture);

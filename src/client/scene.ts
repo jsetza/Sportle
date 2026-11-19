@@ -1,5 +1,5 @@
 import type { Match, Player, Vec } from "../shared/types.ts";
-import { COURT, OUTFITS } from "../shared/types.ts";
+import { COURT, OUTFITS, clamp } from "../shared/types.ts";
 import type { MapId, Outfit } from "../shared/types.ts";
 import { LOOKS, buildMap } from "./maps.ts";
 type V = number[];
@@ -138,6 +138,7 @@ export class Scene {
   history: { state: Match; at: number }[] = [];
   raf = 0;
   lastEvent = -1;
+  lastBounceAt = 0;
   lastFrame = 0;
   lastSnapAt = 0;
   offsets = new Map<string, Vec>();
@@ -244,12 +245,28 @@ export class Scene {
     this.staticCount = this.vertices.length / 6;
     this.vertices = [];
   }
+  /** Flip sound effects on/off; returns true when sound is now on. */
   sound() {
-    this.muted = !this.muted;
-    if (!this.audio) this.audio = new AudioContext();
-    this.audio.resume();
+    this.setSound(this.muted);
     return !this.muted;
   }
+  setSound(on: boolean) {
+    this.muted = !on;
+    if (on) this.wakeAudio();
+  }
+  /** Browsers only allow audio after a click/key, so call this from a user gesture. */
+  wakeAudio() {
+    if (this.muted) return;
+    if (!this.audio) {
+      this.audio = new AudioContext();
+      const len = Math.floor(this.audio.sampleRate * 0.12);
+      this.noise = this.audio.createBuffer(1, len, this.audio.sampleRate);
+      const d = this.noise.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+    this.audio.resume();
+  }
+  noise: AudioBuffer | null = null;
   tone(
     freq: number,
     to: number,
@@ -270,13 +287,73 @@ export class Scene {
     o.start();
     o.stop(a.currentTime + dur + 0.01);
   }
+  /** Short filtered noise click, the "crack" part of a hit or bounce. */
+  click(
+    freq: number,
+    q: number,
+    dur: number,
+    gain: number,
+    type: BiquadFilterType,
+  ) {
+    if (this.muted || !this.audio || !this.noise) return;
+    const a = this.audio,
+      src = a.createBufferSource(),
+      f = a.createBiquadFilter(),
+      g = a.createGain(),
+      t = a.currentTime;
+    src.buffer = this.noise;
+    src.playbackRate.value = 0.9 + Math.random() * 0.2;
+    f.type = type;
+    f.frequency.value = freq;
+    f.Q.value = q;
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    src.connect(f).connect(g).connect(a.destination);
+    src.start(t);
+    src.stop(t + dur + 0.01);
+  }
+  /** Paddle hitting the ball: a bright hollow "pock". power 0..1 = gentle..hard. */
+  hitSound(power: number) {
+    const p = clamp(power, 0, 1),
+      v = 0.55 + 0.45 * p,
+      jitter = 1 + (Math.random() - 0.5) * 0.06;
+    this.click(1500 + 1300 * p, 2.2, 0.045 + 0.02 * p, 0.32 * v, "bandpass");
+    this.tone(1050 * jitter, 640 * jitter, 0.07, 0.16 * v);
+    this.tone(430 * jitter, 300 * jitter, 0.09, 0.09 * v, "triangle");
+  }
+  /** Ball hitting the court: a duller, lower "tock". power 0..1 = soft..fast landing. */
+  bounceSound(power: number) {
+    const p = clamp(power, 0, 1),
+      v = 0.3 + 0.7 * p,
+      jitter = 1 + (Math.random() - 0.5) * 0.08;
+    this.click(700 + 500 * p, 0.8, 0.035, 0.22 * v, "lowpass");
+    this.tone(360 * jitter, 210 * jitter, 0.06, 0.13 * v);
+  }
   update(state: Match) {
     if (state.map) this.setMap(state.map);
     const prev = this.state;
     this.state = state;
     this.history.push({ state, at: performance.now() });
     if (this.history.length > 8) this.history.shift();
-    if (prev && state.contacts > this.lastContacts && this.lastContacts >= 0) {
+    const hit =
+      prev && state.contacts > this.lastContacts && this.lastContacts >= 0;
+    if (hit) {
+      const v = state.velocity,
+        speed = Math.hypot(v.x, v.y, v.z);
+      this.hitSound(0.6 * clamp((speed - 4) / 18, 0, 1) + 0.4 * state.quality);
+    } else if (prev && prev.phase === "rally") {
+      // Ground contact: the server counted a bounce, or the ball was falling low and stopped
+      // falling (also catches a landing that ends the rally as a fault before it is counted).
+      const counted = state.bounces > prev.bounces,
+        landed =
+          prev.velocity.y < -0.5 && state.velocity.y >= 0 && state.ball.y < 0.4;
+      const now = performance.now();
+      if ((counted || landed) && now - this.lastBounceAt > 90) {
+        this.lastBounceAt = now;
+        this.bounceSound((-prev.velocity.y - 0.5) / 8);
+      }
+    }
+    if (hit) {
       const p = state.players.find((q) => q.id === state.lastPlayer);
       if (p) this.contactAt.set(p.id, { ...state.ball, at: performance.now() });
       this.burst(
@@ -289,13 +366,7 @@ export class Scene {
     if (state.event !== this.lastEvent) {
       this.lastEvent = state.event;
       const msg = state.message;
-      if (/drive|dink|roll|lob|smash/i.test(msg))
-        this.tone(
-          /smash/i.test(msg) ? 760 : /dink/i.test(msg) ? 420 : 560,
-          170,
-          0.1,
-        );
-      else if (/fault|Out|Net|wins|Double bounce|hit /i.test(msg))
+      if (/fault|Out|Net|wins|Double bounce|hit /i.test(msg))
         this.tone(330, 220, 0.25, 0.05, "triangle");
     }
   }
