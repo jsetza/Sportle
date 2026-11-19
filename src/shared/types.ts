@@ -62,8 +62,8 @@ export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
     },
     {
       id: "haas",
-      name: "UC Berkeley Haas courtyard",
-      short: "Berkeley Haas",
+      name: "Fancy",
+      short: "Fancy",
       note: "Shingle-style courtyard in the hills",
     },
     {
