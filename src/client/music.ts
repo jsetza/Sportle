@@ -217,7 +217,6 @@ export class Music {
     if (this.out && this.ctx)
       this.out.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
   }
-  audio: HTMLAudioElement | null = null;
   fileGain: GainNode | null = null;
   filePlaying = false;
   fileTimer = 0;
@@ -237,26 +236,49 @@ export class Music {
       this.startFile();
     }
   }
+  /** Decoded file per style (looped sample-accurately, so a cut loop has no gap). */
+  buffers: Partial<Record<MusicStyle, AudioBuffer>> = {};
+  source: AudioBufferSourceNode | null = null;
   startFile() {
     if (this.filePlaying) return;
     if (!this.ctx) this.setup();
-    const ctx = this.ctx!;
-    if (!this.audio) {
-      this.audio = new Audio();
-      this.audio.loop = true;
-      this.audio.preload = "auto";
+    const ctx = this.ctx!,
+      style = this.style;
+    if (!this.fileGain) {
       this.fileGain = ctx.createGain();
       this.fileGain.gain.value = 0.0001;
-      ctx.createMediaElementSource(this.audio).connect(this.fileGain).connect(this.out!);
+      this.fileGain.connect(this.out!);
     }
-    const url = this.files[this.style]!;
-    if (!this.audio.src.endsWith(url)) this.audio.src = url;
     ctx.resume();
-    this.audio.play().catch(() => {});
     this.filePlaying = true;
+    const go = (buf: AudioBuffer) => {
+      if (!this.filePlaying || this.style !== style || this.source) return;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(this.fileGain!);
+      src.start();
+      this.source = src;
+    };
+    const have = this.buffers[style];
+    if (have) go(have);
+    else
+      fetch(this.files[style]!)
+        .then((r) => r.arrayBuffer())
+        .then((data) => ctx.decodeAudioData(data))
+        .then((buf) => {
+          this.buffers[style] = buf;
+          go(buf);
+        })
+        .catch(() => {
+          // Couldn't load the file: fall back to the synthesised loop for this style.
+          delete this.files[style];
+          this.filePlaying = false;
+          this.start();
+        });
     // Quieter on the menu, fuller in a match; eased so changes are smooth.
     const level = () => (this.intensity > 0.5 ? 0.85 : 0.55);
-    const g = this.fileGain!.gain;
+    const g = this.fileGain.gain;
     g.cancelScheduledValues(ctx.currentTime);
     g.setValueAtTime(Math.max(0.0001, g.value), ctx.currentTime);
     g.linearRampToValueAtTime(level(), ctx.currentTime + 1.2);
@@ -269,15 +291,14 @@ export class Music {
     if (!this.filePlaying || !this.ctx) return;
     const ctx = this.ctx,
       g = this.fileGain!.gain,
-      audio = this.audio!;
+      src = this.source;
     clearInterval(this.fileTimer);
     g.cancelScheduledValues(ctx.currentTime);
     g.setValueAtTime(g.value, ctx.currentTime);
     g.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
     this.filePlaying = false;
-    setTimeout(() => {
-      if (!this.filePlaying) audio.pause();
-    }, 700);
+    this.source = null;
+    src?.stop(ctx.currentTime + 0.65);
   }
   setStyle(style: MusicStyle) {
     if (!STYLES[style] || style === this.style) return;

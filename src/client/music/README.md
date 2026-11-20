@@ -12,6 +12,6 @@ Spotify, YouTube, etc. are not allowed here. Keep files under ~20 MB.
 
 ## Credits
 
-- `house.mp3`: **LOSTBOYJAY – COULD BE WRONG (Edit)**. Used with the artist's permission
+- `house.wav`: a 59-second instrumental loop cut from **LOSTBOYJAY – COULD BE WRONG (Edit)** (the beat-only drop sections, bars 40–55 and 72–87 at 129.2 BPM, joined on the beat with short crossfades so it loops without a gap). Used with the artist's permission
   (granted to the owner by email, 2026-11-20). All rights remain with the artist; not covered by
   this project's code licence. Remove it if that permission ends.
