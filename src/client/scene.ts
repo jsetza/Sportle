@@ -3,7 +3,7 @@ import { COURT, OUTFITS, PADDLES, SHOES, clamp } from "../shared/types.ts";
 import type { MapId, Outfit } from "../shared/types.ts";
 import { LOOKS, buildMap, lightingFor } from "./maps.ts";
 import { Renderer, STRIDE } from "./renderer.ts";
-import type { Post, ViewDraw } from "./renderer.ts";
+import type { Decal, Post, ViewDraw } from "./renderer.ts";
 import { Effects, calloutHtml, placeMeter } from "./effects.ts";
 import type { Timing } from "../shared/types.ts";
 type V = number[];
@@ -19,6 +19,10 @@ const norm = (a: V) => {
 };
 const dot = (a: V, b: V) => a.reduce((s, v, i) => s + v * b[i], 0);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const smooth01 = (t: number) => {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+};
 function multiply(a: V, b: V) {
   const o = new Array(16).fill(0);
   for (let c = 0; c < 4; c++)
@@ -883,6 +887,8 @@ export class Scene {
       label?: number;
       /** First-person view of this player: draw only the paddle, out in front of the eyes. */
       firstPerson?: boolean;
+      /** 0..1: arms up, celebrating a won point. */
+      cheer?: number;
     },
   ) {
     const prevMat = this.mat;
@@ -905,6 +911,7 @@ export class Scene {
       moving: number;
       server: boolean;
       owner: boolean;
+      cheer?: number;
     },
   ) {
     const col = teamColor(p.team),
@@ -912,7 +919,10 @@ export class Scene {
       hand = (p.hand === "left" ? -1 : 1) * facing,
       bob =
         Math.sin(performance.now() / 85) * Math.min(0.05, opts.moving * 0.015);
-    const y0 = bob;
+    const cheer = opts.cheer ?? 0;
+    // Celebration hop.
+    const y0 =
+      bob + cheer * Math.abs(Math.sin(performance.now() / 160)) * 0.16;
     // player indicator ring (and a fake shadow when real shadows are off)
     if (!this.gl.shadows)
       this.blob(
@@ -984,20 +994,38 @@ export class Scene {
       0.02,
       col.map((v) => v * 0.55),
     );
-    // face plate + shades
+    // face plate + shades (or the face photo, which replaces the shades)
     const fz = pos.z - 0.21 * facing;
     this.blob(pos.x, y0 + 1.28, fz, 0.22, 0.25, 0.12, palette.white);
-    const eyes = p.gear?.eyes ?? 0;
+    const photo = this.faces.has(p.id);
+    if (photo) {
+      // The plate faces -facing in z; the photo sits just in front of it.
+      const z = fz - 0.125 * facing,
+        hw = 0.21,
+        hh = 0.25,
+        r = -facing; // screen-left/right flips with facing so the photo isn't mirrored
+      this.decals.push({
+        key: "face:" + p.id,
+        corners: [
+          [pos.x - hw * r, y0 + 1.28 - hh, z],
+          [pos.x + hw * r, y0 + 1.28 - hh, z],
+          [pos.x + hw * r, y0 + 1.28 + hh, z],
+          [pos.x - hw * r, y0 + 1.28 + hh, z],
+        ],
+      });
+    }
+    const eyes = photo ? -1 : (p.gear?.eyes ?? 0);
     this.material(0.95);
-    this.box(
-      pos.x,
-      y0 + 1.33,
-      fz - 0.1 * facing,
-      0.34,
-      eyes === 2 ? 0.1 : 0.075,
-      0.05,
-      eyes === 1 ? palette.gold : eyes === 2 ? palette.orange : palette.dark,
-    );
+    if (eyes >= 0)
+      this.box(
+        pos.x,
+        y0 + 1.33,
+        fz - 0.1 * facing,
+        0.34,
+        eyes === 2 ? 0.1 : 0.075,
+        0.05,
+        eyes === 1 ? palette.gold : eyes === 2 ? palette.orange : palette.dark,
+      );
     if (eyes === 1)
       this.box(
         pos.x,
@@ -1021,15 +1049,16 @@ export class Scene {
         2,
         14,
       );
-    this.box(
-      pos.x,
-      y0 + 1.19,
-      fz - 0.11 * facing,
-      0.11,
-      0.02,
-      0.03,
-      palette.dark,
-    );
+    if (eyes >= 0)
+      this.box(
+        pos.x,
+        y0 + 1.19,
+        fz - 0.11 * facing,
+        0.11,
+        0.02,
+        0.03,
+        palette.dark,
+      );
     this.material(0.45);
     this.outfit(p.outfit ?? "classic", pos.x, y0, pos.z, facing, col);
     this.material(0.55);
@@ -1053,14 +1082,24 @@ export class Scene {
       );
     const paddleColor = (PADDLES[p.gear?.paddle ?? 0] ?? PADDLES[0])
       .color as unknown as V;
-    // paddle arm + paddle (orientation mirrors the phone)
+    // paddle arm + paddle (orientation mirrors the phone); arms up when cheering
     const swing = opts.swing;
-    const [px, py, pz] = this.reach(
+    let [px, py, pz] = this.reach(
       p.id,
       pos.x + hand * (0.52 + swing * 0.1),
       y0 + 0.92 + swing * 0.22,
       pos.z - (0.28 + swing * 0.25) * facing,
     );
+    if (cheer > 0) {
+      const wave = Math.sin(performance.now() / 120) * 0.08;
+      px = lerp(px, pos.x + hand * 0.42 + wave, cheer);
+      py = lerp(py, y0 + 2.05, cheer);
+      pz = lerp(pz, pos.z, cheer);
+      // the free arm goes up too
+      const ox = pos.x - hand * 0.42 - wave;
+      this.box(ox, y0 + 1.62, pos.z, 0.09, 0.62, 0.09, col, 0, -hand * 0.25 * cheer);
+      this.sphere(ox - hand * 0.06, y0 + 1.98, pos.z, 0.08, palette.white);
+    }
     this.box(
       (pos.x + hand * 0.3 + px) / 2,
       py - 0.05,
@@ -1310,6 +1349,57 @@ export class Scene {
       shift: this.panelOpen ? 0.3 : 0,
     };
   }
+  /**
+   * Presentation camera moves on top of the normal view: the match intro (close-up on the
+   * opponent, then a swoop down to the play camera) and a short move after a won point.
+   */
+  stage(goal: View, m: Match | null, positions: Map<string, Vec>, now: number): View & { snap?: boolean } {
+    if (!m) return goal;
+    if (m.introUntil > m.time && m.phase === "serve" && this.introSeen !== m.introUntil) {
+      this.introSeen = m.introUntil;
+      this.introT0 = now;
+      this.introDur = (m.introUntil - m.time) * 1000;
+    }
+    const ip = (now - this.introT0) / Math.max(1, this.introDur);
+    if (ip >= 0 && ip < 1 && m.phase === "serve") {
+      // Close-up of the other side's first player (or the far team's player).
+      const me = m.players.find((p) => p.id === this.follow);
+      const opp =
+        m.players.find((p) => p.team !== (me?.team ?? 0) && p.id !== "practice-feed") ??
+        m.players[0];
+      const op = positions.get(opp.id) ?? opp.pos;
+      const f = opp.team ? 1 : -1; // direction the opponent faces (toward the net)
+      const close: View = {
+        eye: [op.x + 0.35, 1.45, op.z + f * 2.1],
+        target: [op.x, 1.25, op.z],
+        fov: 34,
+        shift: 0,
+      };
+      const k = ip < 0.45 ? 0 : smooth01((ip - 0.45) / 0.55);
+      // Swoop: rise up and over on the way back.
+      const arc = Math.sin(k * Math.PI) * 2.2;
+      return {
+        eye: close.eye.map((v, i) => lerp(v, goal.eye[i], k) + (i === 1 ? arc : 0)),
+        target: close.target.map((v, i) => lerp(v, goal.target[i], k)),
+        fov: lerp(close.fov, goal.fov, k),
+        shift: lerp(0, goal.shift, k),
+        snap: true,
+      };
+    }
+    const age = (now - this.cheerAt) / 1000;
+    if (age >= 0 && age < 1.8 && this.cheerTeam >= 0 && m.phase !== "rally") {
+      // Point won: drift toward the winners and rise a little, then settle back.
+      const k = Math.sin((age / 1.8) * Math.PI) * (this.cheerSize === "point" ? 0.6 : 1);
+      const z = this.cheerTeam ? -4 : 4;
+      return {
+        ...goal,
+        eye: [goal.eye[0], goal.eye[1] + k * 0.6, goal.eye[2] + (z - goal.eye[2]) * 0.08 * k],
+        target: goal.target.map((v, i) => lerp(v, i === 2 ? z : i === 1 ? 1 : 0, 0.25 * k)),
+        fov: goal.fov - 3 * k,
+      };
+    }
+    return goal;
+  }
   // ——— attract-mode demo rally (cosmetic only, never presented as a match) ———
   demo(now: number) {
     const period = 1.25,
@@ -1469,6 +1559,78 @@ export class Scene {
     );
   }
   cpuMs = 0;
+  /** Face-photo decals for the view being built. */
+  decals: Decal[] = [];
+  /** Players on this screen who use a face photo (kept in this browser only). */
+  faces = new Set<string>();
+  setFace(playerId: string, img: TexImageSource | null) {
+    this.gl.setTexture("face:" + playerId, img);
+    if (img) this.faces.add(playerId);
+    else this.faces.delete(playerId);
+  }
+  /** Point celebration: winning team cheers, the camera moves a little (ms timestamps). */
+  cheerTeam = -1;
+  cheerAt = -1e9;
+  cheerSize: "point" | "game" | "match" = "point";
+  /** Match intro (local clock): close-up on the opponent, then swoop to the play camera. */
+  introT0 = -1e9;
+  introDur = 0;
+  introSeen = -1;
+  /** A point was won (or a side out): confetti, cheering, crowd roar, short camera move. */
+  celebrate(team: number, size: "point" | "game" | "match", sideOut: boolean) {
+    const now = performance.now();
+    if (sideOut) {
+      this.roar(0.25);
+      return;
+    }
+    this.cheerTeam = team;
+    this.cheerAt = now;
+    this.cheerSize = size;
+    const big = size === "match" ? 2 : size === "game" ? 1.5 : 1;
+    // Burst over each winning player.
+    const winners = this.state?.players.filter((p) => p.team === team && p.id !== "practice-feed") ?? [];
+    for (const p of winners.length ? winners : [{ pos: { x: 0, y: 0, z: team ? -4 : 4 } }]) {
+      const at = this.shown.get("p:" + (p as Player).id) ?? p.pos;
+      this.fx.confetti(at, teamColor(team), now, big);
+      if (size !== "point") this.fx.confetti(at, teamColor(team), now + 400, big * 0.8);
+    }
+    this.roar(size === "match" ? 1 : size === "game" ? 0.8 : 0.55);
+  }
+  roarNoise: AudioBuffer | null = null;
+  /** Crowd roar: a swell of band-passed noise with a little shimmer. */
+  roar(level: number) {
+    if (this.muted || !this.audio) return;
+    const a = this.audio;
+    if (!this.roarNoise) {
+      const len = Math.floor(a.sampleRate * 2.5);
+      this.roarNoise = a.createBuffer(2, len, a.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = this.roarNoise.getChannelData(ch);
+        let b = 0;
+        for (let i = 0; i < len; i++) {
+          // Pinkish noise with slow "voices" rising and falling.
+          b = b * 0.97 + (Math.random() * 2 - 1) * 0.3;
+          d[i] = b * (0.7 + 0.3 * Math.sin(i / (a.sampleRate * (0.11 + ch * 0.03))));
+        }
+      }
+    }
+    const t = a.currentTime,
+      src = a.createBufferSource(),
+      f = a.createBiquadFilter(),
+      g = a.createGain();
+    src.buffer = this.roarNoise;
+    f.type = "bandpass";
+    f.frequency.value = 900;
+    f.Q.value = 0.6;
+    const peak = 0.22 * level,
+      dur = 1.2 + level * 1.2;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(a.destination);
+    src.start(t);
+    src.stop(t + dur + 0.05);
+  }
   frozen: { positions: Map<string, Vec>; ball: Vec | null } | null = null;
   demoNear = 0;
   demoFar = 0;
@@ -1603,6 +1765,7 @@ export class Scene {
       this.follow = this.follows[pass] ?? null;
       this.vertices = [];
       this.fxv = [];
+      this.decals = [];
       this.followPos = null;
       this.tags = [];
       if (m) {
@@ -1636,7 +1799,13 @@ export class Scene {
               y: 1.85 + (m.serverId === p.id && m.phase === "serve" ? 0.55 : 0),
               z: pos.z,
             });
+          const cheerAge = (now - this.cheerAt) / 1000;
+          const cheer =
+            p.team === this.cheerTeam && cheerAge < (this.cheerSize === "point" ? 1.9 : 3.2)
+              ? Math.min(1, cheerAge / 0.15) * Math.min(1, ((this.cheerSize === "point" ? 1.9 : 3.2) - cheerAge) / 0.3)
+              : 0;
           this.mascot(p, pos, {
+            cheer,
             firstPerson: ownFirst,
             swing: Math.max(0, 1 - (m.time - p.lastHit) / 0.28),
             pitch: p.input.pitch,
@@ -1780,14 +1949,20 @@ export class Scene {
       // Each half keeps its own camera; a new one starts from the current view.
       this.view = this.views[pass] || { ...this.view };
       this.aspect = (split ? Math.floor(w / 2) - 1 : w) / Math.max(1, h);
-      const goal = this.targetView(m, ball);
+      const goal = this.stage(this.targetView(m, ball), m, positions, now);
       // Player cameras track tightly (a lagging first-person view feels sickly).
       const playerView =
         m &&
         m.phase !== "lobby" &&
         this.followPos &&
         this.viewMode !== "broadcast";
-      const e = playerView ? (this.viewMode === "first" ? 1 : 0.3) : 0.06;
+      const e = (goal as { snap?: boolean }).snap
+        ? 1
+        : playerView
+          ? this.viewMode === "first"
+            ? 1
+            : 0.3
+          : 0.06;
       this.view = {
         eye: this.view.eye.map((v, i) => lerp(v, goal.eye[i], e)),
         // Look direction eases a little even in first person, so it never jerks.
@@ -1827,6 +2002,7 @@ export class Scene {
         eye: this.view.eye,
         dynamic: new Float32Array(this.vertices),
         fx: new Float32Array(this.fxv),
+        decals: this.decals,
       });
     }
     this.gl.frame(w, h, light, drawViews, this.postFx(now), now / 1000);

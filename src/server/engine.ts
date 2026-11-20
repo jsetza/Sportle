@@ -5,6 +5,8 @@ import {
   DEFAULT_GEAR,
   clamp,
   PERFECT_ZONE,
+  DEFAULT_RULES,
+  WARMUP_HITS,
 } from "../shared/types.ts";
 import type {
   Match,
@@ -15,6 +17,7 @@ import type {
   Input,
   Vec,
   ServeStyle,
+  Rules,
 } from "../shared/types.ts";
 import {
   rotateService,
@@ -62,6 +65,7 @@ export function player(
     gear: { ...DEFAULT_GEAR },
     serveStyle: "drive",
     rr: 0,
+    keyboard: false,
     reactionAt: 0,
     target: vec(),
   };
@@ -70,11 +74,17 @@ export function match(
   mode: Mode = "practice",
   difficulty: Difficulty = "easy",
   map: MapId = "arena",
+  rules: Rules = DEFAULT_RULES,
 ): Match {
   return {
     mode,
     difficulty,
     map,
+    rules: { ...rules },
+    games: [0, 0],
+    gameWinner: null,
+    warmupLeft: 0,
+    introUntil: 0,
     phase: "lobby",
     paused: false,
     pauseReason: "",
@@ -247,16 +257,35 @@ export function announce(m: Match, s: string) {
   m.message = s;
   m.event++;
 }
+/** Match intro length (s): the display shows "YOU vs …" and swoops in; serving waits. */
+export const INTRO = 2.6;
+/** Longer pause after a game is won in a best-of-three. */
+export const GAME_PAUSE = 3.5;
 export function start(m: Match) {
-  m.score = [0, 0];
-  m.serving = 0;
-  m.serverNumber = doubles(m) ? 2 : 1;
-  m.serverId = rightPlayer(m, 0).id;
+  m.games = [0, 0];
   m.winner = null;
   m.paused = false;
   m.pauseReason = "";
   m.resumeAt = 0;
   m.contacts = 0;
+  m.warmupLeft =
+    m.rules.warmup && m.mode !== "practice" && !m.ranked ? WARMUP_HITS : 0;
+  newGame(m, 0);
+  m.introUntil = m.mode === "practice" ? 0 : m.time + INTRO;
+  m.nextServe += m.introUntil ? INTRO : 0;
+  if (m.warmupLeft) {
+    announce(m, "Warm-up · forehands, then backhands: find your timing. No points yet");
+  }
+}
+/** Fresh score for a new game; `first` serves first (the bot side during a warm-up). */
+export function newGame(m: Match, first: number) {
+  const bots = m.players.filter((p) => p.bot && p.id !== "practice-feed");
+  if (m.warmupLeft && bots.length) first = bots[0].team;
+  m.score = [0, 0];
+  m.gameWinner = null;
+  m.serving = first;
+  m.serverNumber = doubles(m) ? 2 : 1;
+  m.serverId = rightPlayer(m, first).id;
   prepare(m);
 }
 const scoreLine = (m: Match) =>
@@ -307,7 +336,29 @@ export function fault(m: Match, loser: number, reason: string) {
     announce(m, reason + " • next practice ball");
     return;
   }
+  if (m.warmupLeft !== 0) {
+    // Warm-up: no points. The same side serves again after a short pause.
+    m.phase = "point";
+    m.nextServe = m.time + 1.2;
+    announce(
+      m,
+      reason +
+        (m.warmupLeft > 0
+          ? " • warm-up · " + m.warmupLeft + " to go"
+          : " • warm-up done"),
+    );
+    return;
+  }
   rotateService(m, 1 - loser);
+  if (m.gameWinner !== null) {
+    m.phase = "point";
+    m.nextServe = m.time + GAME_PAUSE;
+    announce(
+      m,
+      `${m.gameWinner ? "Red" : "Blue"} wins game ${m.games[0] + m.games[1]} • ${m.score[m.gameWinner]}–${m.score[1 - m.gameWinner]}`,
+    );
+    return;
+  }
   if (m.phase === "over") {
     announce(
       m,
@@ -662,6 +713,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     m.popupAt = descentPoint(m, 2.0);
     m.quality = quality;
     m.hits++;
+    warmupHit(m, p);
     m.shot = strokeSide(m, p, side) + " pop-up";
     judge(m, p, true, "pop-up");
     announce(m, "Pop-up! • " + m.shot + " • smash it!");
@@ -703,6 +755,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   );
   m.quality = quality;
   m.hits++;
+  warmupHit(m, p);
   const stroke = smash
     ? "smash"
     : lob
@@ -753,6 +806,13 @@ export function clearsNet(m: Match) {
  * up or finds the net is "early"/"late" (was the ball still in front of you, or behind?);
  * anything else is "good", or "great" on the sweet spot.
  */
+/** A human warm-up hit counts down; at zero the rally plays out and then scoring starts. */
+function warmupHit(m: Match, p: Player) {
+  if (p.bot || m.warmupLeft <= 0) return;
+  m.warmupLeft--;
+  // -1 marks "warm-up over, start the match at the next pause".
+  if (m.warmupLeft === 0) m.warmupLeft = -1;
+}
 export function judge(m: Match, p: Player, popup: boolean, stroke: string) {
   if (p.bot) return;
   const net = !popup && !clearsNet(m);
@@ -883,7 +943,12 @@ export function movementTarget(m: Match, p: Player): Vec {
   }
   // Recovery: get out of the kitchen first, then return to the base position.
   // Medium/hard bots advance to the NVZ line once the return of serve is struck.
-  const advance = p.bot && m.difficulty !== "easy" && m.hits >= 2;
+  const style = m.rules.style;
+  const advance =
+    p.bot &&
+    m.hits >= 2 &&
+    style !== "defender" &&
+    (m.difficulty !== "easy" || style === "attacker");
   return vec(
     teammates.length === 1 ? -side * 0.5 : serviceX(m, p),
     0,
@@ -899,6 +964,14 @@ export function step(m: Match, dt = 1 / 120) {
       if (m.mode === "practice") {
         m.phase = "serve";
         m.nextServe = m.time + 0.3;
+      } else if (m.gameWinner !== null) newGame(m, 1 - m.gameWinner);
+      else if (m.warmupLeft < 0) {
+        // Warm-up finished: the real match starts at 0–0 with its own intro.
+        m.warmupLeft = 0;
+        newGame(m, 0);
+        m.introUntil = m.time + INTRO;
+        m.nextServe += INTRO;
+        announce(m, "Warm-up done · game on! " + m.rules.to + " points, win by 2");
       } else prepare(m);
     }
     return;
@@ -1134,6 +1207,13 @@ export function botShot(m: Match, p: Player): Input {
     calibrated: true,
   };
   const pick = r();
+  const style = m.rules.style;
+  if (style === "defender") {
+    // Defender: lobs over a net-rusher, resets and drops, rarely hits hard.
+    if (oppNet && pick < 0.3) return { ...base, strength: 0.55, direction: 0.4, pitch: 40 };
+    if (pick < 0.45 + skill * 0.2)
+      return { ...base, strength: 0.26 + r() * 0.12, direction: 0.05 };
+  }
   if (b.y > 1.85 && m.bounces === 0)
     return {
       ...base,
@@ -1143,12 +1223,15 @@ export function botShot(m: Match, p: Player): Input {
     };
   if (d !== "easy" && oppNet && pick < 0.12 + (d === "hard" ? 0.08 : 0))
     return { ...base, strength: 0.55, direction: 0.4, pitch: 40 };
-  // Third shot: better bots favour a drop to get to the net.
-  if (m.hits === 2 && pick < skill * 0.6)
+  // Third shot: better bots favour a drop to get to the net (attackers drive instead).
+  if (m.hits === 2 && pick < skill * (style === "attacker" ? 0.2 : 0.6))
     return { ...base, strength: 0.3 + r() * 0.08, direction: 0.05 };
   if (nearNet && oppNet && pick < 0.35 + skill * 0.4)
     return { ...base, strength: 0.22 + r() * 0.12, direction: 0.05 };
-  const power = { easy: 0.48, medium: 0.62, hard: 0.76 }[d] + (r() - 0.5) * 0.1;
+  const power =
+    { easy: 0.48, medium: 0.62, hard: 0.76 }[d] +
+    (r() - 0.5) * 0.1 +
+    (style === "attacker" ? 0.12 : style === "defender" ? -0.08 : 0);
   return {
     ...base,
     strength: clamp(power, 0.43, 0.9),

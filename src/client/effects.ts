@@ -11,7 +11,7 @@ export type Put = (p: V, n: V, c: V, strength: number, soft: number) => void;
 
 export type TrailStyle = "fire" | "cool" | "plain";
 type Burst = {
-  kind: "ring" | "shock" | "ice" | "bolt" | "sparkle" | "bounce" | "groundring";
+  kind: "ring" | "shock" | "ice" | "bolt" | "sparkle" | "bounce" | "groundring" | "confetti";
   x: number;
   y: number;
   z: number;
@@ -108,6 +108,10 @@ export class Effects {
       this.punchAt = now;
     }
   }
+  /** Confetti over the winning side: team colour, plus white and gold. Bigger for games/matches. */
+  confetti(at: Vec, col: V, now: number, size: number) {
+    this.add("confetti", { x: at.x, y: 2.2, z: at.z }, now, 2600 + size * 600, col, size, now % 991);
+  }
   /** Ball touched the court: a fading ring where it landed. */
   bounce(at: Vec, now: number, out: boolean) {
     this.add(
@@ -122,7 +126,7 @@ export class Effects {
   }
   add(kind: Burst["kind"], at: Vec, now: number, life: number, col: V, size: number, seed: number) {
     this.bursts.push({ kind, x: at.x, y: at.y, z: at.z, at: now, life, col, size, seed });
-    if (this.bursts.length > 24) this.bursts.shift();
+    if (this.bursts.length > 28) this.bursts.shift();
   }
   /** Record where the ball is drawn this frame (once per frame, not per split-screen half). */
   track(ball: Vec | null, now: number) {
@@ -215,6 +219,47 @@ export class Effects {
           }
         }
         this.disc(put, c, 0.5, b.col, 1.5 * (1 - k), right, up);
+      } else if (b.kind === "confetti") {
+        // Paper squares bursting up, then fluttering down; they catch the light as they spin.
+        const n = Math.round(110 * b.size);
+        const t = k * (b.life / 1000);
+        for (let i = 0; i < n; i++) {
+          const s = b.seed + i * 5.31;
+          const pick = rnd(s + 9);
+          const col = pick < 0.6 ? b.col.map((c) => Math.min(1, c * 1.15 + 0.12)) : pick < 0.8 ? [1, 1, 1] : [1, 0.8, 0.3];
+          const vx = (rnd(s) * 2 - 1) * 2.6 * b.size,
+            vz = (rnd(s + 1) * 2 - 1) * 2.0 * b.size,
+            vy = 2.5 + rnd(s + 2) * 3;
+          // Rise quickly, then fall slowly (air drag) with a sideways flutter.
+          const rise = Math.min(t, 0.35);
+          const y =
+            b.y + vy * rise - 4.9 * rise * rise - Math.max(0, t - 0.35) * (0.9 + rnd(s + 3) * 0.5);
+          if (y < 0.02) continue;
+          const drift = Math.min(t, 0.6);
+          const p = [
+            b.x + vx * drift + Math.sin(t * 6 + i) * 0.15,
+            y,
+            b.z + vz * drift + Math.cos(t * 5 + i) * 0.15,
+          ];
+          const spin = t * (5 + rnd(s + 4) * 7) + i;
+          const u2 = [Math.cos(spin), Math.sin(spin * 0.7) * 0.5, Math.sin(spin)];
+          const v2 = norm(cross(u2, [0.3, 1, 0.2]));
+          const q = 0.09;
+          const shine = 0.55 + 0.45 * Math.abs(Math.sin(spin * 1.3));
+          const fade = 1 - clamp((k - 0.8) / 0.2, 0, 1);
+          const c0 = scale(col, shine * fade);
+          const a = add(p, add(scale(u2, q), scale(v2, q))),
+            bb = add(p, add(scale(u2, -q), scale(v2, q))),
+            cc = add(p, add(scale(u2, -q), scale(v2, -q))),
+            dd = add(p, add(scale(u2, q), scale(v2, -q)));
+          const nn = norm(cross(u2, v2));
+          put(a, nn, c0, 1.8, 0);
+          put(bb, nn, c0, 1.8, 0);
+          put(cc, nn, c0, 1.8, 0);
+          put(a, nn, c0, 1.8, 0);
+          put(cc, nn, c0, 1.8, 0);
+          put(dd, nn, c0, 1.8, 0);
+        }
       } else if (b.kind === "ice") {
         // Ice-crystal burst: shards that shoot out and up, hold, then melt away.
         const grow = clamp(k / 0.18, 0, 1),

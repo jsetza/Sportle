@@ -8,6 +8,7 @@ import {
   prepare,
   queueSwing,
   POINT_PAUSE,
+  INTRO,
 } from "../src/server/engine.ts";
 import { COURT, ZERO_INPUT, cleanGear } from "../src/shared/types.ts";
 import type { ServeStyle } from "../src/shared/types.ts";
@@ -61,7 +62,7 @@ for (const style of ["drive", "roll", "slice"] as ServeStyle[])
     for (const power of [0.25, 0.6, 1]) {
       const m = singles();
       m.players[0].serveStyle = style;
-      for (let i = 0; i < 120; i++) step(m);
+      for (let i = 0; i < 120 * (1 + INTRO); i++) step(m); // past the match intro
       queueSwing(m, m.players[0], swingInput(power));
       assert.equal(m.serveKind, style);
       const startVx = m.velocity.x;
@@ -80,7 +81,7 @@ for (const style of ["drive", "roll", "slice"] as ServeStyle[])
 
 test("after a point the ball keeps flying for the pause, with a mark if it was out", () => {
   const m = singles();
-  for (let i = 0; i < 120; i++) step(m);
+  for (let i = 0; i < 120 * (1 + INTRO); i++) step(m); // past the match intro
   queueSwing(m, m.players[0], swingInput(0.6));
   // Replace the serve with a ball sailing long over the far baseline.
   m.ball = { x: 0, y: 1, z: -5 };

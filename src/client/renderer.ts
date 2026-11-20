@@ -51,6 +51,11 @@ export interface Post {
   /** Screen point the speed lines radiate from (0..1, origin bottom-left). */
   focus: [number, number];
 }
+/** A textured quad (the optional face photo), as 4 corners in world space. */
+export interface Decal {
+  key: string;
+  corners: number[][];
+}
 export interface ViewDraw {
   /** Pixel rectangle in the canvas (origin bottom-left). */
   rect: [number, number, number, number];
@@ -58,6 +63,7 @@ export interface ViewDraw {
   eye: number[];
   dynamic: Float32Array;
   fx: Float32Array;
+  decals?: Decal[];
 }
 
 const COMMON = `
@@ -180,6 +186,23 @@ const DIRECT_TONEMAP = `
   vec3 x = fragColor.rgb;
   x = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
   fragColor.rgb = pow(x, vec3(1.0 / 2.2));
+}`;
+// Face photo decal: texture × a soft light level, alpha-masked (oval cut-out in the image).
+const DECAL_VS = `
+in vec3 aPos; in vec2 aUv; uniform mat4 uVP; out vec2 vUv; out float vDepth;
+void main(){ vUv = aUv; gl_Position = uVP * vec4(aPos, 1.0); vDepth = gl_Position.w; }`;
+const DECAL_FS = `
+in vec2 vUv; in float vDepth; uniform sampler2D uTex; uniform float uLight; uniform float uDirect; uniform float uExposure;
+${"__OUT__"}
+void main(){
+  vec4 t = texture(uTex, vUv);
+  vec3 c = pow(t.rgb, vec3(2.2)) * uLight;
+  if (uDirect > 0.5) {
+    vec3 x = c * uExposure;
+    x = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+    c = pow(x, vec3(1.0 / 2.2));
+  }
+  fragColor = vec4(c, t.a);
 }`;
 const DEPTH_VS = `
 in vec3 aPos; uniform mat4 uLightVP;
@@ -373,6 +396,62 @@ export class Renderer {
   up?: WebGLProgram;
   composite?: WebGLProgram;
   fxaa?: WebGLProgram;
+  decal?: WebGLProgram;
+  decalBuf?: WebGLBuffer;
+  textures = new Map<string, WebGLTexture>();
+  /** Upload (or replace) an image texture under `key`; null removes it. */
+  setTexture(key: string, img: TexImageSource | null) {
+    const gl = this.gl;
+    const old = this.textures.get(key);
+    if (old) gl.deleteTexture(old);
+    this.textures.delete(key);
+    if (!img) return;
+    const t = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.textures.set(key, t);
+  }
+  drawDecals(v: ViewDraw, direct: boolean, exposure: number) {
+    if (!v.decals?.length || !this.decal) return;
+    const gl = this.gl,
+      p = this.decal;
+    gl.useProgram(p);
+    gl.uniformMatrix4fv(this.u(p, "uVP"), false, v.vp);
+    gl.uniform1f(this.u(p, "uLight"), 0.85);
+    gl.uniform1f(this.u(p, "uDirect"), direct ? 1 : 0);
+    gl.uniform1f(this.u(p, "uExposure"), exposure);
+    gl.uniform1i(this.u(p, "uTex"), 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    for (const d of v.decals) {
+      const tex = this.textures.get(d.key);
+      if (!tex) continue;
+      const [a, b, c, e] = d.corners;
+      const data = new Float32Array([
+        // Corners are bottom-left, bottom-right, top-right, top-left; the texture is
+        // uploaded flipped, so v = 0 is the bottom of the photo.
+        ...a, 0, 0, ...b, 1, 0, ...c, 1, 1,
+        ...a, 0, 0, ...c, 1, 1, ...e, 0, 1,
+      ]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.decalBuf!);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
+      for (const i of [2, 3]) gl.disableVertexAttribArray(i);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    gl.disable(gl.BLEND);
+  }
   quad?: WebGLBuffer;
   staticBuf: WebGLBuffer;
   staticCount = 0;
@@ -455,6 +534,7 @@ export class Renderer {
     gl.bindAttribLocation(p, 2, "aColor");
     gl.bindAttribLocation(p, 3, "aMat");
     gl.bindAttribLocation(p, 0, "aQuad");
+    gl.bindAttribLocation(p, 1, "aUv");
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS))
       throw Error(gl.getProgramInfoLog(p) || "Unable to initialize renderer");
@@ -462,10 +542,13 @@ export class Renderer {
     return p;
   }
   compile() {
+    this.decalBuf = this.gl.createBuffer()!;
     if (!this.webgl2) {
       this.scene = this.program(SCENE_VS, SCENE_FS(false), false);
+      this.decal = this.program(DECAL_VS, DECAL_FS.replace("__OUT__", ""), false);
       return;
     }
+    this.decal = this.program(DECAL_VS, DECAL_FS.replace("__OUT__", "out vec4 fragColor;"));
     const fs = SCENE_FS(true);
     this.scene = this.program(SCENE_VS, fs);
     this.direct = this.program(
@@ -797,6 +880,8 @@ export class Renderer {
       }
       this.drawMesh(this.staticBuf, this.staticCount);
       this.drawMesh(this.dynBuf, dynCount);
+      this.drawDecals(v, !post2, light.exposure);
+      gl.useProgram(prog);
       // Additive glow (light shafts, trails, rings): no depth writes.
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE);

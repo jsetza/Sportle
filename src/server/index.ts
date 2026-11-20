@@ -14,6 +14,7 @@ import {
   acceptMove,
   rematch,
   begin,
+  setRules,
   chooseSide,
   swapSides,
   dropPause,
@@ -38,7 +39,7 @@ import type { Room, Session } from "./rooms.ts";
 import { detectOrigin, detectPlatform, clientIp } from "./hosting.ts";
 import type { ServerResponse } from "node:http";
 import type { Mode, Difficulty, MapId, Outfit } from "../shared/types.ts";
-import { MAPS, OUTFITS, cleanGear } from "../shared/types.ts";
+import { MAPS, OUTFITS, cleanGear, cleanRules } from "../shared/types.ts";
 const source = dirname(fileURLToPath(import.meta.url));
 const built = source.includes("/dist/");
 const root = resolve(source, "../client");
@@ -143,7 +144,12 @@ const server = createServer(async (req, res) => {
         ) as RankedQueue | null;
         const r = ranked
           ? createLobby(ranked, map)
-          : createRoom(a.mode as Mode, a.difficulty as Difficulty, map);
+          : createRoom(
+              a.mode as Mode,
+              a.difficulty as Difficulty,
+              map,
+              cleanRules(a.rules),
+            );
         return json(res, {
           ...view(r),
           credential: r.host,
@@ -326,6 +332,10 @@ const server = createServer(async (req, res) => {
       }
       if (r.state.ranked && (path === "/api/start" || path === "/api/rematch"))
         throw Error("Ranked matches start by themselves");
+      if (path === "/api/rules") {
+        setRules(r, a.rules, a.difficulty);
+        return json(res, { ok: true });
+      }
       if (path === "/api/team") {
         setTeam(r, String(a.playerId || ""), Number(a.team));
         return json(res, { ok: true });

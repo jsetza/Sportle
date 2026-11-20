@@ -7,8 +7,14 @@ import {
   setMove,
   setPhoneMove,
 } from "./engine.ts";
-import { MOVE_STYLES, SERVE_STYLES, DEFAULT_GEAR } from "../shared/types.ts";
-import type { Gear } from "../shared/types.ts";
+import {
+  MOVE_STYLES,
+  SERVE_STYLES,
+  DEFAULT_GEAR,
+  DEFAULT_RULES,
+  cleanRules,
+} from "../shared/types.ts";
+import type { Gear, Rules } from "../shared/types.ts";
 import { slots, teamFor } from "../shared/types.ts";
 import type {
   Mode,
@@ -100,6 +106,7 @@ export function createRoom(
   mode: Mode,
   difficulty: Difficulty,
   map: MapId = "arena",
+  rules: Rules = DEFAULT_RULES,
 ): Room {
   let code: string;
   do {
@@ -107,7 +114,7 @@ export function createRoom(
   } while (rooms.has(code));
   const r: Room = {
     code,
-    state: match(mode, difficulty, map),
+    state: match(mode, difficulty, map, rules),
     host: token(),
     pair: token(),
     pairExpires: Date.now() + PAIR_TTL,
@@ -192,6 +199,15 @@ export function joinController(
   });
   return { credential: key, player: p, seq: -1 };
 }
+/** Host changes the match format in the lobby (not in ranked: ranked rules are fixed). */
+export function setRules(r: Room, rules: unknown, difficulty: unknown) {
+  const m = r.state;
+  if (m.ranked) throw Error("Ranked matches use the standard rules");
+  if (m.phase !== "lobby") throw Error("Change the rules before the match starts");
+  m.rules = cleanRules(rules);
+  if (difficulty === "easy" || difficulty === "medium" || difficulty === "hard")
+    m.difficulty = difficulty;
+}
 export function begin(r: Room) {
   const m = r.state,
     humans = m.players.filter((p) => !p.bot);
@@ -262,6 +278,7 @@ export function acceptInput(
       return false;
   if (a.ctl !== undefined && a.ctl !== 0 && a.ctl !== 1 && a.ctl !== 2)
     return false;
+  if (a.kb !== undefined && typeof a.kb !== "boolean") return false;
   if (a.sv !== undefined && a.sv !== 0 && a.sv !== 1 && a.sv !== 2)
     return false;
   if (now - s.lastInput < 15) return false;
@@ -270,6 +287,7 @@ export function acceptInput(
   const p = r.state.players.find((p) => p.id === s.playerId);
   if (!p) return false;
   p.input = { ...a };
+  p.keyboard = a.kb === true;
   p.lastSeen = now;
   p.connected = true;
   r.updated = now;

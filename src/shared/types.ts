@@ -177,6 +177,8 @@ export type Input = {
   /** Thumb-pad movement, player-relative: mx = right(+)/left(-), mz = forward toward the net (+). */
   mx?: number;
   mz?: number;
+  /** Sent by the display's keyboard paddle (not phone sensors). */
+  kb?: boolean;
 };
 export type Player = {
   id: string;
@@ -220,11 +222,22 @@ export type Player = {
   serveStyle: ServeStyle;
   /** Ranked rating, shown in ranked rooms (0 when the phone has no ranked profile). */
   rr: number;
+  /** Paddle driven by the display's keyboard instead of a phone (owner request). */
+  keyboard: boolean;
 };
 export type Match = {
   mode: Mode;
   difficulty: Difficulty;
   map: MapId;
+  rules: Rules;
+  /** Games won by each team (best of three). */
+  games: number[];
+  /** Set when a game has just been won (shown during the point pause before the next game). */
+  gameWinner: number | null;
+  /** Human contacts left in the warm-up (0 = scoring has started / no warm-up). */
+  warmupLeft: number;
+  /** Sim time when the match intro ends (serving waits for it). */
+  introUntil: number;
   /** point = the rally just ended: the ball keeps flying for a moment before the reset. */
   phase: "lobby" | "serve" | "rally" | "point" | "over";
   paused: boolean;
@@ -290,6 +303,37 @@ export type Match = {
   /** Serve type of the ball in play ("" once anyone else has hit it). */
   serveKind: "" | ServeStyle;
 };
+/** Bot playing style (owner request). */
+export type BotStyle = "allround" | "attacker" | "defender";
+/** Match format chosen in the lobby. Ranked always uses DEFAULT_RULES. */
+export type Rules = {
+  /** Points to win a game (win by 2). */
+  to: 5 | 7 | 11;
+  /** 1 = a single game, 3 = best of three games. */
+  bestOf: 1 | 3;
+  /** Warm-up hits before scoring starts. */
+  warmup: boolean;
+  style: BotStyle;
+};
+export const DEFAULT_RULES: Rules = {
+  to: 11,
+  bestOf: 1,
+  warmup: false,
+  style: "allround",
+};
+/** Human paddle contacts in a warm-up before the score starts. */
+export const WARMUP_HITS = 10;
+/** Validate rules sent by a client; anything invalid falls back to the default. */
+export function cleanRules(a: unknown): Rules {
+  const o = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+  return {
+    to: o.to === 5 || o.to === 7 || o.to === 11 ? o.to : 11,
+    bestOf: o.bestOf === 3 ? 3 : 1,
+    warmup: o.warmup === true,
+    style:
+      o.style === "attacker" || o.style === "defender" ? o.style : "allround",
+  };
+}
 export type Timing = {
   /** Contact number this verdict belongs to (matches Match.contacts). */
   at: number;

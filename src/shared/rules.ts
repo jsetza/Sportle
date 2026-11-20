@@ -38,10 +38,27 @@ export function rotateService(m: Match, winner: number) {
     m.serverNumber = 1;
     m.serverId = rightPlayer(m, m.serving).id;
   }
-  if (m.score[winner] >= 11 && m.score[winner] - m.score[1 - winner] >= 2) {
-    m.phase = "over";
-    m.winner = winner;
+  if (gameWon(m, winner)) {
+    m.games[winner]++;
+    if (m.games[winner] >= Math.ceil(m.rules.bestOf / 2)) {
+      m.phase = "over";
+      m.winner = winner;
+    } else m.gameWinner = winner;
   }
+}
+/** Has `team` reached the game target with a two-point lead? */
+export function gameWon(m: Match, team: number) {
+  return (
+    m.score[team] >= m.rules.to && m.score[team] - m.score[1 - team] >= 2
+  );
+}
+/** Would winning the next rally end the game for `team`? (game point; needs the serve) */
+export function gamePoint(m: Match, team: number) {
+  return (
+    m.serving === team &&
+    m.score[team] + 1 >= m.rules.to &&
+    m.score[team] + 1 - m.score[1 - team] >= 2
+  );
 }
 export function contactFault(m: Match, p: Player): string | null {
   if (m.hits < 2 && m.bounces === 0) return "Two-bounce fault";

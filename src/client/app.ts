@@ -10,9 +10,11 @@ import {
   EYEWEAR,
   cleanGear,
 } from "../shared/types.ts";
-import type { Match, Input, MapId } from "../shared/types.ts";
+import type { Match, Input, MapId, Player } from "../shared/types.ts";
 import { Scene, VIEW_LABELS } from "./scene.ts";
 import { QUALITY_LABELS } from "./renderer.ts";
+import { Hud } from "./hud.ts";
+import { KeyboardPaddle } from "./keyboard.ts";
 import type { QualityPref } from "./renderer.ts";
 import type { ViewMode } from "./scene.ts";
 import { drawQR } from "./qr.ts";
@@ -113,25 +115,35 @@ function display() {
   </div>
   <div id="lobby" class="hidden">
     <div class="eyebrow" id="connection">Connecting</div>
-    <div id="pairing" class="pairing"><div class="qrtile"><canvas id="qr" class="qr"></canvas></div><div><small>Room code</small><div class="roomcode" id="roomcode"></div><p class="fine" id="pairHint">Scan with your phone camera.</p><div id="teamPick" class="hidden"><label for="pairTeam">Phones paired here join</label><select id="pairTeam"><option value="">Any open team</option><option value="0">Team blue</option><option value="1">Team red</option></select></div><button class="link" id="refreshPair">Refresh pairing link</button></div></div>
+    <div id="pairing" class="pairing"><div class="qrtile"><canvas id="qr" class="qr"></canvas><div class="pairedtile" aria-hidden="true"><span>✓</span><b>PAIRED</b></div></div><div><small>Room code</small><div class="roomcode" id="roomcode"></div><ul class="checklist" id="checklist"></ul><button class="link hidden" id="useKeys">Use the keyboard instead</button><p class="fine" id="pairHint">Scan with your phone camera.</p><div id="teamPick" class="hidden"><label for="pairTeam">Phones paired here join</label><select id="pairTeam"><option value="">Any open team</option><option value="0">Team blue</option><option value="1">Team red</option></select></div><button class="link" id="refreshPair">Refresh pairing link</button></div></div>
+    <div id="matchOpts" class="opts hidden">
+      <div class="optrow" id="optOppRow"><span id="optOppLabel">Opponent</span><div class="seg" data-opt="difficulty"><button data-v="easy">Rookie</button><button data-v="medium">Club</button><button data-v="hard">Pro</button></div></div>
+      <div class="optrow" id="optStyleRow"><span>Style</span><div class="seg" data-opt="style"><button data-v="allround">All-round</button><button data-v="attacker">Attacker</button><button data-v="defender">Defender</button></div></div>
+      <div class="optgrid"><div class="optrow"><span>Game to</span><div class="seg" data-opt="to"><button data-v="5">5</button><button data-v="7">7</button><button data-v="11">11</button></div></div><div class="optrow"><span>Match</span><div class="seg" data-opt="bestOf"><button data-v="1">1 game</button><button data-v="3">Best of 3</button></div></div><div class="optrow"><span>Warm-up</span><div class="seg" data-opt="warmup"><button data-v="true">On</button><button data-v="false">Off</button></div></div></div>
+    </div>
     <div class="difficulty viewpick" role="radiogroup" aria-label="Camera"><span>Camera · <kbd>V</kbd></span>${(["third", "first", "broadcast"] as const).map((v) => `<input type="radio" name="view" id="v-${v}" value="${v}"><label for="v-${v}">${{ third: "3rd person", first: "1st person", broadcast: "Broadcast" }[v]}</label>`).join("")}</div>
     <div id="players"></div>
+    <button class="link" id="photoOpen">Your face on the player (optional photo)</button>
     <div id="rankedBox" class="ranked hidden"><div class="rkstatus" id="rkStatus"></div><p class="fine" id="rkLast"></p><button class="cta" id="rkFind">Find match <span>→</span></button><button class="ghost hidden" id="rkCancel">Cancel search</button><h3>Leaderboard</h3><ol class="board" id="rkBoard"><li class="fine">No ranked games yet.</li></ol></div>
     <div class="telemetry" id="telemetry"></div>
     <button id="start" class="cta">Start practice <span>→</span></button>
-    <div class="row"><button id="pause" class="ghost">Pause</button><button id="resume" class="ghost">Resume</button></div>
-    <p class="fine">Move with <kbd>WASD</kbd> (player 1) and the <kbd>arrow keys</kbd> (player 2), or let characters position themselves. Compact phone swings control timing, angle and power. When it’s your serve, pick Drive, Roll or Slice on your phone and swing to serve.</p>
+    <div class="row inplay"><button id="pause" class="ghost">Pause</button><button id="resume" class="ghost">Resume</button></div>
+    <p class="fine inplay">Move with <kbd>WASD</kbd> (player 1) and the <kbd>arrow keys</kbd> (player 2), or let characters position themselves. Compact phone swings control timing, angle and power. When it’s your serve, pick Drive, Roll or Slice on your phone and swing to serve.</p>
     <button id="new" class="link">← Leave court</button>
   </div>
   <div id="error" role="alert"></div>
 </aside>
 <button class="paneltab" id="panelToggle" aria-controls="panel">Room</button>
-<div class="hud"><span class="courtlabel" id="courtLabel">POVPICKLE ARENA</span><div class="score" id="score">0 : 0</div></div>
+<div class="hud"><span class="courtlabel" id="courtLabel">POVPICKLE ARENA</span><div class="sboard" id="score"></div><div class="pills" id="pills"></div></div>
+<div class="banner" id="banner" aria-live="polite"></div>
+<div class="intro hidden" id="intro" aria-live="polite"></div>
+<div class="toast hidden" id="toast" aria-live="polite"></div>
 <div class="message" id="message" aria-live="polite">Pick a mode to start.</div>
 <div class="keys" id="keys" aria-live="polite"></div>
 <div class="callout hidden" id="callout" aria-live="assertive"><b>POP-UP!</b><span>Swing down to smash</span></div>
 <div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small id="goMode">MATCH</small><h2 id="goTitle">Blue wins</h2><div class="goscore" id="goScore">11 : 7</div><p id="goNames"></p><button class="cta" id="again">Play again <span>↻</span></button><button class="link" id="goMenu">Change mode</button><p class="fine" id="goWait"></p></div>
-<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Enable motion</b> and take the <b>movement test</b>: swing right, left, up and down when asked. Your phone learns your swings and remembers them. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
+<dialog id="photoDlg" class="photodlg"><h2>Your photo</h2><p class="fine">Line your face up in the oval.</p><div class="photorow"><div class="cam"><video id="camVideo" playsinline muted autoplay></video><canvas id="camShot" class="hidden" width="200" height="250"></canvas><div class="oval" aria-hidden="true"></div><p class="camerr" id="camErr"></p></div><div class="faceprev"><canvas id="facePrev" width="120" height="300"></canvas><small>On the court</small></div></div><p class="fine">The photo stays in this browser only and is never uploaded. Other screens see the drawn face.</p><div class="photobtns"><button class="link" id="drawnFace">Use a drawn face</button><span></span><button class="ghost" id="photoRetry">Try again</button><button class="cta" id="photoUse">Use photo <span>→</span></button></div></dialog>
+<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Enable motion</b> and take the <b>movement test</b>: swing right, left, up and down when asked. Your phone learns your swings and remembers them. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you: tilt to aim, swing up for topspin, open the face and lift for a lob, swing down on a high ball to smash, swing softly to dink.</li><li><b>No phone?</b> In the lobby choose <b>Use the keyboard instead</b>: hold and release <kbd>Space</kbd> to swing (longer = harder); hold <kbd>Shift</kbd> for a dink, <kbd>E</kbd> topspin, <kbd>Q</kbd> slice, <kbd>R</kbd> lob, <kbd>F</kbd> smash; <kbd>A</kbd>/<kbd>D</kbd> also aim; <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a drive/roll/slice serve.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
     "here-practice": "Practice feeds and a live paddle mirror. Start here.",
     "here-solo": "One phone. Choose the bot level below.",
@@ -283,6 +295,12 @@ function display() {
     return;
   }
   syncMap();
+  // Scoreboard, pills, banners, intro and warm-up toast; won points trigger the celebration.
+  const hud = new Hud(document.querySelector<HTMLElement>(".hud")!);
+  hud.onPoint = (e) => scene.celebrate(e.team, e.size, e.sideOut);
+  // "Use the keyboard instead": this screen drives one player's paddle from the keyboard.
+  const kb = new KeyboardPaddle();
+  kb.onError = error;
   // Test hook (automated browser checks only): open the page with #test.
   if (location.hash === "#test") {
     (window as any).__povScene = scene;
@@ -363,6 +381,8 @@ function display() {
     pairing();
     net.clock().catch(error);
     net.stream();
+    // A keyboard seat survives a reload of this screen.
+    kb.resume(net.room).catch(() => kb.stop());
   }
   net.onStatus = (s) => {
     ui("connection").text = s + " · " + net.room;
@@ -392,7 +412,12 @@ function display() {
     }
     scene.panelOpen =
       !playing || document.body.classList.contains("panel-open");
-    ui("score").text = state.score.join(" : ");
+    hud.update(
+      state,
+      localPlayers(state).map((p) => p.id),
+    );
+    lobbyUI(state);
+    applyFace(state);
     ui("message").text = (state.paused ? "PAUSED · " : "") + state.message;
     ui("courtLabel").text =
       (MAPS.find((x) => x.id === state.map)?.short.toUpperCase() ?? "") +
@@ -456,6 +481,209 @@ function display() {
     ui("start").html =
       (state.mode === "practice" ? "Start practice" : "Start match") +
       " <span>→</span>";
+  };
+  // ——— Lobby setup: match options, PAIRED card with checklist, keyboard seat ———
+  const optButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>("#matchOpts .seg button"),
+  );
+  const lobbyUI = (state: Match) => {
+    const lobby = state.phase === "lobby";
+    const opts = lobby && !state.ranked && state.mode !== "practice";
+    $("matchOpts").classList.toggle("hidden", !opts);
+    if (opts) {
+      const bots = state.mode === "solo" || state.mode === "coop";
+      $("optStyleRow").classList.toggle("hidden", !bots);
+      ui("optOppLabel").text = bots ? "Opponent" : "Hitbox";
+      const vals: Record<string, string> = {
+        difficulty: state.difficulty,
+        style: state.rules.style,
+        to: String(state.rules.to),
+        bestOf: String(state.rules.bestOf),
+        warmup: String(state.rules.warmup),
+      };
+      for (const b of optButtons) {
+        const opt = b.parentElement!.dataset.opt!;
+        b.classList.toggle("on", vals[opt] === b.dataset.v);
+        b.disabled = !host;
+        if (opt === "difficulty")
+          b.textContent = bots
+            ? { easy: "Rookie", medium: "Club", hard: "Pro" }[b.dataset.v!]!
+            : { easy: "Big", medium: "Medium", hard: "Normal" }[b.dataset.v!]!;
+      }
+    }
+    // Pairing card: big ✓ PAIRED once this screen's phones are all set, plus a checklist.
+    const mine = localPlayers(state);
+    const seats = state.ranked
+      ? state.ranked.queue === "1v1"
+        ? 1
+        : 2
+      : slots(state.mode);
+    const humans = state.players.filter((p) => !p.bot);
+    const ok = (p: Player | undefined) => !!p && p.connected && p.ready;
+    const allSet =
+      mine.length > 0 &&
+      mine.every(ok) &&
+      (humans.length >= seats || !!state.ranked);
+    $("pairing").classList.toggle("paired", lobby && allSet);
+    const p = mine.find((q) => !ok(q)) ?? mine[mine.length - 1];
+    const item = (done: boolean, busy: boolean, text: string) =>
+      `<li class="${done ? "done" : busy ? "busy" : ""}">${text}</li>`;
+    ui("checklist").html = lobby
+      ? item(!!p?.connected, false, "Phone connected") +
+        item(!!p?.input.sensors, !!p?.connected, p?.keyboard ? "Keyboard paddle on" : "Motion sensors on") +
+        item(!!p?.ready, !!p?.input.sensors, p && !p.ready && p.input.sensors ? "Setting up on the phone" : "Set up")
+      : "";
+    $("useKeys").classList.toggle(
+      "hidden",
+      !lobby || !!state.ranked || kb.active || humans.length >= seats || !pair,
+    );
+  };
+  // Clicks build on the latest choice even before the server's snapshot catches up.
+  let draft: { rules: Record<string, unknown>; difficulty: string; at: number } | null =
+    null;
+  for (const b of optButtons)
+    b.onclick = () => {
+      if (!current || !host) return;
+      const opt = b.parentElement!.dataset.opt!;
+      const fresh = draft && Date.now() - draft.at < 1500;
+      const rules: Record<string, unknown> = fresh
+        ? { ...draft!.rules }
+        : { ...current.rules };
+      let difficulty = fresh ? draft!.difficulty : (current.difficulty as string);
+      if (opt === "difficulty") difficulty = b.dataset.v!;
+      else if (opt === "to" || opt === "bestOf") rules[opt] = Number(b.dataset.v);
+      else if (opt === "warmup") rules.warmup = b.dataset.v === "true";
+      else rules[opt] = b.dataset.v;
+      draft = { rules, difficulty, at: Date.now() };
+      // Show the choice right away.
+      for (const o of Array.from(b.parentElement!.querySelectorAll("button")))
+        o.classList.toggle("on", o === b);
+      net.api("rules", { rules, difficulty }).catch(error);
+    };
+  action("useKeys", () => kb.start(net.room, pair));
+  // ——— Optional face photo (owner request): camera on this screen, oval guide.
+  // Kept in this browser's storage only, shown on this screen's player 1; never uploaded. ———
+  const faceImg = new Image();
+  let faceFor = "";
+  const loadFace = () => {
+    let url = "";
+    try {
+      url = localStorage.getItem("pov-face") || "";
+    } catch {}
+    faceFor = "";
+    if (url) faceImg.src = url;
+    return !!url;
+  };
+  let hasFace = loadFace();
+  const applyFace = (state: Match) => {
+    const me = localPlayers(state)[0];
+    if (!me || me.id === faceFor) return;
+    if (faceFor) scene.setFace(faceFor, null);
+    faceFor = me.id;
+    if (hasFace && faceImg.complete && faceImg.naturalWidth) scene.setFace(me.id, faceImg);
+    else if (hasFace) faceImg.onload = () => scene.setFace(me.id, faceImg);
+  };
+  const dlg = $<HTMLDialogElement>("photoDlg"),
+    video = $<HTMLVideoElement>("camVideo"),
+    shot = $<HTMLCanvasElement>("camShot");
+  let stream: MediaStream | null = null;
+  const stopCam = () => {
+    stream?.getTracks().forEach((t) => t.stop());
+    stream = null;
+  };
+  const drawPreview = (face: CanvasImageSource | null) => {
+    const c = $<HTMLCanvasElement>("facePrev"),
+      g = c.getContext("2d")!;
+    g.clearRect(0, 0, c.width, c.height);
+    g.fillStyle = "#54a8fa";
+    g.beginPath();
+    g.roundRect(14, 10, 92, 280, 46);
+    g.fill();
+    g.save();
+    g.beginPath();
+    g.ellipse(60, 78, 34, 42, 0, 0, Math.PI * 2);
+    g.fillStyle = "#f4efe6";
+    g.fill();
+    g.clip();
+    if (face) g.drawImage(face, 26, 36, 68, 84);
+    else {
+      g.fillStyle = "#1b1b24";
+      g.beginPath();
+      g.ellipse(48, 74, 4, 6, 0, 0, Math.PI * 2);
+      g.ellipse(72, 74, 4, 6, 0, 0, Math.PI * 2);
+      g.fill();
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(60, 88, 9, 0.2, Math.PI - 0.2);
+      g.stroke();
+    }
+    g.restore();
+  };
+  const startCam = async () => {
+    shot.classList.add("hidden");
+    video.classList.remove("hidden");
+    $("photoUse").textContent = "Take photo";
+    ui("camErr").text = "";
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: 640, height: 480 },
+      });
+      video.srcObject = stream;
+      await video.play();
+    } catch {
+      ui("camErr").text =
+        "The camera is blocked or missing. Allow it from the address bar, then try again.";
+    }
+  };
+  $("photoOpen").onclick = () => {
+    drawPreview(hasFace ? faceImg : null);
+    dlg.showModal();
+    startCam();
+  };
+  dlg.addEventListener("close", stopCam);
+  $("photoRetry").onclick = () => startCam();
+  $("drawnFace").onclick = () => {
+    try {
+      localStorage.removeItem("pov-face");
+    } catch {}
+    hasFace = false;
+    if (faceFor) scene.setFace(faceFor, null);
+    faceFor = "";
+    stopCam();
+    dlg.close();
+  };
+  $("photoUse").onclick = () => {
+    if (stream && video.videoWidth) {
+      // Crop the oval area (centre of the frame), mirrored like a selfie, with an oval mask.
+      const g = shot.getContext("2d")!,
+        vw = video.videoWidth,
+        vh = video.videoHeight,
+        h = vh * 0.82,
+        w = h * 0.8;
+      g.clearRect(0, 0, shot.width, shot.height);
+      g.save();
+      g.beginPath();
+      g.ellipse(100, 125, 98, 123, 0, 0, Math.PI * 2);
+      g.clip();
+      g.translate(shot.width, 0);
+      g.scale(-1, 1);
+      g.drawImage(video, (vw - w) / 2, (vh - h) / 2, w, h, 0, 0, shot.width, shot.height);
+      g.restore();
+      stopCam();
+      video.classList.add("hidden");
+      shot.classList.remove("hidden");
+      drawPreview(shot);
+      $("photoUse").innerHTML = "Use photo <span>→</span>";
+      return;
+    }
+    if (!shot.classList.contains("hidden")) {
+      try {
+        localStorage.setItem("pov-face", shot.toDataURL("image/png"));
+      } catch {}
+      hasFace = loadFace();
+      if (current) applyFace(current);
+      dlg.close();
+    }
   };
   // ——— Keyboard movement: WASD moves this screen's player 1, arrow keys move player 2 ———
   const KEYMAP: Record<string, [number, number, number]> = {
@@ -841,6 +1069,7 @@ function display() {
   action("pause", () => net.api("pause", {}));
   action("resume", () => net.api("resume", {}));
   action("new", () => {
+    kb.stop();
     sessionStorage.removeItem("visual-host");
     location.reload();
   });
