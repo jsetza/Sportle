@@ -434,6 +434,9 @@ const server = createServer(async (req, res) => {
         return res.end(req.method === "HEAD" ? undefined : content.subarray(start, end + 1));
       }
     }
+    // Game code and pages: always check for the current version, so a deploy never leaves a
+    // browser running a mix of old and new files (audio keeps its day-long cache above).
+    if (!AUDIO[file.slice(file.lastIndexOf(".") + 1)]) res.setHeader("Cache-Control", "no-cache");
     res.writeHead(200, { "Content-Type": type, "Content-Length": content.length });
     res.end(req.method === "HEAD" ? undefined : content);
   } catch (e) {
