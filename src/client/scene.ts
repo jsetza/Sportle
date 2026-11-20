@@ -1112,42 +1112,18 @@ export class Scene {
       0,
       hand * facing * 0.5,
     );
-    this.box(px, py - 0.2, pz, 0.06, 0.24, 0.06, palette.dark);
-    this.blob(
+    // Big, clearly two-sided paddle that follows the phone's orientation in real time.
+    this.paddle(
       px,
       py + 0.1,
       pz,
-      0.2,
-      0.24,
-      0.035,
-      col.map((v) => v * 0.7),
-      0,
-      6,
-      10,
-    );
-    this.box(
-      px,
-      py + 0.1,
-      pz,
-      0.36,
-      0.44,
-      0.04,
-      palette.dark,
       facing * ((opts.pitch * Math.PI) / 180 + swing * 0.9),
       (-opts.roll * facing * Math.PI) / 180,
       (opts.yaw * Math.PI) / 180,
-    );
-    this.box(
-      px,
-      py + 0.1,
-      pz,
-      0.32,
-      0.4,
-      0.05,
+      1.6,
       paddleColor,
-      facing * ((opts.pitch * Math.PI) / 180 + swing * 0.9),
-      (-opts.roll * facing * Math.PI) / 180,
-      (opts.yaw * Math.PI) / 180,
+      facing,
+      col,
     );
     if (opts.server) {
       this.blob(pos.x, y0 + 2.25, pos.z, 0.1, 0.1, 0.1, palette.ball);
@@ -1260,18 +1236,149 @@ export class Scene {
       col = teamColor(p.team);
     const [px, py, pz] = this.reach(
       p.id,
-      pos.x + hand * (0.44 - o.swing * 0.12),
-      0.98 + o.swing * 0.25,
-      pos.z - (0.85 + o.swing * 0.3) * facing,
+      pos.x + hand * (0.42 - o.swing * 0.12),
+      1.08 + o.swing * 0.25,
+      pos.z - (0.8 + o.swing * 0.3) * facing,
     );
     const rx = facing * ((o.pitch * Math.PI) / 180 + o.swing * 0.9),
       rz = (-o.roll * facing * Math.PI) / 180,
       ry = (o.yaw * Math.PI) / 180;
-    this.box(px, py - 0.24, pz, 0.05, 0.22, 0.05, palette.dark, rx, rz, ry);
-    this.box(px, py + 0.06, pz, 0.34, 0.42, 0.035, palette.dark, rx, rz, ry);
     const face = (PADDLES[p.gear?.paddle ?? 0] ?? PADDLES[0])
       .color as unknown as V;
-    this.box(px, py + 0.06, pz, 0.3, 0.38, 0.045, face, rx, rz, ry);
+    this.paddle(px, py + 0.06, pz, rx, rz, ry, 1.0, face, facing, col);
+  }
+  /**
+   * A pickleball paddle: rounded face, bright front (the hitting side, toward the net) with a
+   * light stripe, darker back, edge guard and grip, rotated like the phone (same rotation
+   * order as box()). `facing` = which way the player faces along z.
+   */
+  paddle(
+    cx: number,
+    cy: number,
+    cz: number,
+    rx: number,
+    rz: number,
+    ry: number,
+    k: number,
+    faceCol: V,
+    facing: number,
+    edgeCol: V = palette.dark,
+  ) {
+    const cX = Math.cos(rx),
+      sX = Math.sin(rx),
+      cY = Math.cos(ry),
+      sY = Math.sin(ry),
+      cZ = Math.cos(rz),
+      sZ = Math.sin(rz);
+    const rot = (a: number, b: number, c: number, translate = true): V => {
+      const by = b * cX - c * sX;
+      c = b * sX + c * cX;
+      b = by;
+      const ax = a * cY + c * sY;
+      c = -a * sY + c * cY;
+      a = ax;
+      const x = a * cZ - b * sZ,
+        y = a * sZ + b * cZ;
+      return translate ? [cx + x, cy + y, cz + c] : [x, y, c];
+    };
+    const w = 0.19 * k,
+      h = 0.22 * k,
+      r = 0.07 * k,
+      t = 0.014 * k,
+      front = -facing; // the hitting face points toward the net
+    // Rounded-rectangle outline (counter-clockwise).
+    const ring: [number, number][] = [];
+    for (const [ox, oy, a0] of [
+      [w - r, h - r, 0],
+      [-(w - r), h - r, 90],
+      [-(w - r), -(h - r), 180],
+      [w - r, -(h - r), 270],
+    ])
+      for (let i = 0; i <= 5; i++) {
+        const a = ((a0 + i * 18) * Math.PI) / 180;
+        ring.push([ox + Math.cos(a) * r, oy + Math.sin(a) * r]);
+      }
+    const prev = this.mat;
+    const back = faceCol.map((v) => v * 0.8 + 0.04);
+    for (const [side, col] of [
+      [front, faceCol],
+      [-front, back],
+    ] as [number, V][]) {
+      this.mat = [side === front ? 0.6 : 0.35, 0, 0, 0];
+      const n = rot(0, 0, side, false);
+      const c0 = rot(0, 0, side * t);
+      for (let i = 0; i < ring.length; i++) {
+        const [ax, ay] = ring[i],
+          [bx, by] = ring[(i + 1) % ring.length];
+        this.vertex(c0, n, col);
+        this.vertex(rot(ax, ay, side * t), n, col);
+        this.vertex(rot(bx, by, side * t), n, col);
+      }
+    }
+    // Edge guard in the team colour, faintly glowing so the outline always reads.
+    this.mat = [0.4, 0.35, 0, 0];
+    for (let i = 0; i < ring.length; i++) {
+      const [ax, ay] = ring[i],
+        [bx, by] = ring[(i + 1) % ring.length];
+      const n = rot(ax + bx, ay + by, 0, false);
+      const l = Math.hypot(n[0], n[1], n[2]) || 1;
+      const nn = [n[0] / l, n[1] / l, n[2] / l];
+      const e = 1.35;
+      const p0 = rot(ax, ay, t * e),
+        p1 = rot(bx, by, t * e),
+        p2 = rot(bx, by, -t * e),
+        p3 = rot(ax, ay, -t * e);
+      for (const p of [p0, p1, p2, p0, p2, p3]) this.vertex(p, nn, edgeCol);
+    }
+    // A light stripe across the hitting face, so its angle reads at a glance.
+    this.mat = [0.5, 0.15, 0, 0];
+    const sn = rot(0, 0, front, false),
+      z = front * (t + 0.002);
+    const sw = w * 0.7,
+      sy = h * 0.45,
+      sh = 0.018 * k;
+    const q = [rot(-sw, sy - sh, z), rot(sw, sy - sh, z), rot(sw, sy + sh, z), rot(-sw, sy + sh, z)];
+    for (const i of [0, 1, 2, 0, 2, 3]) this.vertex(q[i], sn, palette.white);
+    // The back shows a white sweet-spot ring, so you can tell which face you're looking at.
+    const bn = rot(0, 0, -front, false),
+      bz = -front * (t + 0.002);
+    for (let i = 0; i < 16; i++) {
+      const a0 = (i / 16) * Math.PI * 2,
+        a1 = ((i + 1) / 16) * Math.PI * 2,
+        r0 = 0.055 * k,
+        r1 = 0.075 * k;
+      const p = (a: number, rr: number) => rot(Math.cos(a) * rr, Math.sin(a) * rr + h * 0.1, bz);
+      for (const v of [p(a0, r0), p(a1, r0), p(a1, r1), p(a0, r0), p(a1, r1), p(a0, r1)])
+        this.vertex(v, bn, palette.white);
+    }
+    // Grip.
+    this.mat = [0.3, 0, 0, 0];
+    const gw = 0.03 * k,
+      g0 = -h + 0.02 * k,
+      g1 = -h - 0.13 * k;
+    const corners = [
+      [-gw, g0, -gw],
+      [gw, g0, -gw],
+      [gw, g1, -gw],
+      [-gw, g1, -gw],
+      [-gw, g0, gw],
+      [gw, g0, gw],
+      [gw, g1, gw],
+      [-gw, g1, gw],
+    ].map(([a, b, c]) => rot(a, b, c));
+    const center = rot(0, (g0 + g1) / 2, 0);
+    for (const f of [
+      [0, 1, 2, 3],
+      [4, 5, 6, 7],
+      [0, 4, 7, 3],
+      [1, 5, 6, 2],
+      [3, 2, 6, 7],
+      [0, 1, 5, 4],
+    ]) {
+      this.tri(corners[f[0]], corners[f[1]], corners[f[2]], [0.12, 0.12, 0.15], 1, center);
+      this.tri(corners[f[0]], corners[f[2]], corners[f[3]], [0.12, 0.12, 0.15], 1, center);
+    }
+    this.mat = prev;
   }
   targetView(m: Match | null, ball: Vec | null): View {
     const t = performance.now() / 1000;

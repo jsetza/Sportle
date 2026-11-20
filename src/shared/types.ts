@@ -179,6 +179,8 @@ export type Input = {
   mz?: number;
   /** Sent by the display's keyboard paddle (not phone sensors). */
   kb?: boolean;
+  /** Which side of the phone faced the screen: 1 = screen (forehand), -1 = back (backhand). */
+  face?: number;
 };
 export type Player = {
   id: string;

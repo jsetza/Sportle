@@ -867,10 +867,11 @@ test("ball speed follows the swing percentage for forehand/backhand drives and d
     s45.v / s90.v < 0.65,
     `45%/90% ratio ${(s45.v / s90.v).toFixed(2)}`,
   );
-  // Dinks: a softer dink floats slower too.
+  // Touch shots: a softer one floats slower too. From the baseline a gentle swing is a drop
+  // (a dink near the kitchen; see tests/shots.test.ts).
   const d15 = speed(0.15),
     d35 = speed(0.35);
-  assert.match(d15.shot, /dink/);
+  assert.match(d15.shot, /drop/);
   assert.ok(d15.v < d35.v, `${d15.v} ${d35.v}`);
   // Backhand side behaves the same.
   assert.ok(speed(0.45, -0.3).v < speed(0.9, -0.3).v);

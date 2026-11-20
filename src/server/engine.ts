@@ -190,11 +190,12 @@ function netSafeFlight(
   targetZ: number,
   fast: number,
   normal: number,
+  g = 9.81,
 ) {
   const b = m.ball;
   if (Math.sign(b.z) === Math.sign(targetZ) || b.z === 0) return fast;
   for (let t = fast; t < normal; t += 0.02) {
-    const vy = (0.07 - b.y + 4.905 * t * t) / t;
+    const vy = (0.07 - b.y + (g / 2) * t * t) / t;
     // When does the (slowing) ball reach the net plane?
     const boost = Math.min(
       MAX_LAUNCH_FACTOR,
@@ -202,7 +203,7 @@ function netSafeFlight(
     );
     const vz = ((targetZ - b.z) / t) * boost;
     const tn = Math.min(t, timeToCover(vz, b.z));
-    if (b.y + vy * tn - 4.905 * tn * tn > C.netCenter + 0.12) return t;
+    if (b.y + vy * tn - (g / 2) * tn * tn > C.netCenter + 0.12) return t;
   }
   return normal;
 }
@@ -673,21 +674,14 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const quality = p.bot
     ? botExecution(m, contactQuality(m, p))
     : contactQuality(m, p);
-  const power = clamp(input.strength, 0.15, 1),
-    open = clamp(input.pitch / 55, -1, 1),
-    direction = input.direction;
-  const smash = smashIntent(m, input);
-  const lob = !smash && open > 0.45 && direction > 0.1;
-  const roll = !lob && direction > 0.35;
-  const dink = power < 0.42;
-  // Soft dinks land inside the opponent's kitchen; slightly firmer ones become drops just beyond it.
-  const depth = smash
-    ? 5.5
-    : lob
-      ? 5.8
-      : dink
-        ? 1.55 + power * 2.7
-        : 3.4 + power * 2.5;
+  const power = clamp(input.strength, 0.15, 1);
+  const stroke = classifyShot(m, p, input);
+  const shape = SHOTS[stroke](power);
+  const smash = stroke === "smash",
+    lob = stroke === "lob",
+    dink = stroke === "dink" || stroke === "drop",
+    soft = dink || stroke === "block" || stroke === "reset";
+  const depth = shape.depth;
   // Roll/yaw are in the player's own frame (handedness already normalised on the phone);
   // the far team faces +z, so its left/right is mirrored in world X.
   // Off-centre or badly timed contact spreads the shot; big swings magnify the error.
@@ -703,6 +697,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   // Badly timed contact can pop the ball up instead: high, short and slow, an easy smash
   // for the other side. Same chance for players and bots.
   const popup = !smash && !lob && quality < 0.55 && rand(m) < 0.5;
+  void soft;
   if (popup) {
     const px = aim * 0.5 * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * 0.6;
     const pz = (p.team ? 1 : -1) * (C.kitchen + 2.3 + rand(m) * 1.5);
@@ -714,32 +709,35 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     m.quality = quality;
     m.hits++;
     warmupHit(m, p);
-    m.shot = strokeSide(m, p, side) + " pop-up";
+    m.shot = strokeSide(m, p, side, input.face) + " pop-up";
     judge(m, p, true, "pop-up");
     announce(m, "Pop-up! • " + m.shot + " • smash it!");
     return true;
   }
   const x = aim * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * miss * 2.8;
-  let flight = smash ? 0.58 : lob ? 1.95 : dink ? 1.05 : 1.5 - power * 0.55;
-  // Owner request: ball speed follows the swing percentage for forehand/backhand drives,
-  // rolls and dinks — a gentle swing sends a proportionally slower (loopier) ball to the
-  // same spot. Smashes and lobs keep their own speeds.
-  if (!smash && !lob) {
+  // Spin changes the flight: topspin adds downward pull (a higher, dipping arc), backspin
+  // takes some away (a flatter, floating ball). Launches account for it so shots still land
+  // where aimed; the bounce then kicks (topspin) or skids low (backspin).
+  const g = 9.81 + shape.spin;
+  let flight = shape.flight ?? 1.5 - power * 0.55;
+  // Owner request: ball speed follows the swing percentage for drives, rolls and slices —
+  // a gentle swing sends a proportionally slower (loopier) ball to the same spot.
+  if (shape.flight === undefined) {
     const tz = (p.team ? 1 : -1) * Math.max(0.6, depth);
     const dist = Math.hypot(x - b.x, tz - b.z);
-    if (dink) flight = 1.05 + (0.42 - power) * 1.3;
-    else {
-      flight = clamp(dist / (GROUND_MAX_SPEED * power ** 0.8), 0.7, 2.4);
-      // Fast drives are flat: make sure the arc still clears the net.
-      flight = netSafeFlight(m, tz, flight, flight * 1.8);
-    }
+    flight = clamp(dist / (GROUND_MAX_SPEED * shape.pace * power ** 0.8), 0.7, 2.4);
+    // Fast drives are flat: make sure the arc still clears the net.
+    flight = netSafeFlight(m, tz, flight, flight * 1.8, g);
+  } else if (!smash && !lob) {
+    const tz = (p.team ? 1 : -1) * Math.max(0.6, depth);
+    flight = netSafeFlight(m, tz, flight, flight * 1.8, g);
   }
   // Owner request: overheads and attacking volleys (hit before the bounce) fly 1.75× faster.
-  // Soft volleys (dinks) and lob volleys keep their touch. A safety check keeps the faster,
-  // flatter ball above the net.
-  if (smash || (m.bounces === 0 && !dink && !lob)) {
+  // Touch volleys (dinks, drops, blocks, resets) and lob volleys keep their touch. A safety
+  // check keeps the faster, flatter ball above the net.
+  if (smash || (m.bounces === 0 && !soft && !lob)) {
     const targetZ = (p.team ? 1 : -1) * Math.max(0.6, depth);
-    flight = netSafeFlight(m, targetZ, flight / VOLLEY_SPEEDUP, flight);
+    flight = netSafeFlight(m, targetZ, flight / VOLLEY_SPEEDUP, flight, g);
   }
   p.volleyMomentum = m.bounces === 0;
   if (p.volleyMomentum) p.momentumAt = m.time;
@@ -751,21 +749,13 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     (p.team ? 1 : -1) * Math.max(0.6, depth + long),
     // A mishit also flattens the arc, which is how balls find the net.
     flight * (1 - rand(m) * Math.min(0.6, miss * 0.7)),
-    roll ? power * 1.8 : 0,
+    shape.spin,
+    true,
   );
   m.quality = quality;
   m.hits++;
   warmupHit(m, p);
-  const stroke = smash
-    ? "smash"
-    : lob
-      ? "lob"
-      : roll
-        ? "roll"
-        : dink
-          ? "dink"
-          : "drive";
-  m.shot = strokeSide(m, p, side) + " " + stroke;
+  m.shot = strokeSide(m, p, side, input.face) + " " + stroke;
   judge(m, p, false, stroke);
   announce(
     m,
@@ -847,6 +837,68 @@ function botExecution(m: Match, q: number) {
  * 0..1 contact quality from where the ball is relative to the paddle side of the body
  * at the moment of contact (i.e. timing), and contact height. Not a physical measurement.
  */
+export type Stroke =
+  | "smash"
+  | "lob"
+  | "topspin"
+  | "roll"
+  | "drive"
+  | "slice"
+  | "chop"
+  | "dink"
+  | "drop"
+  | "block"
+  | "reset";
+/**
+ * Shot type from the paddle face angle (pitch: + open, − closed), the swing path
+ * (direction: + low-to-high, − high-to-low) and swing speed (strength), plus where the ball
+ * and player are (owner request):
+ * - high ball + downward swing → smash
+ * - big upward swing with an open face → lob
+ * - high-to-low with an open face → slice (backspin), harder → chop
+ * - gentle with little swing against a fast ball → block (volley) / reset (after the bounce)
+ * - gentle → dink near the kitchen, drop from further back
+ * - low-to-high with a closed or neutral face → roll, harder → topspin drive
+ * - anything else → flat drive
+ */
+export function classifyShot(m: Match, p: Player, input: Input): Stroke {
+  const power = clamp(input.strength, 0.15, 1),
+    open = clamp(input.pitch / 55, -1, 1),
+    dir = input.direction;
+  if (smashIntent(m, input)) return "smash";
+  if (open > 0.4 && dir > 0.3 && power >= 0.45) return "lob";
+  if (dir < -0.2 && open > 0.05) return power >= 0.62 ? "chop" : "slice";
+  if (power < 0.42) {
+    const v = m.velocity,
+      incoming = Math.hypot(v.x, v.y, v.z);
+    if (Math.abs(dir) < 0.15 && Math.abs(open) < 0.3 && incoming > 9)
+      return m.bounces === 0 ? "block" : "reset";
+    return Math.abs(p.pos.z) < C.kitchen + 1.3 ? "dink" : "drop";
+  }
+  if (dir > 0.35 && open <= 0.15) return power >= 0.62 ? "topspin" : "roll";
+  return "drive";
+}
+/**
+ * Flight per shot: target depth (m from the net), a fixed flight time (s) for touch shots or
+ * undefined to derive it from swing speed × pace, and spin (m/s² of extra downward pull:
+ * + topspin, − backspin).
+ */
+export const SHOTS: Record<
+  Stroke,
+  (power: number) => { depth: number; flight?: number; pace: number; spin: number }
+> = {
+  smash: () => ({ depth: 5.5, flight: 0.58, pace: 1, spin: 0 }),
+  lob: () => ({ depth: 5.8, flight: 1.95, pace: 1, spin: 0.5 }),
+  topspin: (p) => ({ depth: Math.min(6.0, 4.3 + p * 1.6), pace: 1, spin: 3 + p * 3 }),
+  roll: (p) => ({ depth: 3.4 + p * 2.5, pace: 0.95, spin: 2 + p * 2 }),
+  drive: (p) => ({ depth: 3.4 + p * 2.5, pace: 1, spin: 0 }),
+  slice: (p) => ({ depth: 3.4 + p * 2.2, pace: 0.85, spin: -(2 + p * 2) }),
+  chop: (p) => ({ depth: Math.min(6.0, 4.2 + p * 1.5), pace: 0.8, spin: -(4 + p * 1.5) }),
+  dink: (p) => ({ depth: 1.55 + p * 2.7, flight: 1.05 + (0.42 - p) * 1.3, pace: 1, spin: -1.2 }),
+  drop: (p) => ({ depth: 1.55 + p * 2.7, flight: 1.3 + (0.42 - p) * 1.3, pace: 1, spin: -1 }),
+  block: (p) => ({ depth: 2.0 + p * 1.2, flight: 0.95, pace: 1, spin: 0 }),
+  reset: (p) => ({ depth: 1.8 + p * 1.2, flight: 1.1, pace: 1, spin: -0.6 }),
+};
 /** Downward swing at a ball above 1.8 m. Pop-ups are easier: a softer downward swing counts. */
 export function smashIntent(m: Match, input: Input) {
   return input.direction < (m.popup ? -0.3 : -0.45) && m.ball.y > 1.8;
@@ -870,7 +922,15 @@ export function contactQuality(m: Match, p: Player) {
  * paddle hand). When the ball is nearly central, the swing path decides — a forehand swings
  * across toward the non-paddle side.
  */
-export function strokeSide(m: Match, p: Player, swingSide = 0) {
+export function strokeSide(
+  m: Match,
+  p: Player,
+  swingSide = 0,
+  face?: number,
+) {
+  // The phone knows which side of it faced the screen: screen = forehand, back = backhand.
+  if (face === 1) return "Forehand";
+  if (face === -1) return "Backhand";
   const lateral = (m.ball.x - p.pos.x) * forehandSide(p);
   if (Math.abs(lateral) > 0.12) return lateral > 0 ? "Forehand" : "Backhand";
   const hand = p.hand === "left" ? -1 : 1;
@@ -1116,6 +1176,20 @@ export function step(m: Match, dt = 1 / 120) {
       m.velocity.y *= 0.72;
       m.velocity.x += m.curve * 0.45;
       m.curve = 0;
+    } else if (m.spin > 0.5) {
+      // Topspin kicks forward and stays a little lower off the bounce.
+      const k = clamp(m.spin / 6, 0, 1);
+      m.velocity.y *= 1 - 0.15 * k;
+      m.velocity.x *= 1 + 0.18 * k;
+      m.velocity.z *= 1 + 0.18 * k;
+      m.spin *= 0.4;
+    } else if (m.spin < -0.5) {
+      // Backspin skids low and checks up.
+      const k = clamp(-m.spin / 6, 0, 1);
+      m.velocity.y *= 1 - 0.4 * k;
+      m.velocity.x *= 1 - 0.18 * k;
+      m.velocity.z *= 1 - 0.18 * k;
+      m.spin = 0;
     }
   }
   const team = m.bounces ? 1 - m.lastTeam : m.lastTeam;

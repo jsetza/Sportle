@@ -279,6 +279,7 @@ export function acceptInput(
   if (a.ctl !== undefined && a.ctl !== 0 && a.ctl !== 1 && a.ctl !== 2)
     return false;
   if (a.kb !== undefined && typeof a.kb !== "boolean") return false;
+  if (a.face !== undefined && a.face !== 1 && a.face !== -1) return false;
   if (a.sv !== undefined && a.sv !== 0 && a.sv !== 1 && a.sv !== 2)
     return false;
   if (now - s.lastInput < 15) return false;
