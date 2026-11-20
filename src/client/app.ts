@@ -387,6 +387,23 @@ function display() {
   net.onStatus = (s) => {
     ui("connection").text = s + " · " + net.room;
   };
+  // The room is gone (server restarted/redeployed, or expired): back to the menu, say why.
+  net.onGone = () => {
+    kb.stop();
+    sessionStorage.removeItem("visual-host");
+    sessionStorage.setItem(
+      "pov-gone",
+      "Room " + net.room + " has ended (the server restarted or the room expired). Create a new game.",
+    );
+    location.reload();
+  };
+  {
+    const gone = sessionStorage.getItem("pov-gone");
+    if (gone) {
+      sessionStorage.removeItem("pov-gone");
+      $("error").textContent = gone;
+    }
+  }
   net.onState = ({ state }: { state: Match }) => {
     // Matchmaking moves this screen into its ranked match (and back home afterwards).
     const mv = state.moves?.[displayId];
@@ -1648,6 +1665,15 @@ function phone() {
     const p = savedProfile();
     if (p) saveProfile({ ...p, sensitivity: filter.sensitivity });
   };
+  // The room is gone (server restarted/redeployed, or expired): stop, and say what to do.
+  net.onGone = () => {
+    localStorage.removeItem("visual-controller-" + net.room);
+    connState = "ROOM ENDED";
+    ui("connection").text = connState;
+    $("pDot").className = "dot";
+    $("error").textContent =
+      "This room has ended (the server restarted or the room expired). Scan the new code on the big screen.";
+  };
   // Header: PADDLE · P1 · ● LIVE · 15 MS. Connection trouble only changes this small status;
   // it never covers the setup.
   let connState = "";
@@ -1886,7 +1912,7 @@ function phone() {
     // Up to two packets in flight hides tunnel/cellular round trips; the server drops any
     // that arrive out of order, and each swing rides in three packets so one late packet
     // cannot lose it (the server applies each swing id once).
-    if (!net.credential || inflight >= 2 || document.hidden) return;
+    if (!net.credential || net.gone || inflight >= 2 || document.hidden) return;
     inflight++;
     const fresh = pendingSwing && performance.now() >= swingDue;
     if (fresh) {

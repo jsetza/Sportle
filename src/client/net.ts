@@ -8,6 +8,18 @@ export class Connection {
   onState: (s: any) => void = () => {};
   onStatus: (s: string) => void = () => {};
   /**
+   * The room no longer exists (server restarted or redeployed, or the room expired) or this
+   * session expired. Retrying can't help, so streaming stops and this is called once.
+   */
+  onGone: (reason: string) => void = () => {};
+  gone = false;
+  private goneNow(reason: string) {
+    if (this.gone) return;
+    this.gone = true;
+    this.stop();
+    this.onGone(reason);
+  }
+  /**
    * Live state transport. Server-Sent Events by default; falls back to short polling when
    * SSE cannot work — e.g. Cloudflare quick tunnels (*.trycloudflare.com), which do not
    * support SSE — or when the stream stalls. Polling keeps the same authoritative snapshots.
@@ -48,7 +60,11 @@ export class Connection {
           : `Couldn't reach the game server (HTTP ${r.status}). Check that it's still running on the computer, then try again.`,
       );
     }
-    if (!r.ok) throw Error(a.error || "Connection failed");
+    if (!r.ok) {
+      const e = Error(a.error || "Connection failed") as Error & { status?: number };
+      e.status = r.status;
+      throw e;
+    }
     return a;
   }
   async clock() {
@@ -93,6 +109,13 @@ export class Connection {
             signal: controller.signal,
           },
         );
+        if (r.status === 404 || r.status === 401) {
+          const a = await r.json().catch(() => ({}));
+          clearTimeout(watchdog);
+          clearInterval(stall);
+          this.goneNow(a.error || "This room has ended");
+          return;
+        }
         if (!r.ok || !r.body) throw Error("Session lost");
         const reader = r.body.getReader(),
           decoder = new TextDecoder();
@@ -146,7 +169,12 @@ export class Connection {
             newest = time;
             this.onState(s);
           }
-        } catch {
+        } catch (e) {
+          const status = (e as { status?: number }).status;
+          if (status === 404 || status === 401) {
+            this.goneNow((e as Error).message);
+            return;
+          }
           errors++;
           this.onStatus("Reconnecting…");
           await new Promise((r) => setTimeout(r, Math.min(3000, 300 * errors)));
