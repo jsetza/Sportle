@@ -318,27 +318,16 @@ export function learnSwings(
 ): { ok: true; profile: SwingProfile } | { ok: false; redo: "fore" | "back" | "both"; reason: string } {
   if (fore.length < 3) return { ok: false, redo: "fore", reason: "Three forehands, please." };
   if (back.length < 3) return { ok: false, redo: "back", reason: "Three backhands, please." };
-  const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
-  const fs = avg(fore.map((s) => s.side)),
-    bs = avg(back.map((s) => s.side));
+  // Robust to an odd swing: count which way most swings went instead of averaging.
+  const vote = (a: number[]) => a.reduce((s, v) => s + Math.sign(v), 0);
+  const fs = vote(fore.map((s) => s.side)),
+    bs = vote(back.map((s) => s.side));
   // Right hand: forehands go right→left (side < 0), backhands left→right (side > 0).
   const want = hand === "left" ? -1 : 1;
-  const gap = (bs - fs) * want;
-  if (Math.abs(bs - fs) < 0.3)
-    return {
-      ok: false,
-      redo: "both",
-      reason: "Forehands and backhands looked the same. Swing clearly across your body.",
-    };
-  // Forehand faces: mostly the screen side toward the TV (or consistently the other way).
-  const ff = avg(fore.map((s) => s.face)),
-    bf = avg(back.map((s) => s.face));
-  if (Math.abs(ff - bf) < 0.6)
-    return {
-      ok: false,
-      redo: "back",
-      reason: "Turn the phone over for backhands, so its back faces the TV.",
-    };
+  // Unclear (both ways the same)? Keep the standard sign rather than asking for a redo.
+  const gap = bs - fs === 0 ? 1 : Math.sign(bs - fs) * want;
+  const ff = vote(fore.map((s) => s.face)),
+    bf = vote(back.map((s) => s.face));
   const speeds = [...fore, ...back].map((s) => s.rad).sort((a, b) => a - b);
   const typical = (speeds[2] + speeds[3]) / 2;
   const deg = (typical * 180) / Math.PI;
@@ -346,7 +335,8 @@ export function learnSwings(
     ok: true,
     profile: {
       sideSign: gap > 0 ? 1 : -1,
-      faceSign: ff >= bf ? 1 : -1,
+      // Standard unless the forehands clearly read as the other face.
+      faceSign: ff < bf ? -1 : 1,
       sensitivity: clamp((0.6 * 210) / Math.max(60, deg), 0.5, 2.5),
       typical,
     },

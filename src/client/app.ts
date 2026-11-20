@@ -1358,9 +1358,12 @@ function phone() {
   const goReady = async () => {
     showStep("done");
     ready = true;
+    readyAt = performance.now();
     showGame(true);
     await net.api("ready", { ready: true }).catch(error);
   };
+  let serverReady = false,
+    readyAt = -1e9;
   let wake: any = null;
   const screenAngle = () =>
     screen.orientation?.angle ?? Number((window as any).orientation || 0);
@@ -1371,6 +1374,7 @@ function phone() {
     if (angle !== lastOrientation) lastOrientation = angle;
     filter.orientation(e.alpha, e.beta, e.gamma, angle);
   }
+  let setupQuietUntil = 0;
   let swingRad = 0,
     swingPathPeak = { side: 0, up: 0 },
     swingFace = 1;
@@ -1387,9 +1391,13 @@ function phone() {
     );
     const rad = (Math.hypot(r.alpha, r.beta, r.gamma) * Math.PI) / 180;
     gaugeRad = Math.max(rad, gaugeRad * 0.92);
-    if (swing) {
+    if (swing && pendingSwing && (step === "fore" || step === "back")) {
+      // Still inside one setup swing (backswing → forward swing): keep collecting its peak.
+    } else if (swing && performance.now() < setupQuietUntil) {
+      // Follow-through of a swing that was just counted.
+    } else if (swing) {
       pendingSwing = true;
-      swingDue = motionAt + 65;
+      swingDue = motionAt + (step === "fore" || step === "back" ? 350 : 65);
       swingPeak = filter.strength;
       swingDirection = filter.direction;
       swingSide = filter.side;
@@ -1545,7 +1553,7 @@ function phone() {
     $("enable").click();
   });
   // 02 · Aim: press and hold while the phone lies flat and still; the bar fills over ~1.2 s.
-  const HOLD_MS = 1200;
+  const HOLD_MS = 800;
   let holdStart = 0,
     holdTimer: ReturnType<typeof setInterval> | undefined;
   const holdSegs = $("holdSegs");
@@ -1570,10 +1578,11 @@ function phone() {
     clearInterval(holdTimer);
     holdTimer = setInterval(() => {
       const { alpha, beta, gamma } = filter.abs;
-      const flat = aimFrom(alpha, beta, gamma) && Math.abs(beta) < 40 && Math.abs(gamma) < 40;
-      const still = Math.hypot(...filter.rate) < 60;
+      const flat = aimFrom(alpha, beta, gamma) && Math.abs(beta) < 60 && Math.abs(gamma) < 60;
+      const still = Math.hypot(...filter.rate) < 150;
       if (!flat || !still) {
-        holdStart = performance.now();
+        // A wobble slows the bar down a little instead of starting over.
+        holdStart = Math.min(performance.now(), holdStart + 80);
         $("holdHint").textContent = !flat ? "HOLD IT FLAT, SCREEN UP" : "HOLD STILL…";
       } else $("holdHint").textContent = "HOLD STILL…";
       const k = Math.min(1, (performance.now() - holdStart) / HOLD_MS);
@@ -1783,10 +1792,13 @@ function phone() {
     }
     current = state;
     const p = state.players.find((p) => p.id === playerId);
-    const wasReady = ready;
-    ready = p?.ready || false;
-    // The server can un-ready a phone (backgrounded, sensors lost): back to setup.
-    if (wasReady && !ready && step === "done") {
+    const wasReady = serverReady;
+    serverReady = p?.ready || false;
+    if (serverReady) ready = true;
+    // Only a ready → not-ready change the server itself reports (and not in the moment
+    // right after we said Ready, before the server has caught up) sends you back to aiming.
+    if (wasReady && !serverReady && step === "done" && performance.now() - readyAt > 3000) {
+      ready = false;
       // Back to aiming: one press-and-hold and you're in again (swings are kept).
       showGame(false);
       welcome = true;
@@ -1923,6 +1935,7 @@ function phone() {
     if (swing) swingRepeats--;
     if (fresh) {
       pendingSwing = false;
+      if (step === "fore" || step === "back") setupQuietUntil = performance.now() + 350;
       setupSwing({ side: swingPathPeak.side, up: swingPathPeak.up, rad: swingRad, face: swingFace });
     }
     const live = sensorLive();

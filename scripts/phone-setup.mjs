@@ -70,13 +70,18 @@ export async function setUpPhone(phone, { reversed = false } = {}) {
   const k = reversed ? -1 : 1;
   await setPose(phone, FOREHAND);
   await phone.waitForTimeout(200);
-  for (let i = 0; i < 3; i++) await swing(phone, { alpha: 0, beta: 0, gamma: 420 * k });
+  // First forehand with a real backswing first (the other way, slower): it must count once.
+  await swing(phone, { alpha: 0, beta: 0, gamma: -260 * k }, 40);
+  await swing(phone, { alpha: 0, beta: 0, gamma: 0 }, 40);
+  await swing(phone, { alpha: 0, beta: 0, gamma: 0 }, 40);
+  await swing(phone, { alpha: 0, beta: 0, gamma: 460 * k }, 900);
+  for (let i = 0; i < 2; i++) await swing(phone, { alpha: 0, beta: 0, gamma: 420 * k }, 800);
   const fore = await phone.locator("#gDashes i.done").count();
   if (fore !== 3) throw Error("Setup counted " + fore + " of 3 forehands");
   await phone.locator("#next").click();
   await setPose(phone, BACKHAND);
   await phone.waitForTimeout(200);
-  for (let i = 0; i < 3; i++) await swing(phone, { alpha: 0, beta: 0, gamma: -420 * k });
+  for (let i = 0; i < 3; i++) await swing(phone, { alpha: 0, beta: 0, gamma: -420 * k }, 800);
   const back = await phone.locator("#gDashes i.done").count();
   if (back !== 3) throw Error("Setup counted " + back + " of 3 backhands");
   await phone.locator("#next").click(); // FINISH

@@ -79,11 +79,21 @@ test("learning from 3 forehands + 3 backhands: side sign, face sign and swing fe
   assert.ok(flipped.ok && flipped.profile.faceSign === -1);
 });
 
-test("learning refuses swings it can't tell apart", () => {
+test("learning never makes you redo: unclear swings fall back to the standard setup", () => {
+  // Forehands and backhands that read the same way: keep the standard left/right sign.
   const same = learnSwings(swings(-0.9, 1), swings(-0.8, -1), "right");
-  assert.ok(!same.ok && same.redo === "both");
+  assert.ok(same.ok && same.profile.sideSign === 1);
+  // Backhands without turning the phone over: keep the standard face.
   const noFlip = learnSwings(swings(-0.9, 1), swings(0.9, 1), "right");
-  assert.ok(!noFlip.ok && noFlip.redo === "back", "backhands must turn the phone over");
+  assert.ok(noFlip.ok && noFlip.profile.faceSign === 1);
+  // One odd swing (a backswing read as its own swing) doesn't flip the result.
+  const odd = learnSwings(
+    [{ side: 0.9, up: 0, rad: 3, face: 1 }, ...swings(-0.9, 1).slice(1)],
+    swings(0.9, -1),
+    "right",
+  );
+  assert.ok(odd.ok && odd.profile.sideSign === 1);
+  // Still needs three of each.
   assert.ok(!learnSwings(swings(-0.9, 1).slice(0, 2), swings(0.9, -1), "right").ok);
 });
 

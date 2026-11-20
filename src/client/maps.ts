@@ -1694,8 +1694,8 @@ export function lightingFor(id: MapId): Lighting {
   const sunset = id === "manila" || id === "usc";
   return {
     ...base,
-    sunDir: sunset ? unit(0.25, -0.55, 0.8) : unit(-0.45, -0.88, -0.32),
-    sunColor: sunset ? [2.3, 1.55, 1.0] : [2.15, 2.0, 1.8],
+    sunDir: sunset ? unit(0.25, -0.62, 0.8) : unit(-0.45, -0.88, -0.32),
+    sunColor: sunset ? [1.95, 1.35, 0.92] : [2.15, 2.0, 1.8],
     skyAmb: lin(look.sky).map((v) => v * 0.75 + 0.05) as [number, number, number],
     groundAmb: lin(look.ground ?? look.apron).map((v) => v * 0.6 + 0.03) as [
       number,

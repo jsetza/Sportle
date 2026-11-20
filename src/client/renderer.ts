@@ -99,12 +99,15 @@ ${
     ? `  if (uShadowOn < 0.5) return 1.0;
   vec3 p = vLight.xyz / vLight.w * 0.5 + 0.5;
   if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z >= 1.0) return 1.0;
+  // Fade shadows out toward the edge of the shadow map so they never stop at a hard line.
+  vec2 e = min(p.xy, 1.0 - p.xy);
+  float edge = smoothstep(0.0, 0.08, min(e.x, e.y));
   float ndl = max(dot(normalize(vNormal), -uSunDir), 0.0);
   p.z -= 0.0012 + 0.0025 * (1.0 - ndl);
   float s = 0.0; float r = uShadowTexel * uShadowSoft;
   for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++)
     s += texture(uShadow, vec3(p.xy + vec2(float(x), float(y)) * r, p.z));
-  return s / 9.0;`
+  return mix(1.0, s / 9.0, edge);`
     : "  return 1.0;"
 }
 }
@@ -763,9 +766,9 @@ export class Renderer {
       x[2], y[2], z[2], 0,
       -dotV(x, eye), -dotV(y, eye), -dotV(z, eye), 1,
     ];
-    const r = 13.5,
+    const r = 18,
       n = 1,
-      f = 90;
+      f = 110;
     const proj = [
       1 / r, 0, 0, 0,
       0, 1 / r, 0, 0,

@@ -889,7 +889,8 @@ export const SHOTS: Record<
   (power: number) => { depth: number; flight?: number; pace: number; spin: number }
 > = {
   smash: () => ({ depth: 5.5, flight: 0.58, pace: 1, spin: 0 }),
-  lob: () => ({ depth: 5.8, flight: 1.95, pace: 1, spin: 0.5 }),
+  // Lower lob (owner request): ~2.7 m apex instead of ~4.7 m, still deep.
+  lob: () => ({ depth: 5.6, flight: 1.45, pace: 1, spin: 0.5 }),
   topspin: (p) => ({ depth: Math.min(6.0, 4.3 + p * 1.6), pace: 1, spin: 3 + p * 3 }),
   roll: (p) => ({ depth: 3.4 + p * 2.5, pace: 0.95, spin: 2 + p * 2 }),
   drive: (p) => ({ depth: 3.4 + p * 2.5, pace: 1, spin: 0 }),

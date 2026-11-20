@@ -53,8 +53,10 @@ function camera(aspect: number, eye: V, target: V, fov: number, shift: number) {
     -dot(z, eye),
     1,
   ];
+  // Near plane at 0.3 m (was 0.1): ~3× better depth precision, so distant scenery doesn't
+  // flicker. The closest thing drawn (first-person paddle) is ~0.7 m away.
   const f = 1 / Math.tan((fov * Math.PI) / 360),
-    near = 0.1,
+    near = 0.3,
     far = 220;
   return multiply(
     [
@@ -710,11 +712,14 @@ export class Scene {
     const arena = this.map === "arena";
     // Arena floor: deep red carpet with a fine speckle (like a TV event floor).
     this.material(0.1, 0, arena ? 0.05 : 0, arena ? 1 : 0);
-    if (look.ground) this.box(0, -0.06, 0, 90, 0.1, 90, look.ground);
+    // Ground under the court area. Its top sits at -3.5 cm: below the maps' paths (-1 cm) and
+    // above their lawns (-5 cm), so no two layers share a height and flicker against each other.
+    if (look.ground) this.box(0, -0.085, 0, 90, 0.1, 90, look.ground);
     this.material(0.12, 0, arena ? 0.05 : 0.12, arena ? 1 : 0);
     this.box(0, -0.02, 0, 11, 0.04, 21, look.apron);
     // Glossy court: sharp highlights and a soft reflection of the players.
-    this.material(0.42, 0, 0.3, 2);
+    // Satin court: highlights without a white glare when the sun is low.
+    this.material(0.3, 0, 0.25, 2);
     this.box(0, -0.005, 0, 6.096, 0.03, 13.4112, P.court);
     this.box(0, 0.012, 0, 6.096, 0.012, 4.2672, P.kitchen);
     this.material(0.45, 0.04, 0.2);

@@ -87,7 +87,9 @@ test("classification: face angle + swing path + speed pick the shot", () => {
     [{}, { strength: 0.5, direction: 0.5, pitch: 0 }, "roll"],
     [{}, { strength: 0.5, direction: -0.5, pitch: 20 }, "slice"],
     [{}, { strength: 0.8, direction: -0.6, pitch: 25 }, "chop"],
-    [{}, { strength: 0.6, direction: 0.6, pitch: 40 }, "lob"],
+    [{}, { strength: 0.6, direction: 0.75, pitch: 50 }, "lob"],
+    // Owner request: most upward swings are rolls — even a fairly open one isn't a lob.
+    [{}, { strength: 0.6, direction: 0.5, pitch: 35 }, "roll"],
     [{ y: 2.2, bounces: 0 }, { strength: 0.8, direction: -0.8 }, "smash"],
     [{ z: 2.7 }, { strength: 0.2, direction: 0.05, pitch: 10 }, "dink"],
     [{ z: 6 }, { strength: 0.3, direction: 0.05, pitch: 10 }, "drop"],
@@ -108,13 +110,14 @@ test("drive: flat and fast, no spin, lands in the court", () => {
   assert.ok(d.f.atNet > COURT.netCenter, "clears the net");
 });
 
-test("topspin drive: higher arc that dips into the court and kicks forward off the bounce", () => {
+test("topspin drive: low, fast, dips into the court and kicks forward off the bounce", () => {
   const d = shoot({}, DRIVE),
     t = shoot({}, { strength: 0.75, direction: 0.6, pitch: -10 });
   assert.match(t.shot, /topspin/);
   assert.ok(t.spin > 3, `spin ${t.spin}`);
-  assert.ok(t.f.apex > d.f.apex + 0.1, `apex ${t.f.apex.toFixed(2)} vs drive ${d.f.apex.toFixed(2)}`);
-  assert.ok(t.f.atNet > d.f.atNet, "more net clearance");
+  // Low rolls (owner request): no higher than a drive, and still over the net.
+  assert.ok(t.f.apex < d.f.apex + 0.3, `apex ${t.f.apex.toFixed(2)} vs drive ${d.f.apex.toFixed(2)}`);
+  assert.ok(t.f.atNet > COURT.netCenter, "clears the net");
   assert.ok(inCourt(t.f.land), JSON.stringify(t.f.land));
   const kick = t.f.vAfter.h / t.f.vBefore.h,
     flat = d.f.vAfter.h / d.f.vBefore.h;
@@ -146,10 +149,10 @@ test("slice and chop: backspin floats flatter and skids low off the bounce", () 
   assert.ok(s.f.bounceTop < d.f.bounceTop, "stays lower after the bounce");
 });
 
-test("lob: big open-face swing goes high and deep", () => {
-  const l = shoot({}, { strength: 0.6, direction: 0.6, pitch: 40 });
+test("lob: only a very open, steep upward swing; it clears a net player but stays low-ish and deep", () => {
+  const l = shoot({}, { strength: 0.6, direction: 0.75, pitch: 50 });
   assert.match(l.shot, /lob/);
-  assert.ok(l.f.apex > 3.5, `apex ${l.f.apex.toFixed(2)}`);
+  assert.ok(l.f.apex > 2.3 && l.f.apex < 3.2, `apex ${l.f.apex.toFixed(2)}`);
   assert.ok(inCourt(l.f.land) && l.f.land!.z < -4, JSON.stringify(l.f.land));
 });
 
@@ -194,7 +197,7 @@ test("timing verdict still matches the real outcome for every shot type", () => 
     { strength: 0.5, direction: 0.5 },
     { strength: 0.5, direction: -0.5, pitch: 20 },
     { strength: 0.8, direction: -0.6, pitch: 25 },
-    { strength: 0.6, direction: 0.6, pitch: 40 },
+    { strength: 0.6, direction: 0.75, pitch: 50 },
     { strength: 0.3, direction: 0.05, pitch: 10 },
   ];
   let wrong = 0,
