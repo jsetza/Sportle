@@ -1005,20 +1005,38 @@ export class Renderer {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
   /** Auto quality: step down after ~3 s of slow frames, back up after ~10 s of fast ones. */
+  /** When each level last proved too slow (ms), so Auto doesn't bounce straight back to it. */
+  failed: Record<Quality, number> = { high: -1e9, medium: -1e9, low: -1e9 };
+  avgDt = 16.7;
   autoTune() {
     const now = performance.now(),
       dt = now - this.lastFrame;
     this.lastFrame = now;
-    if (this.pref !== "auto" || dt > 250 || document.hidden) return;
+    // Very long frames mean the tab was throttled (hidden, covered, backgrounded), not that
+    // the GPU is struggling, so they don't count either way.
+    if (this.pref !== "auto" || dt > 70 || document.hidden) return;
     if (dt > 24) this.slow++;
     else this.slow = Math.max(0, this.slow - 0.5);
-    if (dt < 18) this.fast++;
+    // Smoothed frame time; "fast" = seconds spent comfortably above ~55 fps.
+    this.avgDt = this.avgDt * 0.95 + dt * 0.05;
+    if (this.avgDt < 18.5) this.fast += dt / 1000;
     else this.fast = 0;
-    if (this.slow > 150 && this.quality !== "low") {
-      this.apply(this.quality === "high" ? "medium" : "low");
+    const order: Quality[] = ["low", "medium", "high"];
+    const i = order.indexOf(this.quality);
+    if (this.slow > 150 && i > 0) {
+      this.failed[this.quality] = now;
+      this.apply(order[i - 1]);
       this.note = "Auto quality lowered to keep the frame rate up";
-    } else if (this.fast > 900 && this.quality === "medium" && !this.note.startsWith("Post")) {
-      this.apply("high");
+    } else if (
+      this.fast > 10 &&
+      i < 2 &&
+      this.webgl2 &&
+      !this.note.startsWith("Post") &&
+      now - this.failed[order[i + 1]] > 60000
+    ) {
+      // ~10 s of smooth frames: try the next level up again (a minute after it last failed).
+      this.apply(order[i + 1]);
+      this.note = "";
     }
   }
 }
