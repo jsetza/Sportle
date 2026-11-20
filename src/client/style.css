@@ -2437,3 +2437,55 @@ body.controller {
 .diagram.short {
   aspect-ratio: 400 / 165;
 }
+
+/* Spotify player (official embed) in the bottom-left corner */
+.spotify {
+  position: fixed;
+  z-index: 4;
+  left: clamp(16px, 2.5vw, 40px);
+  bottom: 84px;
+  width: min(360px, 80vw);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 10, 22, 0.88);
+  backdrop-filter: blur(10px);
+  transition: transform 0.3s;
+}
+.spotify.mini {
+  transform: translateX(calc(-100% - 60px));
+}
+.sphead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px 6px;
+  font-size: 13px;
+}
+.sphead b {
+  flex: 1;
+  color: #1ed760;
+}
+.sphead .link {
+  font-size: 13px;
+}
+.spotify iframe {
+  display: block;
+  width: 100%;
+  height: 152px;
+  border: 0;
+  border-radius: 10px;
+}
+.spotifytab {
+  position: fixed;
+  z-index: 4;
+  left: clamp(16px, 2.5vw, 40px);
+  bottom: 84px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(8, 10, 22, 0.88);
+  color: #1ed760;
+  font-weight: 700;
+  cursor: pointer;
+}
