@@ -4,6 +4,7 @@
 // Original low-poly impressions of each place, built from the scene's box/blob primitives.
 // No real logos, signs or brand lettering — only shapes, colours and lights.
 import type { MapId } from "../shared/types.ts";
+import type { Lighting, Spot } from "./renderer.ts";
 
 type V = number[];
 export interface Builder {
@@ -41,7 +42,12 @@ export interface Builder {
     uz: number,
     color: V,
   ): number;
+  /** Mark what follows as glowing (lit windows, neon, lamps); 0 = normal. */
+  glow?(k: number): void;
 }
+
+/** How strongly lit windows glow on the current map (set by buildMap). */
+let WIN = 0.3;
 
 /** Sky, fog and light for each map. `ground` is drawn under the court area. */
 export interface Look {
@@ -60,8 +66,8 @@ export const LOOKS: Record<MapId, Look> = {
     fogFar: 46,
     ambient: 0.78,
     spots: 1,
-    ground: [0.2, 0.055, 0.1],
-    apron: [0.09, 0.14, 0.26],
+    ground: [0.52, 0.07, 0.16],
+    apron: [0.44, 0.06, 0.14],
   },
   tokyo: {
     sky: [0.07, 0.05, 0.16],
@@ -169,8 +175,10 @@ function tower(
   for (let y = base + 2; y < base + h - 1; y += every) {
     if (rnd() > litChance) continue;
     const c = pick(lit);
+    b.glow?.(WIN);
     b.box(x, y, z, w + 0.06, every * 0.32, d * 0.86, c);
     b.box(x, y, z, w * 0.86, every * 0.32, d + 0.06, c);
+    b.glow?.(0);
   }
   b.box(x, base + h + 0.3, z, w * 0.7, 0.6, d * 0.7, shade(color, 0.8));
 }
@@ -338,10 +346,12 @@ function rooftop(b: Builder, deck: V, facade: V, lit: V[], drop = 42) {
   b.box(0, -0.2, 0, W, 0.36, D, deck);
   // building below the roof
   b.box(0, -drop / 2 - 0.4, 0, W - 0.6, drop, D - 0.6, facade);
+  b.glow?.(WIN);
   for (let y = -3; y > -drop; y -= 3) {
     b.box(0, y, 0, W - 0.5, 1.1, D - 1.4, shade(pick(lit), 0.8));
     b.box(0, y, 0, W - 1.4, 1.1, D - 0.5, shade(pick(lit), 0.8));
   }
+  b.glow?.(0);
   // parapet + railing
   for (const s of [-1, 1]) {
     b.box((s * W) / 2, 0.25, 0, 0.3, 0.5, D, shade(deck, 0.8));
@@ -405,7 +415,9 @@ function tokyo(b: Builder) {
       tower(b, s * (14 + rnd() * 3), 0, z, 6, h, 6, [0.09, 0.08, 0.14], lit);
       // vertical neon sign panels facing the court (shapes only, no lettering)
       const c = pick(neon);
+      b.glow?.(1.5);
       b.box(s * 10.8, 4 + rnd() * 3, z, 0.25, 3 + rnd() * 3, 1.1, c);
+      b.glow?.(0);
       b.box(s * 10.95, 4.2, z, 0.1, 0.4, 1.5, shade(c, 0.6));
     }
   }
@@ -414,7 +426,9 @@ function tokyo(b: Builder) {
       const h = 8 + rnd() * 22;
       tower(b, x, 0, s * (19 + rnd() * 3), 6, h, 6, [0.09, 0.08, 0.14], lit);
       const c = pick(neon);
+      b.glow?.(1.5);
       b.box(x, 5 + rnd() * 3, s * 15.8, 2.4, 1 + rnd(), 0.25, c);
+      b.glow?.(0);
     }
   city(b, {
     ground: 0,
@@ -513,7 +527,9 @@ function manila(b: Builder) {
     skip: (_x, z) => z < -48,
   });
   // setting sun over the bay
+  b.glow?.(2.2);
   b.blob(-15, 8, -118, 11, 11, 2, [1, 0.88, 0.55], 0, 8, 16);
+  b.glow?.(0);
   b.box(-15, -42, -80, 6, 0.1, 70, [1, 0.75, 0.45]);
   // rooftop things: water tank, AC units, potted palms, string lights
   for (const [x, z] of [
@@ -1579,7 +1595,24 @@ function usc(b: Builder) {
   });
 }
 
-export function buildMap(b: Builder, id: MapId) {
+export function buildMap(b0: Builder, id: MapId) {
+  const night = id === "tokyo" || id === "nyc";
+  WIN = night ? 1.0 : id === "manila" ? 0.35 : 0.08;
+  // Small bright blobs (string lights, lamp globes) glow on every map.
+  const b: Builder = {
+    box: (...a) => b0.box(...a),
+    text: (...a) => b0.text(...a),
+    glow: (k) => b0.glow?.(k),
+    blob(x, y, z, rx, ry, rz, color, stretch, rings, segs) {
+      const lamp =
+        Math.max(rx, ry, rz) <= 0.3 &&
+        color[0] + color[1] + color[2] > 2.3 &&
+        color[0] > 0.9;
+      if (lamp) b0.glow?.(night ? 2 : 1);
+      b0.blob(x, y, z, rx, ry, rz, color, stretch, rings, segs);
+      if (lamp) b0.glow?.(0);
+    },
+  };
   if (id === "tokyo") tokyo(b);
   else if (id === "manila") manila(b);
   else if (id === "sf") sf(b);
@@ -1589,4 +1622,88 @@ export function buildMap(b: Builder, id: MapId) {
   else if (id === "haas") haas(b);
   else if (id === "ucla") ucla(b);
   else if (id === "usc") usc(b);
+}
+
+const lin = (c: V): [number, number, number] => [c[0] ** 2.2, c[1] ** 2.2, c[2] ** 2.2];
+const unit = (x: number, y: number, z: number): [number, number, number] => {
+  const l = Math.hypot(x, y, z);
+  return [x / l, y / l, z / l];
+};
+/** Floodlight aimed from (x, y, z) at a floor point. */
+const flood = (
+  x: number,
+  y: number,
+  z: number,
+  tx: number,
+  tz: number,
+  color: [number, number, number],
+  outer = 30,
+): Spot => ({
+  pos: [x, y, z],
+  dir: unit(tx - x, -y, tz - z),
+  color,
+  inner: outer * 0.45,
+  outer,
+  range: 16,
+});
+/** Key light, ambient, spotlights, exposure and bloom for each map (renderer input). */
+export function lightingFor(id: MapId): Lighting {
+  const look = LOOKS[id];
+  const base = {
+    sky: lin(look.sky),
+    fogNear: look.fogNear,
+    fogFar: look.fogFar,
+  };
+  if (id === "arena") {
+    // TV arena: dim key from the gantries, four warm spot pools on the court.
+    const w: [number, number, number] = [1.9, 1.78, 1.6];
+    return {
+      ...base,
+      sunDir: unit(0.32, -1, 0.42),
+      sunColor: [0.3, 0.29, 0.29],
+      skyAmb: [0.09, 0.09, 0.15],
+      groundAmb: [0.06, 0.02, 0.03],
+      spots: [
+        flood(-5.5, 10.5, 7.5, -1.4, 3.2, w),
+        flood(5.5, 10.5, 7.5, 1.4, 3.2, w),
+        flood(-5.5, 10.5, -7.5, -1.4, -3.2, w),
+        flood(5.5, 10.5, -7.5, 1.4, -3.2, w),
+      ],
+      exposure: 1.2,
+      bloom: 0.06,
+    };
+  }
+  if (id === "tokyo" || id === "nyc") {
+    const c: [number, number, number] =
+      id === "tokyo" ? [2.3, 2.0, 2.3] : [2.5, 2.3, 2.0];
+    return {
+      ...base,
+      sunDir: unit(-0.35, -1, -0.45),
+      sunColor: id === "tokyo" ? [0.32, 0.28, 0.48] : [0.3, 0.32, 0.42],
+      skyAmb: lin(look.sky).map((v) => v * 1.4 + 0.06) as [number, number, number],
+      groundAmb: [0.05, 0.04, 0.07],
+      spots: [
+        flood(-7, 9.5, 8, -1.2, 2.5, c, 34),
+        flood(7, 9.5, -8, 1.2, -2.5, c, 34),
+      ],
+      exposure: 1.3,
+      bloom: 0.08,
+    };
+  }
+  // Daylight maps: sun, sky fill, ground bounce. Manila is a low warm sunset.
+  const sunset = id === "manila" || id === "usc";
+  return {
+    ...base,
+    sunDir: sunset ? unit(0.25, -0.55, 0.8) : unit(-0.45, -0.88, -0.32),
+    sunColor: sunset ? [2.3, 1.55, 1.0] : [2.15, 2.0, 1.8],
+    skyAmb: lin(look.sky).map((v) => v * 0.75 + 0.05) as [number, number, number],
+    groundAmb: lin(look.ground ?? look.apron).map((v) => v * 0.6 + 0.03) as [
+      number,
+      number,
+      number,
+    ],
+    spots: [],
+    exposure: 1.0,
+    bloom: 0.045,
+  };
 }

@@ -1,7 +1,9 @@
 import type { Match, Player, Vec } from "../shared/types.ts";
 import { COURT, OUTFITS, PADDLES, SHOES, clamp } from "../shared/types.ts";
 import type { MapId, Outfit } from "../shared/types.ts";
-import { LOOKS, buildMap } from "./maps.ts";
+import { LOOKS, buildMap, lightingFor } from "./maps.ts";
+import { Renderer, STRIDE } from "./renderer.ts";
+import type { Post, ViewDraw } from "./renderer.ts";
 type V = number[];
 const sub = (a: V, b: V) => a.map((v, i) => v - b[i]);
 const cross = (a: V, b: V) => [
@@ -73,8 +75,8 @@ function camera(aspect: number, eye: V, target: V, fov: number, shift: number) {
 export const palette = {
   floor: [0.2, 0.055, 0.1],
   apron: [0.09, 0.14, 0.26],
-  court: [0.27, 0.45, 0.86],
-  kitchen: [0.36, 0.55, 0.93],
+  court: [0.21, 0.39, 0.83],
+  kitchen: [0.3, 0.5, 0.9],
   line: [0.96, 0.97, 1],
   board: [0.06, 0.06, 0.11],
   ink: [0.86, 0.87, 0.93],
@@ -134,30 +136,29 @@ export const VIEW_LABELS: Record<ViewMode, string> = {
   first: "First person",
   broadcast: "Broadcast",
 };
-const VERTEX = `attribute vec3 position; attribute vec3 color; uniform mat4 camera;
-varying vec3 vColor; varying vec3 vWorld; varying float vDepth;
-void main(){vColor=color;vWorld=position;gl_Position=camera*vec4(position,1.0);vDepth=gl_Position.w;}`;
-const FRAGMENT = `precision mediump float;
-varying vec3 vColor; varying vec3 vWorld; varying float vDepth;
-uniform vec3 fogColor; uniform vec4 spots[3]; uniform vec4 look;
-void main(){
-  float light = look.x;
-  for (int i = 0; i < 3; i++) {
-    vec2 d = vWorld.xz - spots[i].xy;
-    light += look.y * spots[i].z * exp(-dot(d, d) / (spots[i].w * spots[i].w)) * (vWorld.y < 1.6 ? 1.0 : 0.45);
-  }
-  vec3 c = vColor * light;
-  float fog = smoothstep(look.z, look.w, vDepth);
-  gl_FragColor = vec4(mix(c, fogColor, fog * 0.88), 1.0);
-}`;
 export class Scene {
   canvas: HTMLCanvasElement;
-  gl: WebGLRenderingContext;
-  program: WebGLProgram;
-  staticBuffer: WebGLBuffer;
-  staticCount = 0;
-  buffer: WebGLBuffer;
+  gl: Renderer;
+  /** Geometry being built: 13 floats per vertex (see renderer STRIDE). */
   vertices: number[] = [];
+  /** Additive glow geometry being built this frame (trails, rings, flashes). */
+  fxv: number[] = [];
+  /** Current material for new triangles: specular, emissive, reflective, pattern. */
+  mat: [number, number, number, number] = [0.15, 0, 0, 0];
+  material(spec: number, emit = 0, refl = 0, pattern = 0) {
+    this.mat = [spec, emit, refl, pattern];
+  }
+  /** Run `fn` with a material, then restore the previous one. */
+  with(m: [number, number?, number?, number?], fn: () => void) {
+    const prev = this.mat;
+    this.mat = [m[0], m[1] ?? 0, m[2] ?? 0, m[3] ?? 0];
+    fn();
+    this.mat = prev;
+  }
+  /** Maps mark lit windows, neon and lamps as glowing (bloom). */
+  glow(k: number) {
+    this.mat = [this.mat[0], k, this.mat[2], this.mat[3]];
+  }
   state: Match | null = null;
   history: { state: Match; at: number }[] = [];
   raf = 0;
@@ -203,7 +204,10 @@ export class Scene {
   }
   /** A pickleball: optic-yellow shell with 40 round holes (generic; no brand markings). */
   pickleball(x: number, y: number, z: number, r: number) {
+    const prev = this.mat;
+    this.material(0.6, 0.22);
     this.blob(x, y, z, r, r, r, palette.ball, 0, 10, 16);
+    this.material(0.2, 0);
     const M = this.ballRot;
     for (const [hx, hy, hz] of BALL_HOLES) {
       const wx = M[0] * hx + M[1] * hy + M[2] * hz,
@@ -218,10 +222,11 @@ export class Scene {
         r * 0.155,
         palette.ballHole,
         0,
-        4,
-        8,
+        3,
+        6,
       );
     }
+    this.mat = prev;
   }
   lastFrame = 0;
   lastSnapAt = 0;
@@ -290,29 +295,7 @@ export class Scene {
     this.tagLayer.className = "nametags";
     this.tagLayer.setAttribute("aria-hidden", "true");
     canvas.after(this.tagLayer);
-    const gl = canvas.getContext("webgl", { antialias: true, alpha: false });
-    if (!gl)
-      throw Error(
-        "WebGL is unavailable. Enable hardware acceleration or try another browser.",
-      );
-    this.gl = gl;
-    const shader = (type: number, source: string) => {
-      const s = gl.createShader(type)!;
-      gl.shaderSource(s, source);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
-        throw Error(gl.getShaderInfoLog(s) || "Shader error");
-      return s;
-    };
-    const program = gl.createProgram()!;
-    gl.attachShader(program, shader(gl.VERTEX_SHADER, VERTEX));
-    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, FRAGMENT));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-      throw Error("Unable to initialize renderer");
-    this.program = program;
-    this.buffer = gl.createBuffer()!;
-    this.staticBuffer = gl.createBuffer()!;
+    this.gl = new Renderer(canvas);
     this.build();
     this.render();
   }
@@ -324,17 +307,53 @@ export class Scene {
     this.build();
   }
   build() {
-    const gl = this.gl;
     this.vertices = [];
+    this.fxv = [];
+    this.mat = [0.15, 0, 0, 0];
     this.arena();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.staticBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array(this.vertices),
-      gl.STATIC_DRAW,
-    );
-    this.staticCount = this.vertices.length / 6;
+    this.gl.setStatic(new Float32Array(this.vertices));
+    // Static glow: light shafts under each spotlight.
     this.vertices = [];
+    for (const sp of lightingFor(this.map).spots) this.shaft(sp.pos, sp.dir, sp.outer, sp.color);
+    this.gl.setStaticFx(new Float32Array(this.vertices));
+    this.vertices = [];
+    this.mat = [0.15, 0, 0, 0];
+  }
+  /** Soft cone of light from a spotlight down to the floor (additive, faint). */
+  shaft(pos: number[], dir: number[], outer: number, color: number[]) {
+    const d = norm(dir),
+      len = (pos[1] - 0.05) / Math.max(0.2, -d[1]),
+      r = Math.tan((outer * 0.8 * Math.PI) / 180) * len,
+      u = norm(cross(d, Math.abs(d[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0])),
+      v = cross(d, u),
+      n = 28;
+    const k = Math.max(...color) || 1,
+      c = color.map((x) => (x / k) * 0.55);
+    const end = pos.map((p, i) => p + d[i] * len);
+    for (const [rad, str] of [
+      [r, 0.032],
+      [r * 0.55, 0.04],
+    ])
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2,
+          a1 = ((i + 1) / n) * Math.PI * 2;
+        const ring = (a: number) =>
+          end.map((e, j) => e + (u[j] * Math.cos(a) + v[j] * Math.sin(a)) * rad);
+        const p0 = ring(a0),
+          p1 = ring(a1);
+        const nrm = (a: number) => norm(u.map((x, j) => x * Math.cos(a) + v[j] * Math.sin(a)));
+        // Bright at the lamp, fading to nothing at the floor; edges fade by view angle.
+        this.mat = [0, str, 1, 0];
+        this.vertex(pos, nrm((a0 + a1) / 2), c);
+        this.vertex(p0, nrm(a0), c.map((x) => x * 0.25));
+        this.vertex(p1, nrm(a1), c.map((x) => x * 0.25));
+      }
+  }
+  /** Append one vertex (position, normal, colour, current material). */
+  vertex(p: V, n: V, c: V, light = 1) {
+    const out = this.vertices,
+      m = this.mat;
+    out.push(p[0], p[1], p[2], n[0], n[1], n[2], c[0] * light, c[1] * light, c[2] * light, m[0], m[1], m[2], m[3]);
   }
   /** Flip sound effects on/off; returns true when sound is now on. */
   sound() {
@@ -505,9 +524,18 @@ export class Scene {
     if (this.bursts.length > 6) this.bursts.shift();
   }
   // ——— geometry primitives ———
-  tri(a: V, b: V, c: V, color: V, light = 1) {
-    for (const p of [a, b, c])
-      this.vertices.push(...p, ...color.map((v) => v * light));
+  /** Flat triangle; its normal points away from `inside` (a point inside the solid). */
+  tri(a: V, b: V, c: V, color: V, light = 1, inside?: V) {
+    let n = cross(sub(b, a), sub(c, a));
+    const l = Math.hypot(n[0], n[1], n[2]) || 1;
+    n = [n[0] / l, n[1] / l, n[2] / l];
+    if (inside) {
+      const ctr = [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3];
+      if (dot(n, sub(ctr, inside)) < 0) n = [-n[0], -n[1], -n[2]];
+    } else if (n[1] < 0) n = [-n[0], -n[1], -n[2]];
+    this.vertex(a, n, color, light);
+    this.vertex(b, n, color, light);
+    this.vertex(c, n, color, light);
   }
   box(
     x: number,
@@ -546,16 +574,18 @@ export class Scene {
         z + c,
       ];
     });
-    for (const [f, l] of [
-      [[0, 1, 2, 3], 0.74],
-      [[4, 5, 6, 7], 0.92],
-      [[0, 4, 7, 3], 0.8],
-      [[1, 5, 6, 2], 0.86],
-      [[3, 2, 6, 7], 1],
-      [[0, 1, 5, 4], 0.6],
-    ] as [number[], number][]) {
-      this.tri(pts[f[0]], pts[f[1]], pts[f[2]], color, l);
-      this.tri(pts[f[0]], pts[f[2]], pts[f[3]], color, l);
+    // Real lighting now shades the faces; normals point out of the box.
+    const ctr = [x, y, z];
+    for (const f of [
+      [0, 1, 2, 3],
+      [4, 5, 6, 7],
+      [0, 4, 7, 3],
+      [1, 5, 6, 2],
+      [3, 2, 6, 7],
+      [0, 1, 5, 4],
+    ]) {
+      this.tri(pts[f[0]], pts[f[1]], pts[f[2]], color, 1, ctr);
+      this.tri(pts[f[0]], pts[f[2]], pts[f[3]], color, 1, ctr);
     }
   }
   /** Ellipsoid; with `stretch` > 0 the two hemispheres are pulled apart into a capsule. */
@@ -581,20 +611,41 @@ export class Scene {
         z + Math.sin(a) * Math.sin(b) * rz,
       ];
     };
-    const shade = (i: number) => 0.62 + 0.38 * (1 - i / rings);
+    // Smooth ellipsoid normals (gradient of the surface), so blobs light like curved plastic.
+    const nrm = (i: number, j: number) => {
+      const a = (i * Math.PI) / rings,
+        b = (j * 2 * Math.PI) / segs;
+      return norm([
+        (Math.sin(a) * Math.cos(b)) / rx,
+        Math.cos(a) / ry,
+        (Math.sin(a) * Math.sin(b)) / rz,
+      ]);
+    };
+    const flat = ry < 0.01; // floor decals: face straight up
+    const vtx = (i: number, j: number) =>
+      this.vertex(p(i, j), flat ? [0, 1, 0] : nrm(i, j), color);
     for (let i = 0; i < rings; i++)
       for (let j = 0; j < segs; j++) {
-        const l = shade(i);
-        this.tri(p(i, j), p(i + 1, j), p(i + 1, j + 1), color, l);
-        this.tri(p(i, j), p(i + 1, j + 1), p(i, j + 1), color, l);
+        vtx(i, j);
+        vtx(i + 1, j);
+        vtx(i + 1, j + 1);
+        vtx(i, j);
+        vtx(i + 1, j + 1);
+        vtx(i, j + 1);
         if (stretch && i === rings / 2 - 1) {
           // cylinder band between the hemispheres
           const a = p(i + 1, j),
             b = p(i + 1, j + 1);
           const c = [b[0], b[1] - stretch, b[2]],
             d = [a[0], a[1] - stretch, a[2]];
-          this.tri(a, d, c, color, 0.8);
-          this.tri(a, c, b, color, 0.8);
+          const na = nrm(i + 1, j),
+            nb = nrm(i + 1, j + 1);
+          this.vertex(a, na, color);
+          this.vertex(d, na, color);
+          this.vertex(c, nb, color);
+          this.vertex(a, na, color);
+          this.vertex(c, nb, color);
+          this.vertex(b, nb, color);
         }
       }
   }
@@ -689,24 +740,36 @@ export class Scene {
   arena() {
     const P = palette,
       look = LOOKS[this.map];
+    const arena = this.map === "arena";
+    // Arena floor: deep red carpet with a fine speckle (like a TV event floor).
+    this.material(0.1, 0, arena ? 0.05 : 0, arena ? 1 : 0);
     if (look.ground) this.box(0, -0.06, 0, 90, 0.1, 90, look.ground);
+    this.material(0.12, 0, arena ? 0.05 : 0.12, arena ? 1 : 0);
     this.box(0, -0.02, 0, 11, 0.04, 21, look.apron);
+    // Glossy court: sharp highlights and a soft reflection of the players.
+    this.material(0.42, 0, 0.3, 2);
     this.box(0, -0.005, 0, 6.096, 0.03, 13.4112, P.court);
     this.box(0, 0.012, 0, 6.096, 0.012, 4.2672, P.kitchen);
+    this.material(0.45, 0.04, 0.2);
     for (const z of [-6.6802, -2.1082, 2.1082, 6.6802])
       this.box(0, 0.022, z, 6.096, 0.012, 0.0508, P.line);
     for (const x of [-3.0226, 3.0226])
       this.box(x, 0.022, 0, 0.0508, 0.012, 13.4112, P.line);
     for (const z of [-4.4196, 4.4196])
       this.box(0, 0.022, z, 0.0508, 0.012, 4.572, P.line);
-    if (this.map === "arena")
+    this.material(0.1, 0, 0, 0);
+    if (arena)
       // floor branding beside the court (subtle)
-      this.text("POVPICKLE", -9.6, 0.004, 5.4, 0.32, 0, -1, [0.27, 0.08, 0.14]);
+      this.text("POVPICKLE", -9.6, 0.004, 5.4, 0.32, 0, -1, [0.32, 0.09, 0.15]);
     // net
+    this.material(0.7);
     for (const x of [-COURT.post, COURT.post]) {
       this.box(x, 0.5, 0, 0.09, 1.0, 0.09, P.dark);
-      this.box(x, 1.0, 0, 0.13, 0.05, 0.13, P.orange);
+      this.with([0.6, 0.6], () =>
+        this.box(x, 1.0, 0, 0.13, 0.05, 0.13, P.orange),
+      );
     }
+    this.material(0.15);
     for (let x = -3.3; x < 3.3; x += 0.11)
       this.box(
         x,
@@ -719,21 +782,32 @@ export class Scene {
       );
     for (let y = 0.08; y < 0.84; y += 0.09)
       this.box(0, y, 0, 6.6, 0.008, 0.012, [0.12, 0.12, 0.17]);
+    this.material(0.35, 0.08);
     for (let x = -3.3; x < 3.3; x += 0.33) {
       const h = COURT.netCenter + (Math.abs(x) / 3.048) * 0.0508;
       this.box(x, h, 0, 0.34, 0.05, 0.03, P.white);
     }
+    this.material(0.15);
     if (this.map !== "arena") {
       buildMap(this, this.map);
+      this.material(0.15);
       return;
     }
     // ad boards with original lettering on three sides
     const boardH = 0.95;
     const bx = 6.2,
       bz = 11.2;
+    this.material(0.8);
     this.box(-bx, boardH / 2, -0.3, 0.12, boardH, 22.4, P.board);
     this.box(bx, boardH / 2, -0.3, 0.12, boardH, 22.4, P.board);
     this.box(0, boardH / 2, -bz, 12.5, boardH, 0.12, P.board);
+    // LED strip along the top edge of the boards
+    this.material(0.2, 0.9);
+    this.box(-bx + 0.07, boardH + 0.01, -0.3, 0.02, 0.025, 22.4, [0.75, 0.55, 1]);
+    this.box(bx - 0.07, boardH + 0.01, -0.3, 0.02, 0.025, 22.4, [0.75, 0.55, 1]);
+    this.box(0, boardH + 0.01, -bz + 0.07, 12.5, 0.025, 0.02, [0.75, 0.55, 1]);
+    // LED lettering (emissive, blooms)
+    this.material(0.2, 0.75);
     const slogan = "POVPICKLE >>|! ";
     const sw = this.text(slogan, 0, 0, 0, 0.09, 1, 0, P.ink, false) + 0.4;
     for (let z = 9.6; z - sw > -bz + 0.4; z -= sw) {
@@ -743,7 +817,8 @@ export class Scene {
     const count = Math.floor((bx * 2 - 0.6) / sw);
     for (let i = 0, x0 = -(count * sw) / 2 + 0.2; i < count; i++)
       this.text(slogan, x0 + i * sw, 0.14, -bz + 0.08, 0.09, 1, 0, P.ink);
-    // tiered crowd stands, deterministic pseudo-random fans
+    // tiered crowd stands, deterministic pseudo-random fans (dim, matte)
+    this.material(0.06);
     let seed = 7;
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const fans = [
@@ -815,9 +890,17 @@ export class Scene {
       for (let x = -6 - back; x < 6 + back; x += 0.62)
         fan(x, lift, -bz - back, 0);
     }
-    // light gantries
+    // light gantries with the spotlight heads
+    this.material(0.5);
     for (const x of [-5, 0, 5])
-      this.box(x, 10, -2, 0.3, 0.3, 26, [0.1, 0.1, 0.14]);
+      this.box(x, 10.8, -2, 0.3, 0.3, 26, [0.1, 0.1, 0.14]);
+    for (const sp of lightingFor("arena").spots) {
+      this.box(sp.pos[0], sp.pos[1] + 0.15, sp.pos[2], 0.6, 0.45, 0.6, [0.08, 0.08, 0.1]);
+      this.with([0.2, 3], () =>
+        this.blob(sp.pos[0], sp.pos[1] - 0.08, sp.pos[2], 0.24, 0.05, 0.24, [1, 0.95, 0.86], 0, 2, 10),
+      );
+    }
+    this.material(0.15);
   }
   // ——— characters ———
   mascot(
@@ -839,33 +922,57 @@ export class Scene {
       firstPerson?: boolean;
     },
   ) {
-    if (opts.firstPerson) return this.fpPaddle(p, pos, opts);
+    const prevMat = this.mat;
+    this.material(0.55);
+    if (opts.firstPerson) this.fpPaddle(p, pos, opts);
+    else this.mascotBody(p, pos, opts);
+    this.mat = prevMat;
+  }
+  mascotBody(
+    p: Pick<Player, "team" | "hand" | "bot" | "id"> & {
+      outfit?: Outfit;
+      gear?: Player["gear"];
+    },
+    pos: Vec,
+    opts: {
+      swing: number;
+      pitch: number;
+      roll: number;
+      yaw: number;
+      moving: number;
+      server: boolean;
+      owner: boolean;
+    },
+  ) {
     const col = teamColor(p.team),
       facing = p.team ? -1 : 1,
       hand = (p.hand === "left" ? -1 : 1) * facing,
       bob =
         Math.sin(performance.now() / 85) * Math.min(0.05, opts.moving * 0.015);
     const y0 = bob;
-    // player indicator ring and shadow
-    this.blob(
-      pos.x,
-      0.02,
-      pos.z,
-      0.42,
-      0.005,
-      0.42,
-      [0.04, 0.04, 0.07],
-      0,
-      2,
-      14,
-    );
-    this.ring(
+    // player indicator ring (and a fake shadow when real shadows are off)
+    if (!this.gl.shadows)
+      this.blob(
+        pos.x,
+        0.02,
+        pos.z,
+        0.42,
+        0.005,
+        0.42,
+        [0.04, 0.04, 0.07],
+        0,
+        2,
+        14,
+      );
+    this.with([0.3, opts.owner ? 0.5 : 0.35], () =>
+      this.ring(
       pos.x,
       pos.z,
       0.55,
-      opts.owner ? palette.white : col,
-      0.035,
-      0.05,
+        opts.owner ? palette.white : col,
+        0.035,
+        0.05,
+      ),
     );
     // body capsule
     this.blob(pos.x, y0 + 0.86, pos.z, 0.34, 0.34, 0.3, col, 0.95);
@@ -918,6 +1025,7 @@ export class Scene {
     const fz = pos.z - 0.21 * facing;
     this.blob(pos.x, y0 + 1.28, fz, 0.22, 0.25, 0.12, palette.white);
     const eyes = p.gear?.eyes ?? 0;
+    this.material(0.95);
     this.box(
       pos.x,
       y0 + 1.33,
@@ -959,7 +1067,9 @@ export class Scene {
       0.03,
       palette.dark,
     );
+    this.material(0.45);
     this.outfit(p.outfit ?? "classic", pos.x, y0, pos.z, facing, col);
+    this.material(0.55);
     if (p.bot) {
       this.box(pos.x, y0 + 1.95, pos.z, 0.03, 0.28, 0.03, palette.dark);
       this.sphere(pos.x, y0 + 2.12, pos.z, 0.06, palette.orange);
@@ -1301,6 +1411,21 @@ export class Scene {
     }
     return ball;
   }
+  /** Additive glow effects for one view (built after its camera is known). */
+  effects(_now: number, _eye: V, _pass: number, _split: boolean) {
+    this.material(0.15);
+  }
+  /** Full-screen effects for this frame. */
+  postFx(_now: number): Post {
+    return {
+      rgbSplit: 0,
+      speedLines: 0,
+      flash: 0,
+      vignette: this.map === "arena" || this.map === "nyc" || this.map === "tokyo" ? 0.55 : 0.3,
+      focus: [0.5, 0.5],
+    };
+  }
+  cpuMs = 0;
   demoNear = 0;
   demoFar = 0;
   demoHit = -1;
@@ -1393,9 +1518,8 @@ export class Scene {
   }
   render = () => {
     this.raf = requestAnimationFrame(this.render);
-    const gl = this.gl,
-      canvas = this.canvas,
-      dpr = Math.min(devicePixelRatio, 2);
+    const canvas = this.canvas,
+      dpr = this.gl.scale;
     const w = Math.round(canvas.clientWidth * dpr),
       h = Math.round(canvas.clientHeight * dpr);
     if (w !== canvas.width || h !== canvas.height) {
@@ -1476,37 +1600,8 @@ export class Scene {
       this.viewMode !== "broadcast" &&
       this.follows.length >= 2;
     document.body.classList.toggle("split", split);
-    gl.viewport(0, 0, w, h);
-    gl.disable(gl.SCISSOR_TEST);
-    const look = LOOKS[this.map];
-    gl.clearColor(look.sky[0], look.sky[1], look.sky[2], 1);
-    gl.enable(gl.DEPTH_TEST);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.useProgram(this.program);
-    gl.uniform3fv(gl.getUniformLocation(this.program, "fogColor"), look.sky);
-    gl.uniform4fv(gl.getUniformLocation(this.program, "look"), [
-      look.ambient,
-      look.spots,
-      look.fogNear,
-      look.fogFar,
-    ]);
-    gl.uniform4fv(
-      gl.getUniformLocation(this.program, "spots"),
-      // x, z, strength, radius — pools of light like arena spots
-      [0, 2.5, 0.55, 5.5, 0, -4, 0.45, 5, 7, 7, 0.35, 4],
-    );
-    const draw = (buffer: WebGLBuffer, count: number) => {
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      for (const [name, offset] of [
-        ["position", 0],
-        ["color", 12],
-      ] as [string, number][]) {
-        const loc = gl.getAttribLocation(this.program, name);
-        gl.enableVertexAttribArray(loc);
-        gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 24, offset);
-      }
-      gl.drawArrays(gl.TRIANGLES, 0, count);
-    };
+    const light = lightingFor(this.map);
+    const drawViews: ViewDraw[] = [];
     const seenTags = new Set<string>(),
       seenPops = new Set<string>();
     const passes = split ? 2 : 1;
@@ -1515,6 +1610,7 @@ export class Scene {
       // this viewer's camera, drawn into their half of the screen.
       this.follow = this.follows[pass] ?? null;
       this.vertices = [];
+      this.fxv = [];
       this.followPos = null;
       this.tags = [];
       if (m) {
@@ -1612,18 +1708,19 @@ export class Scene {
               palette.ball.map((v) => v * (0.35 + i * 0.1)),
             );
         });
-        this.blob(
-          ball.x,
-          0.03,
-          ball.z,
-          0.12,
-          0.004,
-          0.12,
-          [0.03, 0.03, 0.05],
-          0,
-          2,
-          10,
-        );
+        if (!this.gl.shadows)
+          this.blob(
+            ball.x,
+            0.03,
+            ball.z,
+            0.12,
+            0.004,
+            0.12,
+            [0.03, 0.03, 0.05],
+            0,
+            2,
+            10,
+          );
         this.pickleball(ball.x, ball.y, ball.z, 0.11);
       }
       // Pop-up target: pulsing rings where the ball drops through smash height.
@@ -1706,7 +1803,8 @@ export class Scene {
             t,
           );
         }
-      // Contact bursts: expanding ring and shards.
+      // Contact bursts: expanding ring and shards (glowing).
+      this.material(0.2, 1.4);
       for (const s of this.bursts) {
         const k = (now - s.at) / (s.big ? 650 : 420);
         if (k < 0) continue;
@@ -1762,22 +1860,12 @@ export class Scene {
       // This viewer's rectangle (a 2-px gap between the halves).
       const vx = split ? pass * Math.ceil(w / 2) + (pass ? 1 : 0) : 0,
         vw = split ? Math.floor(w / 2) - 1 : w;
-      gl.viewport(vx, 0, vw, h);
-      if (split) {
-        gl.enable(gl.SCISSOR_TEST);
-        gl.scissor(vx, 0, vw, h);
-      }
       const vp = camera(
         vw / Math.max(1, h),
         this.view.eye,
         this.view.target,
         this.view.fov,
         this.view.shift,
-      );
-      gl.uniformMatrix4fv(
-        gl.getUniformLocation(this.program, "camera"),
-        false,
-        new Float32Array(vp),
       );
       this.placeTags(
         vp,
@@ -1794,16 +1882,18 @@ export class Scene {
         split,
         seenPops,
       );
-      draw(this.staticBuffer, this.staticCount);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-      gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array(this.vertices),
-        gl.DYNAMIC_DRAW,
-      );
-      draw(this.buffer, this.vertices.length / 6);
+      this.effects(now, this.view.eye, pass, split);
+      drawViews.push({
+        rect: [vx, 0, vw, h],
+        vp,
+        eye: this.view.eye,
+        dynamic: new Float32Array(this.vertices),
+        fx: new Float32Array(this.fxv),
+      });
     }
-    gl.disable(gl.SCISSOR_TEST);
+    this.gl.frame(w, h, light, drawViews, this.postFx(now), now / 1000);
+    // CPU time spent building and submitting this frame (smoothed), for diagnostics.
+    this.cpuMs = this.cpuMs * 0.95 + (performance.now() - now) * 0.05;
     for (const [key, el] of this.tagEls)
       if (!seenTags.has(key)) el.style.display = "none";
     for (const [key, el] of this.popEls)

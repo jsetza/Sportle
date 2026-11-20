@@ -12,6 +12,8 @@ import {
 } from "../shared/types.ts";
 import type { Match, Input, MapId } from "../shared/types.ts";
 import { Scene, VIEW_LABELS } from "./scene.ts";
+import { QUALITY_LABELS } from "./renderer.ts";
+import type { QualityPref } from "./renderer.ts";
 import type { ViewMode } from "./scene.ts";
 import { drawQR } from "./qr.ts";
 import { Music, MUSIC_STYLES } from "./music.ts";
@@ -69,7 +71,7 @@ function display() {
   ) =>
     `<input type="radio" name="mode" id="m-${group}-${mode}" value="${mode}" data-group="${group}" ${checked ? "checked" : ""}><label class="item" for="m-${group}-${mode}"><span class="ball"></span><b>${name}</b><small>${hint}</small></label>`;
   app.innerHTML = `<canvas id="court" aria-label="3D pickleball arena"></canvas><div class="beams" aria-hidden="true"></div>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="quality" title="Graphics quality (Auto lowers it if frames run slow)">Graphics: Auto</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="POVpickle"><span><b>POV</b>PICKLE</span><i></i></div>
   <p class="tagline">Pickleball. <b>Your phone is the paddle.</b></p>
@@ -286,6 +288,22 @@ function display() {
     (window as any).__povScene = scene;
     (window as any).__povMusic = Music;
   }
+  // Graphics quality (Auto / High / Medium / Low), remembered per browser.
+  const qualityLabel = () => {
+    const r = scene.gl;
+    $("quality").textContent =
+      "Graphics: " +
+      QUALITY_LABELS[r.pref] +
+      (r.pref === "auto" ? " (" + QUALITY_LABELS[r.quality] + ")" : "");
+    $("quality").title = r.note || "Graphics quality";
+  };
+  qualityLabel();
+  setInterval(qualityLabel, 2000);
+  $("quality").onclick = () => {
+    const order: QualityPref[] = ["auto", "high", "medium", "low"];
+    scene.gl.setQuality(order[(order.indexOf(scene.gl.pref) + 1) % order.length]);
+    qualityLabel();
+  };
   // Sound effects (paddle hits, bounces, calls): on by default, remembered per browser.
   let soundOn = true;
   try {
