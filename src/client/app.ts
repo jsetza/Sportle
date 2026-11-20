@@ -142,8 +142,6 @@ function display() {
 <button class="paneltab" id="panelToggle" aria-controls="panel">Room</button>
 <div class="hud"><span class="courtlabel" id="courtLabel">POVPICKLE ARENA</span><div class="sboard" id="score"></div><div class="pills" id="pills"></div></div>
 <div class="banner" id="banner" aria-live="polite"></div>
-<div class="spotify hidden" id="spotify"><div class="sphead"><b>Spotify</b><button class="link" id="spChange">Change playlist</button><button class="link" id="spHide">Hide</button></div><iframe id="spFrame" title="Spotify playlist player" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe></div>
-<button class="spotifytab hidden" id="spShow">♫ Spotify</button>
 <div class="intro hidden" id="intro" aria-live="polite"></div>
 <div class="toast hidden" id="toast" aria-live="polite"></div>
 <div class="message" id="message" aria-live="polite">Pick a mode to start.</div>
@@ -832,52 +830,8 @@ function display() {
   // ——— Background music: House by default; the button cycles styles and Off. Starts on the
   // first click/key (browser rule). ———
   const music = new Music();
-  type Pick = MusicStyle | "spotify" | "off";
-  const order: Pick[] = [...MUSIC_STYLES.map((m) => m.id), "spotify", "off"];
-  // ——— Spotify (owner request): the official Spotify embed player, playing a playlist on
-  // this screen. Spotify streams it; nothing is downloaded or re-hosted. Full songs need a
-  // Spotify login in this browser; otherwise Spotify plays 30-second previews. ———
-  const DEFAULT_PLAYLIST = "playlist/PASTE_A_PLAYLIST_ID";
-  const spotifyPath = () => {
-    try {
-      return localStorage.getItem("pov-spotify") || DEFAULT_PLAYLIST;
-    } catch {
-      return DEFAULT_PLAYLIST;
-    }
-  };
-  const syncSpotify = () => {
-    const on = choice === "spotify";
-    $("spotify").classList.toggle("hidden", !on);
-    $("spShow").classList.add("hidden");
-    $("spotify").classList.remove("mini");
-    const frame = $<HTMLIFrameElement>("spFrame");
-    const src = "https://open.spotify.com/embed/" + spotifyPath() + "?utm_source=generator&theme=0";
-    if (on && frame.src !== src) frame.src = src;
-    // Leaving Spotify stops it (unloading the player is the only way to stop an embed).
-    if (!on && frame.src) frame.removeAttribute("src");
-  };
-  $("spChange").onclick = () => {
-    const url = prompt(
-      "Paste a Spotify playlist or album link (Share → Copy link):",
-      "https://open.spotify.com/" + spotifyPath(),
-    );
-    if (!url) return;
-    const m = url.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(playlist|album)\/([A-Za-z0-9]{10,40})/);
-    if (!m) return error(Error("That doesn't look like a Spotify playlist or album link."));
-    try {
-      localStorage.setItem("pov-spotify", m[1] + "/" + m[2]);
-    } catch {}
-    syncSpotify();
-  };
-  // Hide keeps it playing (moved off screen), with a small tab to bring it back.
-  $("spHide").onclick = () => {
-    $("spotify").classList.add("mini");
-    $("spShow").classList.remove("hidden");
-  };
-  $("spShow").onclick = () => {
-    $("spotify").classList.remove("mini");
-    $("spShow").classList.add("hidden");
-  };
+  type Pick = MusicStyle | "off";
+  const order: Pick[] = [...MUSIC_STYLES.map((m) => m.id), "off"];
   let choice: Pick = "house";
   try {
     const saved = localStorage.getItem("visual-music");
@@ -888,14 +842,11 @@ function display() {
     /* default House */
   }
   const syncMusic = () => {
-    const name =
-      choice === "spotify" ? "Spotify" : MUSIC_STYLES.find((m) => m.id === choice)?.name;
+    const name = MUSIC_STYLES.find((m) => m.id === choice)?.name;
     $("music").textContent = name ? "Music: " + name : "Music off";
-    const synth = choice !== "off" && choice !== "spotify";
-    if (synth) music.setStyle(choice as MusicStyle);
-    if (synth && userActed) music.start();
+    if (choice !== "off") music.setStyle(choice);
+    if (choice !== "off" && userActed) music.start();
     else music.stop();
-    syncSpotify();
   };
   let userActed = false;
   const firstGesture = () => {

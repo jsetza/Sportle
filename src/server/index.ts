@@ -383,7 +383,7 @@ const server = createServer(async (req, res) => {
             : "application/octet-stream";
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src https://open.spotify.com; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
     );
     res.writeHead(200, { "Content-Type": type });
     res.end(content);
