@@ -14,7 +14,7 @@ import {
   FOREHAND_OFFSET,
 } from "../src/server/engine.ts";
 import { contactFault } from "../src/shared/rules.ts";
-import { COURT, ZERO_INPUT } from "../src/shared/types.ts";
+import { COURT, ZERO_INPUT, PERFECT_ZONE } from "../src/shared/types.ts";
 import type { Match } from "../src/shared/types.ts";
 
 const singles = (mode: "singles" | "solo" = "singles") => {
@@ -969,6 +969,40 @@ test("difficulty sets the human hitbox: easy 2.3x, medium 1.6x, hard 1x", async 
       `${d} at ${dist} m`,
     );
   }
+});
+
+test("timing verdict: perfect only on time and clean, offset sign matches early/late, speed reported", () => {
+  let perfect = 0,
+    seen = 0;
+  for (let i = 0; i < 300; i++) {
+    const m = singles();
+    m.difficulty = "hard";
+    m.seed = 9000 + i;
+    const p = m.players[0];
+    rally(m, 1);
+    m.bounces = 1;
+    p.pos = { x: 0, y: 0, z: 5 };
+    freeze(m);
+    const dz = -0.9 + (i % 19) * 0.1;
+    m.ball = { x: forehandSide(p) * 0.45, y: 0.8, z: 5 + dz };
+    p.lastHit = -10;
+    if (!hit(m, p, { ...ZERO_INPUT, strength: 0.4 + (i % 5) * 0.1 })) continue;
+    const t = m.timing!;
+    seen++;
+    // Ball in front (dz < 0) = early side of the meter, behind = late side.
+    if (Math.abs(dz) > 0.05) assert.equal(Math.sign(t.offset), dz < 0 ? -1 : 1);
+    if (t.kind === "perfect") {
+      perfect++;
+      assert.ok(Math.abs(t.offset) <= PERFECT_ZONE, "perfect inside the zone");
+      assert.ok(m.quality > 0.85);
+      assert.equal(t.why, "");
+    }
+    if (t.kind === "early" || t.kind === "late") assert.ok(t.why !== "");
+    const v = m.velocity;
+    assert.equal(t.kmh, Math.round(Math.hypot(v.x, v.y, v.z) * 3.6));
+    assert.ok(t.stroke.length > 0);
+  }
+  assert.ok(seen > 200 && perfect > 10, `seen ${seen}, perfect ${perfect}`);
 });
 
 test("timing spark: red (early/late) exactly when the shot pops up or finds the net, green otherwise", () => {

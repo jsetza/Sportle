@@ -1378,90 +1378,155 @@ body.joined .phone > p {
 .status.bad {
   color: #ff4d42;
 }
-/* Comic timing pop-ups ("KABOOM!"-style burst): red EARLY!/LATE!, green GOOD!/GREAT! */
-.pow {
+/* Timing callout (bold italic shot name) above a slim EARLY ↔ LATE meter, like a TV graphic. */
+.tcall {
   position: absolute;
-  width: 196px;
-  height: 124px;
-  transform: translate(-50%, -100%);
-  pointer-events: none;
+  bottom: 96px;
+  transform: translateX(-50%);
+  width: min(440px, 46vw);
   display: grid;
-  place-items: center;
-  animation: pow 1.1s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+  animation: callout-in 0.28s cubic-bezier(0.2, 1.5, 0.4, 1) both;
 }
-.pow svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+.tcall.leaving {
+  transition: opacity 0.3s, transform 0.3s;
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
 }
-.pow .pow-shadow {
-  fill: rgba(0, 0, 0, 0.28);
-}
-.pow .pow-fill {
-  stroke: #111;
-  stroke-width: 6;
-  stroke-linejoin: miter;
-}
-.pow span {
-  position: relative;
+.callout-name {
   font-family: var(--display);
   font-style: italic;
   font-weight: 900;
-  font-size: 31px;
+  font-size: clamp(30px, 3.4vw, 48px);
   letter-spacing: -0.01em;
-  transform: rotate(-7deg) skewX(-6deg);
-  -webkit-text-stroke: 2.5px #111;
-  paint-order: stroke fill;
+  line-height: 1;
+  white-space: nowrap;
+  color: #fff;
+  transform: skewX(-6deg);
   text-shadow:
-    3px 3px 0 #111,
-    4px 4px 0 #111;
+    0 2px 0 rgba(0, 0, 0, 0.55),
+    0 0 22px rgba(0, 0, 0, 0.5);
 }
-.pow-bad .pow-fill {
-  fill: #ffec1f;
+.kind-perfect .callout-name {
+  color: #ff8a1f;
+  text-shadow:
+    0 2px 0 rgba(60, 20, 0, 0.7),
+    0 0 26px rgba(255, 120, 20, 0.65);
 }
-.pow-bad span {
-  color: #ef3355;
+.kind-early .callout-name,
+.kind-late .callout-name {
+  color: rgba(235, 235, 245, 0.62);
 }
-.pow-good .pow-fill {
-  fill: #3ddc5f;
+.callout-why {
+  font: 700 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.16em;
+  color: rgba(235, 235, 245, 0.75);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.pow-good span {
-  color: #ffffff;
+.callout-why i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff8a1f;
 }
-@keyframes pow {
-  0% {
+.tmeter {
+  width: 100%;
+}
+.tbar {
+  position: relative;
+  height: 6px;
+  margin: 6px 0 5px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.32) 30%,
+    rgba(255, 255, 255, 0.32) 70%,
+    rgba(255, 255, 255, 0.12)
+  );
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+.tzone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: #ff8a1f;
+  box-shadow: 0 0 10px rgba(255, 138, 31, 0.8);
+}
+.tneedle {
+  position: absolute;
+  top: -7px;
+  width: 6px;
+  height: 20px;
+  margin-left: -3px;
+  border-radius: 2px;
+  background: #ff3355;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 8px rgba(255, 51, 85, 0.8);
+  animation: needle-in 0.35s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.tlabels {
+  display: flex;
+  justify-content: space-between;
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  color: rgba(235, 235, 245, 0.62);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.tkmh {
+  color: #fff;
+  font-weight: 700;
+}
+@keyframes callout-in {
+  from {
     opacity: 0;
-    transform: translate(-50%, -100%) scale(0.2) rotate(-14deg);
+    transform: translateX(-50%) scale(1.35);
   }
-  14% {
+  to {
     opacity: 1;
-    transform: translate(-50%, -100%) scale(1.18) rotate(4deg);
-  }
-  26% {
-    transform: translate(-50%, -100%) scale(0.96) rotate(-2deg);
-  }
-  36%,
-  78% {
-    opacity: 1;
-    transform: translate(-50%, -100%) scale(1) rotate(0deg);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -112%) scale(0.9) rotate(0deg);
+    transform: translateX(-50%) scale(1);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .pow {
-    animation-duration: 1.1s;
-    animation-timing-function: linear;
+@keyframes needle-in {
+  from {
+    transform: scaleY(0.2);
   }
 }
-body.split .pow {
-  width: 130px;
-  height: 87px;
+/* RALLY counter, top right */
+.rallycount {
+  position: absolute;
+  top: 64px;
+  right: 40px;
+  display: grid;
+  justify-items: end;
+  pointer-events: none;
+  font-family: var(--display);
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
 }
-body.split .pow span {
-  font-size: 26px;
+.rallycount small {
+  font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.18em;
+  opacity: 0.75;
+}
+.rallycount b {
+  font-style: italic;
+  font-weight: 900;
+  font-size: 46px;
+  line-height: 1;
+  transform: skewX(-6deg);
+}
+.rallycount.hot b {
+  color: #ff8a1f;
+}
+body.split .tcall {
+  width: min(360px, 40vw);
+}
+body.split .callout-name {
+  font-size: clamp(24px, 2.6vw, 38px);
 }

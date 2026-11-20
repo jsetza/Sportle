@@ -4,6 +4,8 @@ import type { MapId, Outfit } from "../shared/types.ts";
 import { LOOKS, buildMap, lightingFor } from "./maps.ts";
 import { Renderer, STRIDE } from "./renderer.ts";
 import type { Post, ViewDraw } from "./renderer.ts";
+import { Effects, calloutHtml, placeMeter } from "./effects.ts";
+import type { Timing } from "../shared/types.ts";
 type V = number[];
 const sub = (a: V, b: V) => a.map((v, i) => v - b[i]);
 const cross = (a: V, b: V) => [
@@ -115,21 +117,6 @@ const GLYPHS: Record<string, string[]> = {
   ">": ["0000", "1100", "0110", "0011", "0110", "1100", "0000"],
 };
 type View = { eye: V; target: V; fov: number; shift: number };
-/** Jagged comic starburst outline (fixed shape), in a -120..120 × -80..80 box. */
-const STARBURST = (() => {
-  const pts: string[] = [];
-  const n = 13;
-  for (let i = 0; i < n * 2; i++) {
-    const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2;
-    // Spikes of uneven length, like a hand-drawn "POW".
-    const r = i % 2 ? 0.62 : 0.9 + 0.1 * Math.sin(i * 2.7);
-    pts.push(
-      `${(Math.cos(a) * 112 * r).toFixed(1)},${(Math.sin(a) * 72 * r).toFixed(1)}`,
-    );
-  }
-  return pts.join(" ");
-})();
-
 export type ViewMode = "third" | "first" | "broadcast";
 export const VIEW_LABELS: Record<ViewMode, string> = {
   third: "Third person",
@@ -249,15 +236,12 @@ export class Scene {
   }
   shown = new Map<string, Vec>();
   lastContacts = -1;
-  bursts: {
-    x: number;
-    y: number;
-    z: number;
-    at: number;
-    col: V;
-    big?: boolean;
-  }[] = [];
-  trail: Vec[] = [];
+  fx = new Effects();
+  /** Latest human timing verdict to show (callout + meter), and when it arrived. */
+  callout: { t: Timing; at: number; by: string } | null = null;
+  /** Contact count when the current rally began (for the RALLY counter). */
+  rallyBase = 0;
+  rallyCount = 0;
   audio: AudioContext | null = null;
   muted = true;
   view: View = {
@@ -461,41 +445,39 @@ export class Scene {
       if ((counted || landed) && now - this.lastBounceAt > 90) {
         this.lastBounceAt = now;
         this.bounceSound((-prev.velocity.y - 0.5) / 8);
+        const out =
+          Math.abs(state.ball.x) > COURT.halfWidth + 0.05 ||
+          Math.abs(state.ball.z) > COURT.halfLength + 0.05;
+        this.fx.bounce(state.ball, now, out);
       }
     }
     if (hit) {
       const p = state.players.find((q) => q.id === state.lastPlayer);
-      if (p) this.contactAt.set(p.id, { ...state.ball, at: performance.now() });
+      const now = performance.now();
+      if (p) this.contactAt.set(p.id, { ...state.ball, at: now });
       const t = state.timing?.at === state.contacts ? state.timing : null;
-      if (t) {
-        // Timing spark (owner request): green for a clean swing over the net, red for an
-        // early/late one that pops up or finds the net. Bigger and longer than a normal burst.
-        const good = t.kind === "great" || t.kind === "good";
-        const col: V = good
-          ? t.kind === "great"
-            ? [0.35, 1, 0.45]
-            : [0.2, 0.85, 0.35]
-          : [1, 0.18, 0.15];
-        this.burst(state.ball, col, 0, true);
-        this.pops.push({
-          id: t.at,
-          by: t.by,
-          kind: t.kind,
-          x: state.ball.x,
-          y: state.ball.y,
-          z: state.ball.z,
-          at: performance.now(),
-        });
-        if (this.pops.length > 4) this.pops.shift();
-        if (t.kind === "great")
-          this.burst(state.ball, [0.85, 1, 0.85], 0, true, 90);
-      } else
-        this.burst(
-          state.ball,
-          p ? teamColor(p.team) : palette.ball,
-          state.quality,
-        );
+      const v = state.velocity,
+        kmh = Math.round(Math.hypot(v.x, v.y, v.z) * 3.6);
+      const stroke = t?.stroke ?? (state.shot.split(" ").pop() || "drive");
+      const local = !!p && this.follows.includes(p.id);
+      this.fx.contact(state.ball, now, {
+        team: p ? teamColor(p.team) : palette.ball,
+        stroke,
+        kmh,
+        timing: t,
+        local,
+      });
+      // Timing callout for human hits: players on this screen, or everyone if none are.
+      if (t && (local || !this.follows.length))
+        this.callout = { t, at: now, by: t.by };
     }
+    // RALLY counter: paddle contacts since the rally started (serve included).
+    if (state.phase === "serve" || state.phase === "lobby" || !prev)
+      this.rallyBase = state.contacts;
+    this.rallyCount =
+      state.phase === "rally" || state.phase === "point"
+        ? state.contacts - this.rallyBase
+        : 0;
     this.lastContacts = state.contacts;
     if (state.event !== this.lastEvent) {
       this.lastEvent = state.event;
@@ -503,25 +485,6 @@ export class Scene {
       if (/fault|Out|Net|wins|Double bounce|hit /i.test(msg))
         this.tone(330, 220, 0.25, 0.05, "triangle");
     }
-  }
-  burst(at: Vec, col: V, quality = 1, big = false, delay = 0) {
-    this.bursts.push({
-      x: at.x,
-      y: at.y,
-      z: at.z,
-      at: performance.now() + delay,
-      col,
-      big,
-    });
-    if (quality > 0.85)
-      this.bursts.push({
-        x: at.x,
-        y: at.y,
-        z: at.z,
-        at: performance.now() + 60,
-        col: palette.white,
-      });
-    if (this.bursts.length > 6) this.bursts.shift();
   }
   // ——— geometry primitives ———
   /** Flat triangle; its normal points away from `inside` (a point inside the solid). */
@@ -1407,86 +1370,110 @@ export class Scene {
     );
     if (n !== this.demoHit) {
       this.demoHit = n;
-      this.burst({ x: x0, y: 0.95, z: z0 }, teamColor(from > 0 ? 0 : 1), 0.9);
+      // Show off the shot effects on the menu court (cosmetic demo only).
+      const show = ["drive", "smash", "slice", "drive", "dink", "drive"][n % 6];
+      this.fx.contact({ x: x0, y: 0.95, z: z0 }, now, {
+        team: teamColor(from > 0 ? 0 : 1),
+        stroke: show,
+        kmh: show === "drive" ? 62 : show === "dink" ? 24 : 45,
+        timing: null,
+        local: false,
+      });
     }
     return ball;
   }
   /** Additive glow effects for one view (built after its camera is known). */
-  effects(_now: number, _eye: V, _pass: number, _split: boolean) {
+  effects(now: number, ball: Vec | null, _pass: number, _split: boolean) {
+    const eye = this.view.eye,
+      f = norm(sub(this.view.target, eye)),
+      right = norm(cross(f, [0, 1, 0])),
+      up = cross(right, f);
+    const keep = this.vertices;
+    this.vertices = this.fxv;
+    this.fx.build(
+      (p, n, c, strength, soft) => {
+        this.mat = [0, strength, soft, 0];
+        this.vertex(p, n, c);
+      },
+      ball,
+      eye,
+      right,
+      up,
+      now,
+    );
+    this.vertices = keep;
     this.material(0.15);
   }
   /** Full-screen effects for this frame. */
-  postFx(_now: number): Post {
+  postFx(now: number): Post {
+    const p = this.fx.post(now);
     return {
-      rgbSplit: 0,
-      speedLines: 0,
-      flash: 0,
-      vignette: this.map === "arena" || this.map === "nyc" || this.map === "tokyo" ? 0.55 : 0.3,
-      focus: [0.5, 0.5],
+      ...p,
+      vignette:
+        (this.map === "arena" || this.map === "nyc" || this.map === "tokyo" ? 0.55 : 0.3) +
+        p.speedLines * 0.25,
+      focus: [0.5, 0.45],
     };
   }
+  calloutEls: HTMLDivElement[] = [];
+  calloutKey: string[] = [];
+  /** Timing callout + EARLY ↔ LATE meter at the bottom of this view (the hitter's half). */
+  placeCallout(pass: number, split: boolean, ox: number, cw: number, now: number) {
+    let el = this.calloutEls[pass];
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "tcall";
+      this.tagLayer.appendChild(el);
+      this.calloutEls[pass] = el;
+    }
+    const c = this.callout;
+    const age = c ? now - c.at : 1e9;
+    const show = !!c && age < 1700 && (!split || this.follows[pass] === c.by);
+    if (!show) {
+      if (el.style.display !== "none") el.style.display = "none";
+      return;
+    }
+    const key = c!.t.at + ":" + c!.by;
+    if (this.calloutKey[pass] !== key) {
+      this.calloutKey[pass] = key;
+      el.className = "tcall kind-" + c!.t.kind;
+      el.innerHTML = calloutHtml(c!.t);
+      placeMeter(el, c!.t);
+      // restart the entrance animation
+      el.style.animation = "none";
+      void el.offsetWidth;
+      el.style.animation = "";
+    }
+    el.style.display = "";
+    el.style.left = (ox + cw / 2).toFixed(0) + "px";
+    el.classList.toggle("leaving", age > 1350);
+  }
+  rallyEl: HTMLDivElement | null = null;
+  rallyShown = -1;
+  /** "RALLY 7" in the top-right corner while a rally is going. */
+  placeRally() {
+    if (!this.rallyEl) {
+      this.rallyEl = document.createElement("div");
+      this.rallyEl.className = "rallycount";
+      this.tagLayer.appendChild(this.rallyEl);
+    }
+    const n = this.state && this.state.phase !== "lobby" ? this.rallyCount : 0;
+    if (n === this.rallyShown) return;
+    this.rallyShown = n;
+    this.rallyEl.style.display = n >= 2 ? "" : "none";
+    this.rallyEl.innerHTML = `<small>RALLY</small><b>${n}</b>`;
+    this.rallyEl.classList.toggle("hot", n >= 8);
+    this.rallyEl.animate?.(
+      [{ transform: "scale(1.25)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(.2,1.6,.4,1)" },
+    );
+  }
   cpuMs = 0;
+  frozen: { positions: Map<string, Vec>; ball: Vec | null } | null = null;
   demoNear = 0;
   demoFar = 0;
   demoHit = -1;
   /** Project each tag's 3D head point to the screen and move its label there. */
-  /**
-   * Comic-style timing pop-ups (owner request, like a "KABOOM!" burst): a jagged starburst with
-   * a thick black outline. Yellow with red "EARLY!"/"LATE!" for a mistimed swing, green with
-   * "GOOD!"/"GREAT!" for a clean one. Shown just above the contact point for ~1.1 s.
-   */
-  pops: {
-    id: number;
-    by: string;
-    kind: "great" | "good" | "early" | "late";
-    x: number;
-    y: number;
-    z: number;
-    at: number;
-  }[] = [];
-  popEls = new Map<string, HTMLDivElement>();
-  placePops(
-    vp: V,
-    ox: number,
-    cw: number,
-    pass: number,
-    split: boolean,
-    seen: Set<string>,
-  ) {
-    const ch = this.canvas.clientHeight,
-      now = performance.now();
-    this.pops = this.pops.filter((p) => now - p.at < 1100);
-    for (const p of this.pops) {
-      // In split screen, only the hitter's own half shows their pop-up.
-      if (split && this.follows[pass] !== p.by) continue;
-      const y = p.y + 0.5;
-      const cx = vp[0] * p.x + vp[4] * y + vp[8] * p.z + vp[12],
-        cy = vp[1] * p.x + vp[5] * y + vp[9] * p.z + vp[13],
-        w4 = vp[3] * p.x + vp[7] * y + vp[11] * p.z + vp[15];
-      if (w4 <= 0.1) continue;
-      // Keep it fully on screen even when the contact is near an edge.
-      const sx = Math.min(
-          ox + cw - 90,
-          Math.max(ox + 90, ox + ((cx / w4 + 1) / 2) * cw),
-        ),
-        sy = Math.min(ch - 70, Math.max(70, ((1 - cy / w4) / 2) * ch));
-      const key = p.id + "@" + pass;
-      let el = this.popEls.get(key);
-      if (!el) {
-        el = document.createElement("div");
-        const good = p.kind === "great" || p.kind === "good";
-        el.className = "pow " + (good ? "pow-good" : "pow-bad");
-        el.innerHTML =
-          `<svg viewBox="-120 -80 240 160" aria-hidden="true"><polygon class="pow-shadow" points="${STARBURST}" transform="translate(9 9)"/><polygon class="pow-fill" points="${STARBURST}"/></svg>` +
-          `<span>${{ great: "GREAT!", good: "GOOD!", early: "EARLY!", late: "LATE!" }[p.kind]}</span>`;
-        this.tagLayer.appendChild(el);
-        this.popEls.set(key, el);
-      }
-      el.style.left = sx.toFixed(1) + "px";
-      el.style.top = sy.toFixed(1) + "px";
-      seen.add(key);
-    }
-  }
   placeTags(vp: V, ox: number, cw: number, pass: number, seen: Set<string>) {
     const ch = this.canvas.clientHeight;
     for (const t of this.tags) {
@@ -1564,9 +1551,14 @@ export class Scene {
       return out;
     };
     // ——— once per frame: positions, ball, trail, effects bookkeeping ———
-    const positions = new Map<string, Vec>();
+    let positions = new Map<string, Vec>();
     let ball: Vec | null = null;
-    if (m) {
+    // Hit-stop on a PERFECT hit: hold everything still for a few frames.
+    const frozen = now < this.fx.freezeUntil && this.frozen;
+    if (frozen) {
+      positions = this.frozen!.positions;
+      ball = this.frozen!.ball;
+    } else if (m) {
       for (const p of m.players)
         positions.set(
           p.id,
@@ -1592,7 +1584,8 @@ export class Scene {
         z: m.ball.z + m.velocity.z * bt,
       });
     }
-    this.bursts = this.bursts.filter((s) => now - s.at < (s.big ? 650 : 420));
+    if (!frozen) this.frozen = m ? { positions, ball } : null;
+
     // Split screen: two players on this screen, a player camera, and a match in progress.
     const split =
       !!m &&
@@ -1602,8 +1595,7 @@ export class Scene {
     document.body.classList.toggle("split", split);
     const light = lightingFor(this.map);
     const drawViews: ViewDraw[] = [];
-    const seenTags = new Set<string>(),
-      seenPops = new Set<string>();
+    const seenTags = new Set<string>();
     const passes = split ? 2 : 1;
     for (let pass = 0; pass < passes; pass++) {
       // Each pass: geometry for this viewer (their own body hidden in first person) and
@@ -1686,28 +1678,9 @@ export class Scene {
       }
       if (ball) {
         if (pass === 0) {
-          // Short motion trail; cleared when the ball jumps (new serve/feed).
-          const lastT = this.trail[this.trail.length - 1];
-          if (
-            lastT &&
-            Math.hypot(lastT.x - ball.x, lastT.y - ball.y, lastT.z - ball.z) >
-              0.7
-          )
-            this.trail = [];
-          this.trail.push({ ...ball });
-          if (this.trail.length > 6) this.trail.shift();
           this.rollBall(ball);
+          this.fx.track(ball, now);
         }
-        this.trail.forEach((q, i) => {
-          if (i < this.trail.length - 1)
-            this.sphere(
-              q.x,
-              q.y,
-              q.z,
-              0.035 + i * 0.01,
-              palette.ball.map((v) => v * (0.35 + i * 0.1)),
-            );
-        });
         if (!this.gl.shadows)
           this.blob(
             ball.x,
@@ -1803,36 +1776,6 @@ export class Scene {
             t,
           );
         }
-      // Contact bursts: expanding ring and shards (glowing).
-      this.material(0.2, 1.4);
-      for (const s of this.bursts) {
-        const k = (now - s.at) / (s.big ? 650 : 420);
-        if (k < 0) continue;
-        const r = (0.15 + k * 0.85) * (s.big ? 1.5 : 1),
-          size = (s.big ? 0.11 : 0.07) * (1 - k),
-          shards = s.big ? 16 : 10;
-        for (let i = 0; i < shards; i++) {
-          const ang = (i / shards) * Math.PI * 2 + s.at;
-          this.box(
-            s.x + Math.cos(ang) * r,
-            s.y + Math.sin(ang) * r * 0.8,
-            s.z,
-            size,
-            size,
-            size,
-            s.col,
-          );
-        }
-        this.ring(
-          s.x,
-          s.z,
-          0.2 + k * 1.1,
-          s.col,
-          0.04,
-          0.05 * (1 - k) + 0.01,
-          16,
-        );
-      }
       // Camera for this viewer, eased toward the view for the current phase.
       // Each half keeps its own camera; a new one starts from the current view.
       this.view = this.views[pass] || { ...this.view };
@@ -1860,11 +1803,13 @@ export class Scene {
       // This viewer's rectangle (a 2-px gap between the halves).
       const vx = split ? pass * Math.ceil(w / 2) + (pass ? 1 : 0) : 0,
         vw = split ? Math.floor(w / 2) - 1 : w;
+      // Camera punch on your own hits (stronger on PERFECT).
+      const sh = this.fx.shake(now);
       const vp = camera(
         vw / Math.max(1, h),
-        this.view.eye,
-        this.view.target,
-        this.view.fov,
+        [this.view.eye[0] + sh.x, this.view.eye[1] + sh.y, this.view.eye[2]],
+        [this.view.target[0] + sh.x * 0.5, this.view.target[1] + sh.y * 0.5, this.view.target[2]],
+        this.view.fov + sh.fov,
         this.view.shift,
       );
       this.placeTags(
@@ -1874,15 +1819,8 @@ export class Scene {
         pass,
         seenTags,
       );
-      this.placePops(
-        vp,
-        (vx / w) * canvas.clientWidth,
-        (vw / w) * canvas.clientWidth,
-        pass,
-        split,
-        seenPops,
-      );
-      this.effects(now, this.view.eye, pass, split);
+      this.effects(now, ball, pass, split);
+      this.placeCallout(pass, split, (vx / w) * canvas.clientWidth, (vw / w) * canvas.clientWidth, now);
       drawViews.push({
         rect: [vx, 0, vw, h],
         vp,
@@ -1896,10 +1834,6 @@ export class Scene {
     this.cpuMs = this.cpuMs * 0.95 + (performance.now() - now) * 0.05;
     for (const [key, el] of this.tagEls)
       if (!seenTags.has(key)) el.style.display = "none";
-    for (const [key, el] of this.popEls)
-      if (!seenPops.has(key)) {
-        el.remove();
-        this.popEls.delete(key);
-      }
+    this.placeRally();
   };
 }

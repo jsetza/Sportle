@@ -1359,7 +1359,8 @@ function phone() {
   ring.addEventListener("pointercancel", padEnd);
   let timingSeen = -1,
     timingUntil = 0,
-    timingKind: "great" | "good" | "early" | "late" = "good";
+    timingKind: "perfect" | "good" | "early" | "late" = "good",
+    timingText = "";
   net.onState = ({ state }: { state: Match }) => {
     // Ranked matchmaking moves this phone into its match and back to the lobby afterwards.
     const mv = state.moves?.[playerId];
@@ -1420,19 +1421,26 @@ function phone() {
       timingSeen = tm.at;
       timingUntil = Date.now() + 1300;
       timingKind = tm.kind;
+      timingText =
+        (tm.kind === "perfect"
+          ? "✓ Perfect "
+          : tm.kind === "good"
+            ? "✓ Good "
+            : tm.kind === "early"
+              ? "✗ Early "
+              : "✗ Late ") +
+        tm.stroke +
+        " · " +
+        tm.kmh +
+        " km/h";
       if (tm.kind === "early" || tm.kind === "late") navigator.vibrate?.(140);
     }
     const showTiming = Date.now() < timingUntil;
     if (showTiming)
-      ui("matchStatus").text = {
-        great: "✓ Great timing!",
-        good: "✓ Good timing",
-        early: "✗ Too early",
-        late: "✗ Too late",
-      }[timingKind];
+      ui("matchStatus").text = timingText;
     $("matchStatus").classList.toggle(
       "good",
-      showTiming && (timingKind === "great" || timingKind === "good"),
+      showTiming && (timingKind === "perfect" || timingKind === "good"),
     );
     $("matchStatus").classList.toggle(
       "bad",

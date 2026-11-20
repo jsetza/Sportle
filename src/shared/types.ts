@@ -246,14 +246,11 @@ export type Match = {
    */
   swapped: string[];
   /**
-   * Timing verdict for the latest human contact (owner request: red/green spark).
-   * great/good = clean swing that clears the net; early/late = mistimed into the net or a pop-up.
+   * Timing verdict for the latest human contact (callout + EARLY ↔ LATE meter on the display).
+   * perfect/good = clean swing that clears the net; early/late = mistimed into the net or a
+   * pop-up, so the verdict always matches what the ball does.
    */
-  timing: {
-    at: number;
-    by: string;
-    kind: "great" | "good" | "early" | "late";
-  } | null;
+  timing: Timing | null;
   /** Epoch ms when an automatic resume happens (0 = none scheduled). */
   resumeAt: number;
   score: number[];
@@ -293,6 +290,22 @@ export type Match = {
   /** Serve type of the ball in play ("" once anyone else has hit it). */
   serveKind: "" | ServeStyle;
 };
+export type Timing = {
+  /** Contact number this verdict belongs to (matches Match.contacts). */
+  at: number;
+  by: string;
+  kind: "perfect" | "good" | "early" | "late";
+  /** -1 (very early: ball well in front) … 0 (beside you) … 1 (very late: ball behind you). */
+  offset: number;
+  /** Launch speed in km/h of game speed (not a real-world measurement). */
+  kmh: number;
+  /** Shot word for the callout, e.g. "drive", "dink", "smash", "slice". */
+  stroke: string;
+  /** Why a mistimed shot was bad. */
+  why: "" | "popup" | "net";
+};
+/** Timing offsets inside ±PERFECT_ZONE count as on time (the meter's orange zone). */
+export const PERFECT_ZONE = 0.3;
 export const ZERO_INPUT: Input = {
   seq: -1,
   t: 0,

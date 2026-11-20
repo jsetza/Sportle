@@ -4,6 +4,7 @@ import {
   ZERO_INPUT,
   DEFAULT_GEAR,
   clamp,
+  PERFECT_ZONE,
 } from "../shared/types.ts";
 import type {
   Match,
@@ -662,7 +663,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
     m.quality = quality;
     m.hits++;
     m.shot = strokeSide(m, p, side) + " pop-up";
-    judge(m, p, true);
+    judge(m, p, true, "pop-up");
     announce(m, "Pop-up! • " + m.shot + " • smash it!");
     return true;
   }
@@ -702,11 +703,17 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   );
   m.quality = quality;
   m.hits++;
-  judge(m, p, false);
-  m.shot =
-    strokeSide(m, p, side) +
-    " " +
-    (smash ? "smash" : lob ? "lob" : roll ? "roll" : dink ? "dink" : "drive");
+  const stroke = smash
+    ? "smash"
+    : lob
+      ? "lob"
+      : roll
+        ? "roll"
+        : dink
+          ? "dink"
+          : "drive";
+  m.shot = strokeSide(m, p, side) + " " + stroke;
+  judge(m, p, false, stroke);
   announce(
     m,
     m.shot +
@@ -746,11 +753,14 @@ export function clearsNet(m: Match) {
  * up or finds the net is "early"/"late" (was the ball still in front of you, or behind?);
  * anything else is "good", or "great" on the sweet spot.
  */
-function judge(m: Match, p: Player, popup: boolean) {
+export function judge(m: Match, p: Player, popup: boolean, stroke: string) {
   if (p.bot) return;
-  const bad = popup || !clearsNet(m);
+  const net = !popup && !clearsNet(m);
+  const bad = popup || net;
   // m.ball is the contact point; in front of the player means the swing came early.
   const front = (p.pos.z - m.ball.z) * (p.team ? -1 : 1);
+  const offset = clamp(-front / 0.8, -1, 1);
+  const v = m.velocity;
   m.timing = {
     at: m.contacts,
     by: p.id,
@@ -758,9 +768,13 @@ function judge(m: Match, p: Player, popup: boolean) {
       ? front > 0
         ? "early"
         : "late"
-      : m.quality > 0.85
-        ? "great"
+      : m.quality > 0.85 && Math.abs(offset) <= PERFECT_ZONE
+        ? "perfect"
         : "good",
+    offset: Math.round(offset * 100) / 100,
+    kmh: Math.round(Math.hypot(v.x, v.y, v.z) * 3.6),
+    stroke,
+    why: popup ? "popup" : net ? "net" : "",
   };
 }
 /** Bot contact: occasional mistimed hits (unforced errors), rarer on harder settings. */

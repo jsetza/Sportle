@@ -248,12 +248,14 @@ void main(){
     vec2 d = (uv - uFocus) * uAspect;
     float a = atan(d.y, d.x);
     float r = length(d);
-    float seg = floor(a * 38.0 / 6.2832 * 2.0);
-    float n = hash(seg + floor(uTime * 24.0) * 13.0);
-    float line = smoothstep(0.55, 1.0, n) * smoothstep(0.12, 0.6, r);
-    float edge = abs(fract(a * 38.0 / 6.2832 * 2.0) - 0.5);
-    line *= smoothstep(0.5, 0.1, edge);
-    c += vec3(1.0, 0.95, 0.9) * line * uLines * 1.4;
+    float seg = floor(a * 150.0 / 6.2832);
+    float n = hash(seg + floor(uTime * 20.0) * 13.0);
+    // Thin streaks, mostly toward the edges, each starting at a random distance.
+    float start = 0.2 + hash(seg * 3.1) * 0.35;
+    float line = step(0.78, n) * smoothstep(start, start + 0.25, r);
+    float edge = abs(fract(a * 150.0 / 6.2832) - 0.5);
+    line *= smoothstep(0.5, 0.3, edge);
+    c += vec3(1.0, 0.96, 0.92) * line * uLines * 0.75;
   }
   c += vec3(1.0, 0.97, 0.92) * uFlash;
   c = aces(c);
