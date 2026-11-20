@@ -719,7 +719,10 @@ export class Scene {
     this.box(0, -0.02, 0, 11, 0.04, 21, look.apron);
     // Glossy court: sharp highlights and a soft reflection of the players.
     // Satin court: highlights without a white glare when the sun is low.
-    this.material(0.3, 0, 0.25, 2);
+    // Indoors/at night the court mirrors the lit players nicely; in daylight a mirror-like
+    // floor just smears the bright surroundings across it, so it's mostly matte there.
+    const night = arena || this.map === "tokyo" || this.map === "nyc";
+    this.material(night ? 0.3 : 0.1, 0, night ? 0.25 : 0.08, 2);
     this.box(0, -0.005, 0, 6.096, 0.03, 13.4112, P.court);
     this.box(0, 0.012, 0, 6.096, 0.012, 4.2672, P.kitchen);
     this.material(0.45, 0.04, 0.2);

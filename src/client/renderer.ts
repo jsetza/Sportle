@@ -156,10 +156,12 @@ void main(){
       vec3 Hs = normalize(Ls + V);
       specular += uSpotCol[i].rgb * pow(max(dot(N, Hs), 0.0), gloss) * spec * specNorm * nl * att;
     }
+    // Highlights stay a sheen: capped so a low sun or spotlight can't wash a floor out to white.
+    specular = min(specular, vec3(0.32));
     col = base * diffuse + specular + base * emit * 2.6;
     // Fresnel rim on glossy things.
     float fres = pow(1.0 - max(dot(N, V), 0.0), 5.0);
-    col += uSkyAmb * fres * spec * 0.35;
+    col += uSkyAmb * fres * spec * 0.15;
 ${
   webgl2
     ? `    if (uReflOn > 0.5 && refl > 0.0 && uMirror < 0.5) {
@@ -169,7 +171,7 @@ ${
       vec3 r = (texture(uRefl, uv).rgb * 2.0
         + texture(uRefl, uv + vec2(t.x, t.y)).rgb + texture(uRefl, uv + vec2(-t.x, t.y)).rgb
         + texture(uRefl, uv + vec2(t.x, -t.y)).rgb + texture(uRefl, uv + vec2(-t.x, -t.y)).rgb) / 6.0;
-      col += r * refl * (0.35 + 0.65 * fres);
+      col += min(r, vec3(1.5)) * refl * (0.3 + 0.4 * fres);
     }`
     : ""
 }
@@ -866,7 +868,9 @@ export class Renderer {
         gl.viewport(Math.floor(vx * k), Math.floor(vy * k), Math.ceil(vw * k), Math.ceil(vh * k));
         gl.enable(gl.SCISSOR_TEST);
         gl.scissor(Math.floor(vx * k), Math.floor(vy * k), Math.ceil(vw * k), Math.ceil(vh * k));
-        gl.clearColor(light.sky[0] ** 2.2, light.sky[1] ** 2.2, light.sky[2] ** 2.2, 1);
+        // Empty sky reflects nothing (black = no light added): reflecting a bright sky washed
+        // the court out to white at low camera angles on sunny maps.
+        gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.disable(gl.SCISSOR_TEST);
         this.useScene(prog, light, v, time, 1, 0, w, h);

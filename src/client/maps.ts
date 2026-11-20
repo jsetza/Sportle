@@ -172,12 +172,17 @@ function tower(
   litChance = 0.75,
 ) {
   b.box(x, base + h / 2, z, w, h, d, color);
-  for (let y = base + 2; y < base + h - 1; y += every) {
+  // Window rows start at a slightly different height per building (from its position, so the
+  // layout stays the same): neighbouring buildings' rows then never share a plane and flicker.
+  const jitter = ((((x * 7.13 + z * 3.71) % 1) + 1) % 1) * 0.3;
+  for (let row = base + 2; row < base + h - 1; row += every) {
+    const y = row + jitter; // same rows (and random picks) as before, nudged up a little
     if (rnd() > litChance) continue;
     const c = pick(lit);
     b.glow?.(WIN);
     b.box(x, y, z, w + 0.06, every * 0.32, d * 0.86, c);
-    b.box(x, y, z, w * 0.86, every * 0.32, d + 0.06, c);
+    // Slightly shorter, so the crossing band's top and bottom don't coincide with the first's.
+    b.box(x, y, z, w * 0.86, every * 0.3, d + 0.06, c);
     b.glow?.(0);
   }
   b.box(x, base + h + 0.3, z, w * 0.7, 0.6, d * 0.7, shade(color, 0.8));
@@ -508,7 +513,7 @@ function manila(b: Builder) {
   rooftop(b, [0.55, 0.52, 0.5], [0.62, 0.55, 0.5], lit);
   // city far below, a few towers rising past the roof, bay on the far side
   b.box(0, -43, 0, 320, 1, 320, [0.36, 0.33, 0.32]);
-  b.box(0, -42.4, -120, 320, 0.4, 150, [0.36, 0.42, 0.6]);
+  b.box(0, -42.4, -120, 319.6, 0.4, 150, [0.36, 0.42, 0.6]);
   city(b, {
     ground: -42.5,
     clearX: 16,
@@ -580,7 +585,7 @@ function sf(b: Builder) {
   ];
   rooftop(b, [0.46, 0.47, 0.5], [0.78, 0.76, 0.72], lit);
   b.box(0, -43, 40, 320, 1, 240, [0.42, 0.44, 0.42]);
-  b.box(0, -42.6, -120, 320, 0.4, 160, [0.3, 0.42, 0.52]);
+  b.box(0, -42.6, -120, 319.6, 0.4, 160, [0.3, 0.42, 0.52]);
   city(b, {
     ground: -42.5,
     clearX: 16,
@@ -837,9 +842,10 @@ function palm(b: Builder, x: number, z: number, s: number) {
       x + lean * y,
       y,
       z,
-      0.42 * s,
+      // Alternate thickness: overlapping segments never share a face (no flicker).
+      (i % 2 ? 0.4 : 0.44) * s,
       h / 8 + 0.05,
-      0.42 * s,
+      (i % 2 ? 0.4 : 0.44) * s,
       i % 2 ? [0.5, 0.38, 0.26] : [0.44, 0.33, 0.22],
     );
   }
