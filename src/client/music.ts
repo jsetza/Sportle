@@ -206,8 +206,83 @@ export class Music {
     return 60 / STYLES[this.style].bpm / 4;
   }
 
+  // ——— Licensed audio file (owner request): if src/client/music/<style>.<ext> exists, that
+  // style plays the file on loop instead of the synthesised loop. ———
+  files: Partial<Record<MusicStyle, string>> = {};
+  audio: HTMLAudioElement | null = null;
+  fileGain: GainNode | null = null;
+  filePlaying = false;
+  fileTimer = 0;
+  /** Look for supplied music files (e.g. /music/house.mp3). Call once at start-up. */
+  async findFiles() {
+    try {
+      const c = await (await fetch("/api/config", { cache: "no-store" })).json();
+      for (const s of MUSIC_STYLES)
+        if (typeof c.music?.[s.id] === "string" && c.music[s.id].startsWith("/music/"))
+          this.files[s.id] = c.music[s.id];
+    } catch {
+      /* no supplied music: the synthesised styles play */
+    }
+    // Already playing that style's synth loop? Switch over to the file.
+    if (this.playing && this.files[this.style]) {
+      this.stopSynth();
+      this.startFile();
+    }
+  }
+  startFile() {
+    if (this.filePlaying) return;
+    if (!this.ctx) this.setup();
+    const ctx = this.ctx!;
+    if (!this.audio) {
+      this.audio = new Audio();
+      this.audio.loop = true;
+      this.audio.preload = "auto";
+      this.fileGain = ctx.createGain();
+      this.fileGain.gain.value = 0.0001;
+      ctx.createMediaElementSource(this.audio).connect(this.fileGain).connect(ctx.destination);
+    }
+    const url = this.files[this.style]!;
+    if (!this.audio.src.endsWith(url)) this.audio.src = url;
+    ctx.resume();
+    this.audio.play().catch(() => {});
+    this.filePlaying = true;
+    // Quieter on the menu, fuller in a match; eased so changes are smooth.
+    const level = () => (this.intensity > 0.5 ? 0.85 : 0.55);
+    const g = this.fileGain!.gain;
+    g.cancelScheduledValues(ctx.currentTime);
+    g.setValueAtTime(Math.max(0.0001, g.value), ctx.currentTime);
+    g.linearRampToValueAtTime(level(), ctx.currentTime + 1.2);
+    clearInterval(this.fileTimer);
+    this.fileTimer = window.setInterval(() => {
+      g.setTargetAtTime(level(), ctx.currentTime, 0.4);
+    }, 500);
+  }
+  stopFile() {
+    if (!this.filePlaying || !this.ctx) return;
+    const ctx = this.ctx,
+      g = this.fileGain!.gain,
+      audio = this.audio!;
+    clearInterval(this.fileTimer);
+    g.cancelScheduledValues(ctx.currentTime);
+    g.setValueAtTime(g.value, ctx.currentTime);
+    g.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+    this.filePlaying = false;
+    setTimeout(() => {
+      if (!this.filePlaying) audio.pause();
+    }, 700);
+  }
   setStyle(style: MusicStyle) {
     if (!STYLES[style] || style === this.style) return;
+    if (this.filePlaying || (this.playing && (this.files[style] || this.files[this.style]))) {
+      // Switching to or from a file-backed style: stop whatever plays, start the new one.
+      const on = this.filePlaying || this.playing;
+      this.stop();
+      this.style = style;
+      this.step = 0;
+      if (this.echo) this.echo.delayTime.value = this.step16 * STYLES[style].echo;
+      if (on) this.start();
+      return;
+    }
     this.style = style;
     this.step = 0;
     if (this.echo) this.echo.delayTime.value = this.step16 * STYLES[style].echo;
@@ -220,6 +295,7 @@ export class Music {
     }
   }
   start() {
+    if (this.files[this.style]) return this.startFile();
     if (this.playing) return;
     if (!this.ctx) this.setup();
     const ctx = this.ctx!;
@@ -235,6 +311,10 @@ export class Music {
     this.timer = window.setInterval(() => this.schedule(), 25);
   }
   stop() {
+    this.stopFile();
+    this.stopSynth();
+  }
+  stopSynth() {
     if (!this.playing || !this.ctx) return;
     const ctx = this.ctx;
     this.master!.gain.cancelScheduledValues(ctx.currentTime);

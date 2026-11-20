@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve, extname, dirname } from "node:path";
 import { stripTypeScriptTypes } from "node:module";
@@ -84,6 +84,26 @@ async function body(req: any) {
   }
   return JSON.parse(text || "{}");
 }
+/** Music files the owner supplies under src/client/music/ (licensed audio only). */
+const AUDIO: Record<string, string> = {
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
+  wav: "audio/wav",
+};
+/** Supplied music files by style, e.g. { house: "/music/house.mp3" } (checked per request). */
+function musicFiles() {
+  const out: Record<string, string> = {};
+  try {
+    for (const f of readdirSync(resolve(root, "music"))) {
+      const m = /^(house|chill|synthwave|lofi)\.(mp3|m4a|ogg|wav)$/.exec(f);
+      if (m && !out[m[1]]) out[m[1]] = "/music/" + f;
+    }
+  } catch {
+    /* no music folder */
+  }
+  return out;
+}
 const server = createServer(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -111,7 +131,11 @@ const server = createServer(async (req, res) => {
       )
         return json(res, { error: "Origin rejected" }, 403);
       if (path === "/api/config")
-        return json(res, { publicOrigin: publicURL, serverTime: Date.now() });
+        return json(res, {
+          publicOrigin: publicURL,
+          serverTime: Date.now(),
+          music: musicFiles(),
+        });
       if (path === "/api/clock") return json(res, { serverTime: Date.now() });
       const ip = clientIp(req.headers, req.socket.remoteAddress, platform);
       const authed = /^Bearer ./.test(req.headers.authorization || "");
@@ -350,7 +374,8 @@ const server = createServer(async (req, res) => {
       }
       return json(res, { error: "Unknown action" }, 404);
     }
-    if (req.method !== "GET") return json(res, { error: "Not found" }, 404);
+    if (req.method !== "GET" && req.method !== "HEAD")
+      return json(res, { error: "Not found" }, 404);
     let file =
       path === "/" || path === "/controller"
         ? resolve(root, "index.html")
@@ -380,13 +405,37 @@ const server = createServer(async (req, res) => {
           ? "text/css"
           : file.endsWith(".html")
             ? "text/html"
-            : "application/octet-stream";
+            : AUDIO[file.slice(file.lastIndexOf(".") + 1)] ??
+              "application/octet-stream";
     res.setHeader(
       "Content-Security-Policy",
       "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
     );
-    res.writeHead(200, { "Content-Type": type });
-    res.end(content);
+    // Audio: byte ranges (Safari won't play audio without them) and a long cache.
+    if (AUDIO[file.slice(file.lastIndexOf(".") + 1)]) {
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ""));
+      if (range) {
+        const size = content.length;
+        let start = range[1] ? Number(range[1]) : size - Number(range[2]);
+        let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+        start = Math.max(0, start);
+        end = Math.min(size - 1, end);
+        if (start > end) {
+          res.writeHead(416, { "Content-Range": `bytes */${size}` });
+          return res.end();
+        }
+        res.writeHead(206, {
+          "Content-Type": type,
+          "Content-Range": `bytes ${start}-${end}/${size}`,
+          "Content-Length": end - start + 1,
+        });
+        return res.end(req.method === "HEAD" ? undefined : content.subarray(start, end + 1));
+      }
+    }
+    res.writeHead(200, { "Content-Type": type, "Content-Length": content.length });
+    res.end(req.method === "HEAD" ? undefined : content);
   } catch (e) {
     json(
       res,

@@ -830,6 +830,8 @@ function display() {
   // ——— Background music: House by default; the button cycles styles and Off. Starts on the
   // first click/key (browser rule). ———
   const music = new Music();
+  music.findFiles();
+  if (location.hash === "#test") (window as any).__povMusicPlayer = music;
   type Pick = MusicStyle | "off";
   const order: Pick[] = [...MUSIC_STYLES.map((m) => m.id), "off"];
   let choice: Pick = "house";
