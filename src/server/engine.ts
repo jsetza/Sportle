@@ -696,7 +696,7 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   const aim = clamp(side * 2.5, -2.7, 2.7);
   // Badly timed contact can pop the ball up instead: high, short and slow, an easy smash
   // for the other side. Same chance for players and bots.
-  const popup = !smash && !lob && quality < 0.55 && rand(m) < 0.5;
+  const popup = !smash && !lob && quality < 0.55 && rand(m) < (stroke === "roll" || stroke === "topspin" ? 0.12 : 0.5);
   void soft;
   if (popup) {
     const px = aim * 0.5 * (p.team ? -1 : 1) + (rand(m) * 2 - 1) * 0.6;
@@ -725,7 +725,8 @@ export function hit(m: Match, p: Player, input: Input): boolean {
   if (shape.flight === undefined) {
     const tz = (p.team ? 1 : -1) * Math.max(0.6, depth);
     const dist = Math.hypot(x - b.x, tz - b.z);
-    flight = clamp(dist / (GROUND_MAX_SPEED * shape.pace * power ** 0.8), 0.7, 2.4);
+    const maxFlight = stroke === "roll" || stroke === "topspin" ? 0.82 : 2.4;
+    flight = clamp(dist / (GROUND_MAX_SPEED * shape.pace * power ** 0.8), 0.7, maxFlight);
     // Fast drives are flat: make sure the arc still clears the net.
     flight = netSafeFlight(m, tz, flight, flight * 1.8, g);
   } else if (!smash && !lob) {
@@ -854,11 +855,11 @@ export type Stroke =
  * (direction: + low-to-high, − high-to-low) and swing speed (strength), plus where the ball
  * and player are (owner request):
  * - high ball + downward swing → smash
- * - big upward swing with an open face → lob
+ * - deliberate steep upward swing with a very open face → lob
  * - high-to-low with an open face → slice (backspin), harder → chop
  * - gentle with little swing against a fast ball → block (volley) / reset (after the bounce)
  * - gentle → dink near the kitchen, drop from further back
- * - low-to-high with a closed or neutral face → roll, harder → topspin drive
+ * - ordinary low-to-high brush → roll, harder → topspin drive
  * - anything else → flat drive
  */
 export function classifyShot(m: Match, p: Player, input: Input): Stroke {
@@ -866,8 +867,9 @@ export function classifyShot(m: Match, p: Player, input: Input): Stroke {
     open = clamp(input.pitch / 55, -1, 1),
     dir = input.direction;
   if (smashIntent(m, input)) return "smash";
-  if (open > 0.4 && dir > 0.3 && power >= 0.45) return "lob";
+  if (open > 0.82 && dir > 0.65 && power >= 0.55) return "lob";
   if (dir < -0.2 && open > 0.05) return power >= 0.62 ? "chop" : "slice";
+  if (dir > 0.22 && power >= 0.32) return power >= 0.68 ? "topspin" : "roll";
   if (power < 0.42) {
     const v = m.velocity,
       incoming = Math.hypot(v.x, v.y, v.z);
@@ -875,7 +877,6 @@ export function classifyShot(m: Match, p: Player, input: Input): Stroke {
       return m.bounces === 0 ? "block" : "reset";
     return Math.abs(p.pos.z) < C.kitchen + 1.3 ? "dink" : "drop";
   }
-  if (dir > 0.35 && open <= 0.15) return power >= 0.62 ? "topspin" : "roll";
   return "drive";
 }
 /**
@@ -1284,7 +1285,7 @@ export function botShot(m: Match, p: Player): Input {
   const style = m.rules.style;
   if (style === "defender") {
     // Defender: lobs over a net-rusher, resets and drops, rarely hits hard.
-    if (oppNet && pick < 0.3) return { ...base, strength: 0.55, direction: 0.4, pitch: 40 };
+    if (oppNet && pick < 0.08) return { ...base, strength: 0.6, direction: 0.75, pitch: 50 };
     if (pick < 0.45 + skill * 0.2)
       return { ...base, strength: 0.26 + r() * 0.12, direction: 0.05 };
   }
@@ -1295,8 +1296,8 @@ export function botShot(m: Match, p: Player): Input {
       direction: -0.8,
       pitch: -10,
     };
-  if (d !== "easy" && oppNet && pick < 0.12 + (d === "hard" ? 0.08 : 0))
-    return { ...base, strength: 0.55, direction: 0.4, pitch: 40 };
+  if (d !== "easy" && oppNet && pick < (d === "hard" ? 0.05 : 0.02))
+    return { ...base, strength: 0.6, direction: 0.75, pitch: 50 };
   // Third shot: better bots favour a drop to get to the net (attackers drive instead).
   if (m.hits === 2 && pick < skill * (style === "attacker" ? 0.2 : 0.6))
     return { ...base, strength: 0.3 + r() * 0.08, direction: 0.05 };
@@ -1309,6 +1310,6 @@ export function botShot(m: Match, p: Player): Input {
   return {
     ...base,
     strength: clamp(power, 0.43, 0.9),
-    direction: d !== "easy" && pick > 0.7 ? 0.45 : 0.15,
+    direction: pick > 0.4 ? 0.45 : 0.15,
   };
 }
