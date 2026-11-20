@@ -138,13 +138,29 @@ test("swing requires neutral rearm and cooldown", () => {
   f.calibrate();
   f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 0 }, 0, 0);
   assert.equal(
-    f.motion({ x: 2, y: 0, z: 0 }, { alpha: 0, beta: 170, gamma: 0 }, 0, 400),
+    f.motion({ x: 2, y: 0, z: 0 }, { alpha: 0, beta: 520, gamma: 0 }, 0, 400),
     true,
   );
   assert.equal(
-    f.motion({ x: 2, y: 0, z: 0 }, { alpha: 0, beta: 170, gamma: 0 }, 0, 800),
+    f.motion({ x: 2, y: 0, z: 0 }, { alpha: 0, beta: 520, gamma: 0 }, 0, 800),
     false,
   );
+});
+test("swings take effort: a gentle wave doesn't count, a firm swing does, full power is hard", () => {
+  const f = new MotionFilter();
+  f.calibrate();
+  const at = (deg: number, t: number) => {
+    f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 0 }, 0, t - 300);
+    // A swing lasts several 60 Hz samples.
+    let s = false;
+    for (let k = 0; k < 4; k++)
+      s = f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: deg, gamma: 0 }, 0, t + k * 16) || s;
+    return { swing: s, strength: f.strength };
+  };
+  assert.equal(at(250, 1000).swing, false, "250°/s (4.4 rad/s) is too gentle");
+  assert.equal(at(420, 3000).swing, true, "420°/s (7.3 rad/s) counts");
+  assert.ok(at(500, 5000).strength < 0.5, "a normal swing is well short of full power");
+  assert.ok(at(950, 7000).strength > 0.9, "a hard swing is full power");
 });
 test("screen orientation axes normalize and neutral resets", () => {
   const f = new MotionFilter();

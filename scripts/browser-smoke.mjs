@@ -56,16 +56,17 @@ try {
     throw Error("Setup still visible after finishing");
   const swing = async (rate) => {
     // Practice shots: low-to-high swings in the forehand grip (−beta = upward path).
-    await phone.evaluate(
-      (value) =>
+    await phone.evaluate(async (value) => {
+      for (let i = 0; i < 4; i++) {
         window.dispatchEvent(
           new DeviceMotionEvent("devicemotion", {
             acceleration: { x: 0, y: 0, z: 0 },
             rotationRate: { alpha: 0, beta: -value, gamma: 0 },
           }),
-        ),
-      rate,
-    );
+        );
+        await new Promise((ok) => setTimeout(ok, 16));
+      }
+    }, rate);
   };
   void profile;
   await display.locator("#start").click();
@@ -112,7 +113,7 @@ try {
         ) {
           contacts = m.contacts;
           fired = true;
-          await swing(results.length ? 700 : 300); // relative to the learned 420°/s "normal pace"
+          await swing(results.length ? 950 : 480); // a firm swing, then a hard one
         }
       }
     }
@@ -160,7 +161,8 @@ try {
         }),
       mode,
     );
-    if (!(lock[mode].frames > 10)) throw Error("Ball lock: no frames with the ball ahead");
+    // Software (SwiftShader) rendering is slow: a handful of frames is enough to measure.
+    if (!(lock[mode].frames > 5)) throw Error("Ball lock: no frames with the ball ahead · " + JSON.stringify(lock[mode]) + JSON.stringify(await display.evaluate(() => { const m = window.__povScene.state; return { phase: m.phase, paused: m.paused, msg: m.message, ball: m.ball, follow: window.__povScene.follow, fp: window.__povScene.followPos }; })));
     // Headless Chrome renders slowly (few frames), so allow some lag; on real screens it's tighter.
     if (lock[mode].median > 12)
       throw Error(`Ball lock (${mode}): ball ${lock[mode].median.toFixed(1)}° off centre`);
@@ -181,7 +183,7 @@ try {
   if (!(await state()).paused) throw Error("Reload did not pause the match");
   // WELCOME BACK: allow motion, hold to aim, and the saved swings are used — no swing steps.
   await phone.locator("#welcomeBack").waitFor({ state: "visible", timeout: 5000 });
-  await phone.locator("#enable").click();
+  await phone.locator("#hold").click(); // first tap turns motion on
   await sensors(phone);
   await holdToAim(phone);
   await phone.locator("#ingame").waitFor({ state: "visible", timeout: 5000 });
@@ -205,7 +207,7 @@ try {
   if (qr.supported) assert.equal(qr.decoded, qr.value);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: display → phone join → synthetic sensors → 4-step setup (learned reversed left/right) → ready → practice → 2 distinct shots → reload → welcome back (allow + aim) → auto resume",
+    "PASS: display → phone join → synthetic sensors → 3-step setup (learned reversed left/right) → ready → practice → 2 distinct shots → reload → welcome back (tap + hold to aim) → auto resume",
   );
   console.log(JSON.stringify({ results, qr }, null, 2));
   await phone.evaluate(() => {

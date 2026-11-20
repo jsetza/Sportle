@@ -30,18 +30,19 @@ export async function sensors(phone, pose = FLAT) {
 }
 export const setPose = (phone, pose) =>
   phone.evaluate((pose) => (window.testPose = pose), pose);
-/** One swing: a single rotation-rate sample (deg/s, device axes), then quiet again. */
+/** One swing: a few 60 Hz samples at this rotation rate (deg/s, device axes), then quiet. */
 export async function swing(phone, rate, wait = 450) {
-  await phone.evaluate(
-    (r) =>
+  await phone.evaluate(async (r) => {
+    for (let i = 0; i < 4; i++) {
       window.dispatchEvent(
         new DeviceMotionEvent("devicemotion", {
           acceleration: { x: 0, y: 0, z: 0 },
           rotationRate: r,
         }),
-      ),
-    rate,
-  );
+      );
+      await new Promise((ok) => setTimeout(ok, 16));
+    }
+  }, rate);
   await phone.waitForTimeout(wait);
 }
 /** Press and hold HOLD TO SET until the bar fills. */
@@ -61,9 +62,10 @@ export async function holdToAim(phone) {
  * (+gamma in the forehand grip) and backhands left→right (−gamma in the backhand grip).
  */
 export async function setUpPhone(phone, { reversed = false } = {}) {
-  await phone.locator("#enable").click();
-  await sensors(phone, FLAT);
+  // Step 01: tap the button (turns motion on), then press and hold it.
   await phone.locator("#hold").waitFor({ state: "visible" });
+  await phone.locator("#hold").click();
+  await sensors(phone, FLAT);
   await holdToAim(phone);
   await phone.locator("#gauge").waitFor({ state: "visible" });
   // A phone that reads left/right the other way round: the setup must learn the flip.
@@ -71,21 +73,21 @@ export async function setUpPhone(phone, { reversed = false } = {}) {
   await setPose(phone, FOREHAND);
   await phone.waitForTimeout(200);
   // First forehand with a real backswing first (the other way, slower): it must count once.
-  await swing(phone, { alpha: 0, beta: 0, gamma: -260 * k }, 40);
+  await swing(phone, { alpha: 0, beta: 0, gamma: -420 * k }, 40);
   await swing(phone, { alpha: 0, beta: 0, gamma: 0 }, 40);
-  await swing(phone, { alpha: 0, beta: 0, gamma: 0 }, 40);
-  await swing(phone, { alpha: 0, beta: 0, gamma: 460 * k }, 900);
-  for (let i = 0; i < 2; i++) await swing(phone, { alpha: 0, beta: 0, gamma: 420 * k }, 800);
+  await swing(phone, { alpha: 0, beta: 0, gamma: 600 * k }, 900);
+  for (let i = 0; i < 2; i++) await swing(phone, { alpha: 0, beta: 0, gamma: 560 * k }, i ? 550 : 800);
   const fore = await phone.locator("#gDashes i.done").count();
   if (fore !== 3) throw Error("Setup counted " + fore + " of 3 forehands");
-  await phone.locator("#next").click();
+  // Moves on to backhands by itself.
+  await phone.locator("#stepTag", { hasText: "BACKHANDS" }).waitFor({ timeout: 3000 });
   await setPose(phone, BACKHAND);
   await phone.waitForTimeout(200);
-  for (let i = 0; i < 3; i++) await swing(phone, { alpha: 0, beta: 0, gamma: -420 * k }, 800);
+  for (let i = 0; i < 3; i++) await swing(phone, { alpha: 0, beta: 0, gamma: -560 * k }, i < 2 ? 800 : 550);
   const back = await phone.locator("#gDashes i.done").count();
   if (back !== 3) throw Error("Setup counted " + back + " of 3 backhands");
-  await phone.locator("#next").click(); // FINISH
-  await phone.locator("#ingame").waitFor({ state: "visible" });
+  // Finishes by itself.
+  await phone.locator("#ingame").waitFor({ state: "visible", timeout: 4000 });
   await setPose(phone, FOREHAND);
   const saved = await phone.evaluate(() => JSON.parse(localStorage.getItem("pov-paddle") || "null"));
   if (!saved || (saved.sideSign !== 1 && saved.sideSign !== -1))

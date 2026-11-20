@@ -65,7 +65,7 @@ try {
         window.dispatchEvent(
           new DeviceMotionEvent("devicemotion", {
             acceleration: { x: 0, y: 0, z: 0 },
-            rotationRate: { alpha: 0, beta: -330, gamma: 0 },
+            rotationRate: { alpha: 0, beta: -700, gamma: 0 },
           }),
         ),
       );

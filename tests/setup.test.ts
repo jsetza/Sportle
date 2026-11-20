@@ -66,8 +66,8 @@ test("learning from 3 forehands + 3 backhands: side sign, face sign and swing fe
   if (!r.ok) return;
   assert.equal(r.profile.sideSign, 1);
   assert.equal(r.profile.faceSign, 1);
-  // A typical 3 rad/s (172°/s) swing becomes a ~60% shot.
-  near(r.profile.sensitivity, (0.6 * 210) / ((3 * 180) / Math.PI), 0.01);
+  // No soft "swing feel" is learned: swings always take the same effort (owner request).
+  assert.equal(r.profile.sensitivity, 1);
   // A phone that reads left/right reversed gets corrected.
   const rev = learnSwings(swings(0.9, 1), swings(-0.9, -1), "right");
   assert.ok(rev.ok && rev.profile.sideSign === -1);
@@ -108,11 +108,11 @@ test("motion filter after aiming: screen-relative face angle, side and swing dir
   assert.equal(f.face, -1);
   f.orientation(180 + 25, 90, 0, 0);
   f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 0 }, 0, 900); // still first
-  const swing = f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 420 }, 0, 1000);
+  const swing = f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 520 }, 0, 1000);
   assert.ok(swing, "a clear swing is detected");
   assert.ok(f.side < -0.8, `forehand swing goes left (${f.side})`);
   f.sideSign = -1;
   f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 0 }, 0, 1300);
-  f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 420 }, 0, 1400);
+  f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 520 }, 0, 1400);
   assert.ok(f.side > 0.8, "the learned sign flips it");
 });

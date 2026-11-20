@@ -55,8 +55,8 @@ An existing Chrome installation may be used with `CHROME_PATH=/absolute/path/to/
 
 1. Create a **Motion lab** room on the display.
 2. Scan its QR code on a phone, or open `/controller` on the same public origin and enter its six-character room code.
-3. Choose nickname and hand, then follow the four setup steps: **01 Allow motion** (then Allow in the browser prompt) · **02 Aim at the screen** — hold the phone flat like a TV remote, top edge pointing at the screen, and press and hold **HOLD TO SET** until the bar fills · **03 three forehands** — hold the bottom of the phone like a handle, screen facing the TV, swing across your body · **04 three backhands** — turn the phone over and swing from the other side, then **FINISH**.
-4. The phone is now ready (no separate Ready tap). Next time it says **WELCOME BACK**: Allow motion, aim, and you're in; **Set up my swings again** redoes steps 03–04.
+3. Choose nickname and hand, then the three setup steps: **01 Aim** — hold the phone flat like a TV remote, top edge at the screen; tap **TAP TO START** (allow motion if asked), then press and hold until the bar fills · **02 three forehands** (screen facing the TV, swing across your body) · **03 three backhands** (turn the phone over). Each step moves on by itself after the third swing.
+4. You're in (no separate Ready tap). Next time it says **WELCOME BACK**: tap, hold to aim, and you're in; **Set up my swings again** redoes the swings. Swings take real effort: gentle waves don't count, and full power needs a hard swing.
 5. Tap **Ready**. On the display, select **Start practice**. Let the practice ball bounce and swing when it comes within your character's reach.
 6. For matches, create a new room in the desired mode. Every required human slot must be connected and ready before starting.
 

@@ -36,7 +36,7 @@ try {
   await phone.goto(`http://127.0.0.1:${PORT}/controller?room=${room}`);
   await phone.locator("#nickname").fill("Restart");
   await phone.locator("#connect").click();
-  await phone.locator("#enable").waitFor({ state: "visible" });
+  await phone.locator("#hold").waitFor({ state: "visible" });
   // Restart the server: the room is gone.
   child.kill();
   await new Promise((r) => child.once("exit", r));

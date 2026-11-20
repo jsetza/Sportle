@@ -1,5 +1,11 @@
 import { Connection } from "./net.ts";
-import { MotionFilter, aimFrom, learnSwings, wrap } from "../shared/motion.ts";
+import {
+  MotionFilter,
+  aimFrom,
+  learnSwings,
+  swingThreshold,
+  wrap,
+} from "../shared/motion.ts";
 import type { SetupSwing, SwingProfile } from "../shared/motion.ts";
 import {
   slots,
@@ -145,7 +151,7 @@ function display() {
 <div class="callout hidden" id="callout" aria-live="assertive"><b>POP-UP!</b><span>Swing down to smash</span></div>
 <div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small id="goMode">MATCH</small><h2 id="goTitle">Blue wins</h2><div class="goscore" id="goScore">11 : 7</div><p id="goNames"></p><button class="cta" id="again">Play again <span>↻</span></button><button class="link" id="goMenu">Change mode</button><p class="fine" id="goWait"></p></div>
 <dialog id="photoDlg" class="photodlg"><h2>Your photo</h2><p class="fine">Line your face up in the oval.</p><div class="photorow"><div class="cam"><video id="camVideo" playsinline muted autoplay></video><canvas id="camShot" class="hidden" width="200" height="250"></canvas><div class="oval" aria-hidden="true"></div><p class="camerr" id="camErr"></p></div><div class="faceprev"><canvas id="facePrev" width="120" height="300"></canvas><small>On the court</small></div></div><p class="fine">The photo stays in this browser only and is never uploaded. Other screens see the drawn face.</p><div class="photobtns"><button class="link" id="drawnFace">Use a drawn face</button><span></span><button class="ghost" id="photoRetry">Try again</button><button class="cta" id="photoUse">Use photo <span>→</span></button></div></dialog>
-<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Set up the paddle</b> in four steps on the phone: <b>Allow motion</b>; <b>aim at the screen</b> (hold the phone flat like a TV remote, top edge to the screen, and press and hold until the bar fills); <b>three forehands</b> (screen facing the TV, swing across your body); <b>three backhands</b> (turn the phone over). The phone learns your swings and remembers them: next time it's Allow motion, aim, and you're in.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you. The paddle face and the swing path pick the shot: low-to-high with a closed face = topspin drive / roll; high-to-low with an open face = slice (harder = chop, backspin that skids low); gentle with an open face = dink near the kitchen or drop from the back; fast and flat = drive; big upward swing with an open face = lob; a high ball and a downward swing = smash; a firm face with almost no swing against a hard ball = block / reset. Swing left or right to aim.</li><li><b>No phone?</b> In the lobby choose <b>Use the keyboard instead</b>: hold and release <kbd>Space</kbd> to swing (longer = harder); hold <kbd>Shift</kbd> for a dink, <kbd>E</kbd> topspin, <kbd>Q</kbd> slice, <kbd>R</kbd> lob, <kbd>F</kbd> smash; <kbd>A</kbd>/<kbd>D</kbd> also aim; <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a drive/roll/slice serve.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
+<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Set up the paddle</b> in three steps on the phone: <b>aim at the screen</b> (hold the phone flat like a TV remote, top edge to the screen; tap, then press and hold until the bar fills); <b>three forehands</b> (screen facing the TV); <b>three backhands</b> (turn the phone over). Swing firmly: gentle waves don't count. Next time it's tap, hold, and you're in.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you. The paddle face and the swing path pick the shot: low-to-high with a closed face = topspin drive / roll; high-to-low with an open face = slice (harder = chop, backspin that skids low); gentle with an open face = dink near the kitchen or drop from the back; fast and flat = drive; big upward swing with an open face = lob; a high ball and a downward swing = smash; a firm face with almost no swing against a hard ball = block / reset. Swing left or right to aim.</li><li><b>No phone?</b> In the lobby choose <b>Use the keyboard instead</b>: hold and release <kbd>Space</kbd> to swing (longer = harder); hold <kbd>Shift</kbd> for a dink, <kbd>E</kbd> topspin, <kbd>Q</kbd> slice, <kbd>R</kbd> lob, <kbd>F</kbd> smash; <kbd>A</kbd>/<kbd>D</kbd> also aim; <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a drive/roll/slice serve.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
     "here-practice": "Practice feeds and a live paddle mirror. Start here.",
     "here-solo": "One phone. Choose the bot level below.",
@@ -1157,7 +1163,7 @@ function display() {
   }
 }
 function phone() {
-  app.innerHTML = `<div class="phone"><header class="phead"><div class="logo"><b>POV</b>pickle</div><span class="pstat"><span>PADDLE</span>·<span id="pSlot">P1</span>·<i class="dot" id="pDot"></i><span id="connection">NOT CONNECTED</span><span id="pLat"></span></span></header><div class="ruler" aria-hidden="true"></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A short setup learns your swings. Swing at your normal pace.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><details class="gear" open><summary>Your gear</summary><label for="gearPaddle">Paddle</label><select id="gearPaddle">${PADDLES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearShoes">Shoes</label><select id="gearShoes">${SHOES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearEyes">Eyewear</label><select id="gearEyes">${EYEWEAR.map((g, i) => `<option value="${i}">${g}</option>`).join("")}</select></details><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><section id="setup" class="setup"><div class="stephead" id="stepHead"><span class="stepno"><b id="stepNo">01</b> / 04</span><span class="dashes" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="steptag" id="stepTag">MOTION</span></div><div class="eyebrow hidden" id="welcomeBack">WELCOME BACK</div><h2 class="big" id="stepTitle">Aim at the screen.</h2><p class="lead" id="stepText">First, let the paddle use this phone’s motion sensors. Tap Allow motion, then Allow.</p><figure class="diagram" id="diagram"></figure><p class="caption" id="diagramCap"></p><div class="gauge hidden" id="gauge"><div class="gtop"><span>SWING SPEED</span><b id="gValue">0.0</b><small>rad/s</small></div><svg id="gRuler" viewBox="0 0 300 52" aria-hidden="true"></svg><div class="gstatus"><span class="gdashes" id="gDashes"><i></i><i></i><i></i></span><span id="gText">WAITING FOR A SWING</span></div><div class="gsegs" id="gSegs"></div><p class="ghint" id="gHint">Swing at your normal rally pace.</p></div><button class="slant orange" id="enable"><span>ALLOW MOTION</span></button><button class="linkbig hidden" id="redoSetup">Set up my swings again</button><button class="hold hidden" id="hold" aria-label="Hold to set the screen direction"><span class="htop"><b>HOLD TO SET</b><small id="holdHint">PRESS AND HOLD</small></span><span class="segs" id="holdSegs"></span></button><div class="pairbtns hidden" id="swingBtns"><button class="slant dark" id="redoLast"><span>REDO LAST</span></button><button class="slant dark" id="next" disabled><span id="nextLabel">NEXT</span></button></div></section><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div class="movepick servepick hidden" id="servePick" role="radiogroup" aria-label="Your serve"><span>Your serve</span><input type="radio" name="sv" id="sv-0" value="0" checked><label for="sv-0">Drive<small>straight</small></label><input type="radio" name="sv" id="sv-1" value="1"><label for="sv-1">Roll<small>topspin dip</small></label><input type="radio" name="sv" id="sv-2" value="2"><label for="sv-2">Slice<small>curves back in</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><div class="sidepick hidden" id="sidePick" role="radiogroup" aria-label="Your half of the screen"><span>Your side of the screen</span><button data-side="left">Left</button><button data-side="right">Right</button></div><button class="full secondary" id="phonePause">Pause</button><details class="more"><summary>Paddle settings</summary><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><label for="sensitivity">Swing feel (learned from your setup swings)</label><input id="sensitivity" type="range" min="0.5" max="2.5" step="0.05" value="1"><button class="link" id="reaim">Aim at the screen again</button><button class="link" id="redo">Set up my swings again</button></details></div></div><div id="error" role="alert"></div></div>`;
+  app.innerHTML = `<div class="phone"><header class="phead"><div class="logo"><b>POV</b>pickle</div><span class="pstat"><span>PADDLE</span>·<span id="pSlot">P1</span>·<i class="dot" id="pDot"></i><span id="connection">NOT CONNECTED</span><span id="pLat"></span></span></header><div class="ruler" aria-hidden="true"></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A short setup learns your swings. Swing at your normal pace.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><details class="gear" open><summary>Your gear</summary><label for="gearPaddle">Paddle</label><select id="gearPaddle">${PADDLES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearShoes">Shoes</label><select id="gearShoes">${SHOES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearEyes">Eyewear</label><select id="gearEyes">${EYEWEAR.map((g, i) => `<option value="${i}">${g}</option>`).join("")}</select></details><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><section id="setup" class="setup"><div class="stephead" id="stepHead"><span class="stepno"><b id="stepNo">01</b> / 03</span><span class="dashes" aria-hidden="true"><i></i><i></i><i></i></span><span class="steptag" id="stepTag">AIM</span></div><div class="eyebrow hidden" id="welcomeBack">WELCOME BACK</div><h2 class="big" id="stepTitle">Aim at the screen.</h2><p class="lead" id="stepText"></p><figure class="diagram" id="diagram"></figure><p class="caption" id="diagramCap"></p><div class="gauge hidden" id="gauge"><div class="gtop"><span>SWING SPEED</span><b id="gValue">0.0</b><small>rad/s</small></div><svg id="gRuler" viewBox="0 0 300 52" aria-hidden="true"></svg><div class="gstatus"><span class="gdashes" id="gDashes"><i></i><i></i><i></i></span><span id="gText">WAITING FOR A SWING</span></div><div class="gsegs" id="gSegs"></div><p class="ghint" id="gHint">Swing firmly, like a real shot. Gentle waves don't count.</p></div><button class="slant orange hidden" id="enable"><span>ALLOW MOTION</span></button><button class="linkbig hidden" id="redoSetup">Set up my swings again</button><button class="hold hidden" id="hold" aria-label="Hold to set the screen direction"><span class="htop"><b id="holdLabel">HOLD TO SET</b><small id="holdHint">PRESS AND HOLD</small></span><span class="segs" id="holdSegs"></span></button><div class="pairbtns hidden" id="swingBtns"><button class="slant dark" id="redoLast"><span>REDO LAST</span></button><button class="slant dark hidden" id="next" disabled><span id="nextLabel">NEXT</span></button></div></section><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div class="movepick servepick hidden" id="servePick" role="radiogroup" aria-label="Your serve"><span>Your serve</span><input type="radio" name="sv" id="sv-0" value="0" checked><label for="sv-0">Drive<small>straight</small></label><input type="radio" name="sv" id="sv-1" value="1"><label for="sv-1">Roll<small>topspin dip</small></label><input type="radio" name="sv" id="sv-2" value="2"><label for="sv-2">Slice<small>curves back in</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><div class="sidepick hidden" id="sidePick" role="radiogroup" aria-label="Your half of the screen"><span>Your side of the screen</span><button data-side="left">Left</button><button data-side="right">Right</button></div><button class="full secondary" id="phonePause">Pause</button><details class="more"><summary>Paddle settings</summary><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><label for="sensitivity">Swing effort (left = swing harder, right = lighter)</label><input id="sensitivity" type="range" min="0.6" max="1.6" step="0.05" value="1"><button class="link" id="reaim">Aim at the screen again</button><button class="link" id="redo">Set up my swings again</button></details></div></div><div id="error" role="alert"></div></div>`;
   // Gripping the phone like a paddle presses on the screen: no text selection, look-up or
   // copy pop-ups anywhere on the controller.
   document.body.classList.add("controller");
@@ -1227,7 +1233,7 @@ function phone() {
   // backhands. The swings teach this phone its left/right sign, which side is the forehand
   // face and the player's normal swing speed (= a medium shot). Saved on the phone.
   type Step = "motion" | "aim" | "fore" | "back" | "done";
-  let step: Step = "motion",
+  let step: Step = "aim",
     welcome = false,
     redoRequested = false;
   const swingsFore: SetupSwing[] = [],
@@ -1246,7 +1252,7 @@ function phone() {
     try {
       localStorage.setItem(
         PROFILE,
-        JSON.stringify({ ...p, sensitivity: filter.sensitivity, hand: filter.hand < 0 ? "left" : "right" }),
+        JSON.stringify({ ...p, v: 2, sensitivity: filter.sensitivity, hand: filter.hand < 0 ? "left" : "right" }),
       );
     } catch {
       /* ignore */
@@ -1255,8 +1261,10 @@ function phone() {
   const applyProfile = (p: SwingProfile) => {
     filter.sideSign = p.sideSign;
     filter.faceSign = p.faceSign;
-    filter.sensitivity = p.sensitivity;
-    $<HTMLInputElement>("sensitivity").value = String(p.sensitivity);
+    // Older saved setups stored a learned "soft swing" feel; swings now always take effort.
+    const v2 = (p as SwingProfile & { v?: number }).v === 2;
+    filter.sensitivity = v2 ? Math.min(1.6, Math.max(0.6, p.sensitivity)) : 1;
+    $<HTMLInputElement>("sensitivity").value = String(filter.sensitivity);
   };
   const lefty = () => filter.hand < 0;
   // ——— diagrams (inline SVG; scale to their box so they never spill out) ———
@@ -1301,7 +1309,7 @@ function phone() {
   };
   // ——— swing speed gauge (rad/s, 0–30) ———
   const ruler = () => {
-    const thr = (0.24 * 210) / filter.sensitivity / (180 / Math.PI);
+    const thr = swingThreshold(filter.sensitivity);
     let s = "";
     for (let v = 0; v <= 30; v++) {
       const x = 10 + (v / 30) * 280,
@@ -1317,9 +1325,9 @@ function phone() {
   const showStep = (s: Step) => {
     step = s;
     const prof = savedProfile();
-    $("welcomeBack").classList.toggle("hidden", !(welcome && (s === "motion" || s === "aim")));
-    $("stepHead").classList.toggle("hidden", welcome && s === "motion");
-    const n = { motion: 1, aim: 2, fore: 3, back: 4, done: 4 }[s];
+    if (s === "motion") s = step = "aim"; // the first tap on the aim button turns motion on
+    $("welcomeBack").classList.toggle("hidden", !(welcome && s === "aim"));
+    const n = { motion: 1, aim: 1, fore: 2, back: 3, done: 3 }[s];
     $("stepNo").textContent = "0" + n;
     $("stepTag").textContent = { motion: "MOTION", aim: "AIM", fore: "FOREHANDS", back: "BACKHANDS", done: "DONE" }[s];
     document.querySelectorAll<HTMLElement>("#stepHead .dashes i").forEach((d, i) => {
@@ -1335,7 +1343,9 @@ function phone() {
     }[s];
     const text = {
       motion: "First, let the paddle use this phone’s motion sensors. Tap Allow motion, then Allow.",
-      aim: "Hold the phone flat like a TV remote, top edge pointing at the screen. Then press and hold the button until the bar fills. This tells the game where the screen is.",
+      aim: enabled
+        ? "Hold the phone flat like a TV remote, top edge pointing at the screen. Press and hold the button until the bar fills."
+        : "Hold the phone flat like a TV remote, top edge pointing at the screen. Tap the button (allow motion if your phone asks), then press and hold until the bar fills.",
       fore: `Hold the bottom of the phone like a paddle handle in your ${hand} hand, screen facing the TV. Swing across your body, ${lefty() ? "left to right" : "right to left"}, like a normal forehand.`,
       back: `Turn the phone over so its back faces the TV, and swing across from the other side, ${lefty() ? "right to left" : "left to right"}.`,
       done: "Your swings are saved on this phone.",
@@ -1352,8 +1362,10 @@ function phone() {
           : s === "done"
             ? ""
             : "TOP EDGE TO THE SCREEN, SCREEN FACING UP";
-    $("enable").classList.toggle("hidden", s !== "motion");
-    $("redoSetup").classList.toggle("hidden", !(s === "motion" && welcome && !!prof));
+    $("enable").classList.add("hidden");
+    $("redoSetup").classList.toggle("hidden", !(s === "aim" && welcome && !!prof));
+    $("holdLabel").textContent = enabled ? "HOLD TO SET" : "TAP TO START";
+    $("holdHint").textContent = enabled ? "PRESS AND HOLD" : "TURNS ON MOTION";
     $("hold").classList.toggle("hidden", s !== "aim");
     $("gauge").classList.toggle("hidden", s !== "fore" && s !== "back");
     $("swingBtns").classList.toggle("hidden", s !== "fore" && s !== "back");
@@ -1370,7 +1382,7 @@ function phone() {
     $("gText").textContent =
       note ||
       (list.length >= 3
-        ? `THREE ${step === "back" ? "BACKHANDS" : "FOREHANDS"} ✓ · TAP ${step === "back" ? "FINISH" : "NEXT"}`
+        ? `THREE ${step === "back" ? "BACKHANDS" : "FOREHANDS"} ✓`
         : list.length
           ? `SWING ${list.length} OF 3 ✓ · ${list[list.length - 1].rad.toFixed(1)} RAD/S`
           : "WAITING FOR A SWING");
@@ -1389,6 +1401,13 @@ function phone() {
     const list = step === "fore" ? swingsFore : swingsBack;
     if (list.length >= 3) return;
     list.push(sw);
+    // Three done: move on by itself (REDO LAST still works during the short pause).
+    if (list.length === 3) {
+      const at = step;
+      setTimeout(() => {
+        if (step === at && list.length === 3) $("next").click();
+      }, 900);
+    }
     const want = step === "fore" ? 1 : -1;
     swingStatus(
       sw.face === -want
@@ -1533,8 +1552,7 @@ function phone() {
     // A saved setup: "WELCOME BACK" — Allow motion, aim, and you're in.
     welcome = !!savedProfile();
     rejoining = !!r.player.ready;
-    if (!enabled) showStep("motion");
-    else if (!filter.fwd) showStep("aim");
+    if (!enabled || !filter.fwd) showStep("aim");
     else if (rejoining) goReady();
   }
   let rejoining = false;
@@ -1596,10 +1614,13 @@ function phone() {
       error(e);
     }
   };
+  $("hold").addEventListener("click", () => {
+    if (!enabled) $("enable").click();
+  });
   action("redoSetup", () => {
     redoRequested = true;
     welcome = false;
-    $("enable").click();
+    showStep("aim");
   });
   // 02 · Aim: press and hold while the phone lies flat and still; the bar fills over ~1.2 s.
   const HOLD_MS = 800;
@@ -1616,6 +1637,7 @@ function phone() {
     $("hold").classList.remove("holding");
   };
   $("hold").addEventListener("pointerdown", (e) => {
+    if (!enabled) return; // first tap turns motion on (click handler)
     e.preventDefault();
     if (!sensorLive()) {
       holdReset("WAITING FOR SENSORS");
@@ -1851,7 +1873,7 @@ function phone() {
       // Back to aiming: one press-and-hold and you're in again (swings are kept).
       showGame(false);
       welcome = true;
-      showStep(filter.fwd ? "aim" : "motion");
+      showStep("aim");
     }
     if (p)
       ui("igTitle").text =

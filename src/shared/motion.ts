@@ -75,6 +75,14 @@ export function learnAxes(
     };
   return { ok: true, axes: { side, up } };
 }
+/** Rotation speed (rad/s) below which nothing registers as swing effort. */
+export const SWING_FLOOR = 3;
+/** Extra rad/s above the floor for a 100% swing. */
+export const SWING_SPAN = 13;
+/** Swing strength needed to count as a swing (≈ 6 rad/s at the default feel). */
+export const SWING_TRIGGER = 0.24;
+/** Rotation speed (rad/s) at which a swing starts to count, for the setup gauge. */
+export const swingThreshold = (sensitivity = 1) => SWING_FLOOR + (SWING_TRIGGER / sensitivity) * SWING_SPAN;
 export class MotionFilter {
   /** Learned from the movement test; null until then (fallback formulas are used). */
   axes: SwingAxes | null = null;
@@ -154,7 +162,14 @@ export class MotionFilter {
     const a = (screenAngle * Math.PI) / 180;
     const rate = Math.hypot(rotation.alpha, rotation.beta, rotation.gamma);
     const force = Math.hypot(acc.x, acc.y, acc.z);
-    const energy = clamp((rate / 210 + force / 24) * this.sensitivity, 0, 1);
+    // Owner request: swings take real effort. Rotation speed in rad/s drives it: nothing below
+    // SWING_FLOOR, a swing counts from ~6 rad/s, and full power needs ~16 rad/s (a hard swing).
+    const rad = (rate * Math.PI) / 180;
+    const energy = clamp(
+      ((rad - SWING_FLOOR) / SWING_SPAN + force / 90) * this.sensitivity,
+      0,
+      1,
+    );
     this.strength = this.strength * 0.35 + energy * 0.65;
     this.rate = [rotation.alpha, rotation.beta, rotation.gamma];
     if (this.fwd) {
@@ -184,7 +199,7 @@ export class MotionFilter {
     const swing =
       this.calibrated &&
       this.armed &&
-      this.strength > 0.24 &&
+      this.strength > SWING_TRIGGER &&
       now - this.lastSwing > SWING_RELOAD * 1000;
     if (swing) {
       this.lastSwing = now;
@@ -330,14 +345,14 @@ export function learnSwings(
     bf = vote(back.map((s) => s.face));
   const speeds = [...fore, ...back].map((s) => s.rad).sort((a, b) => a - b);
   const typical = (speeds[2] + speeds[3]) / 2;
-  const deg = (typical * 180) / Math.PI;
   return {
     ok: true,
     profile: {
       sideSign: gap > 0 ? 1 : -1,
       // Standard unless the forehands clearly read as the other face.
       faceSign: ff < bf ? -1 : 1,
-      sensitivity: clamp((0.6 * 210) / Math.max(60, deg), 0.5, 2.5),
+      // Owner request: everyone swings with effort — no "soft swing" feel is learned.
+      sensitivity: 1,
       typical,
     },
   };

@@ -63,7 +63,7 @@ try {
     await phone.locator("#nickname").fill(name);
     await phone.locator("#connect").click();
     // Fresh page after joining (iOS Undo Typing fix): no text fields left.
-    await phone.locator("#enable").waitFor({ state: "visible" });
+    await phone.locator("#hold").waitFor({ state: "visible" });
     if ((await phone.locator("#nickname").count()) !== 0)
       throw Error("text field survived");
     await setUpPhone(phone);

@@ -789,7 +789,7 @@ test("swing reload: a player can swing again 0.2 s after the last swing, not soo
   const f = new MotionFilter();
   f.calibrated = true;
   const burst = (t: number) =>
-    f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 300, gamma: 0 }, 0, t);
+    f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 900, gamma: 0 }, 0, t); // a firm swing
   const calm = (t: number) =>
     f.motion({ x: 0, y: 0, z: 0 }, { alpha: 0, beta: 0, gamma: 0 }, 0, t);
   assert.equal(burst(1000), true);
