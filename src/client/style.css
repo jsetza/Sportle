@@ -2044,3 +2044,396 @@ body.in-room #lobby:has(#matchOpts:not(.hidden)) .viewpick {
   width: auto;
   margin: 0;
 }
+
+/* ——— Phone setup (01 allow motion · 02 aim · 03 forehands · 04 backhands) ——— */
+body.controller {
+  background: #070812;
+}
+.phone {
+  background: none;
+}
+.phead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.phead .logo {
+  font-size: 30px;
+}
+.pstat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  color: #9da0b8;
+  white-space: nowrap;
+}
+.pstat .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #6b6e85;
+}
+.pstat .dot.live {
+  background: #2fd06a;
+}
+.pstat .dot.wait {
+  background: #ff9a1f;
+}
+.ruler {
+  height: 14px;
+  margin: 14px 0 22px;
+  border-top: 4px solid #fff;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.45) 0 1px,
+    transparent 1px 9px
+  );
+  background-size: 100% 9px;
+  background-repeat: no-repeat;
+}
+.setup {
+  display: grid;
+  gap: 12px;
+}
+.stephead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font: 600 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+  color: #9da0b8;
+}
+.stepno b {
+  color: #ff8a1f;
+  font-size: 24px;
+}
+.stephead .dashes {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+}
+.stephead .dashes i {
+  width: 30px;
+  height: 4px;
+  border-radius: 2px;
+  background: #3a3d55;
+}
+.stephead .dashes i.done {
+  background: #fff;
+}
+.stephead .dashes i.now {
+  background: #ff8a1f;
+}
+.steptag {
+  color: #e6e7f2;
+}
+.eyebrow {
+  font: 600 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.18em;
+  color: #c9cbe0;
+}
+.phone h2.big {
+  margin: 4px 0 0;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: clamp(38px, 11vw, 50px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+.lead {
+  margin: 4px 0 6px;
+  font-size: 19px;
+  line-height: 1.4;
+  color: #c9cbe0;
+}
+.diagram {
+  margin: 0;
+  border: 2px solid #2c3f86;
+  border-radius: 8px;
+  background: #102062;
+  overflow: hidden;
+  aspect-ratio: 400 / 210;
+}
+.diagram svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.diagram text {
+  font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.16em;
+  fill: #b9c3ec;
+}
+.diagram .screenbar {
+  fill: #fff;
+}
+.diagram .phoneoutline {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.5;
+}
+.diagram .facemark {
+  fill: #ff3355;
+}
+.diagram .dash {
+  fill: none;
+  stroke: #b9c3ec;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+}
+.diagram .arrow,
+.diagram .thin,
+.diagram .leader {
+  fill: none;
+  stroke: #e6e9fa;
+  stroke-width: 2;
+}
+.diagram .divider {
+  stroke: #3d5199;
+  stroke-width: 1.5;
+}
+.diagram .swingarc {
+  fill: none;
+  stroke: #ff8a1f;
+  stroke-width: 3;
+  stroke-dasharray: 9 6;
+}
+.diagram .body {
+  fill: #2c3f86;
+  stroke: #e6e9fa;
+  stroke-width: 2;
+}
+.caption {
+  margin: 0;
+  font: 600 13px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.16em;
+  color: #9da0b8;
+}
+/* Big slanted buttons */
+.slant {
+  width: 100%;
+  min-height: 72px;
+  margin-top: 6px;
+  border: 0;
+  clip-path: polygon(3% 0, 100% 0, 97% 100%, 0 100%);
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 26px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.slant.orange {
+  background: #ff8a1f;
+  color: #120700;
+}
+.slant.dark {
+  background: #1a2350;
+  color: #e6e9fa;
+}
+.slant.dark:disabled {
+  color: #56608f;
+}
+.linkbig {
+  border: 0;
+  background: none;
+  color: #e6e7f2;
+  font-size: 19px;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  min-height: 52px;
+}
+.pairbtns {
+  display: flex;
+  gap: 12px;
+}
+.pairbtns .slant {
+  flex: 1;
+  font-size: 22px;
+}
+/* 02 · HOLD TO SET */
+.hold {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 22px 26px;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  background: #121a3d;
+  color: #fff;
+  cursor: pointer;
+  touch-action: none;
+}
+.hold .htop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.hold b {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 26px;
+}
+.hold small {
+  font: 600 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.16em;
+  color: #c9cbe0;
+}
+.segs,
+.gsegs {
+  display: flex;
+  gap: 4px;
+}
+.segs i,
+.gsegs i {
+  flex: 1;
+  height: 16px;
+  background: #2a3670;
+  transform: skewX(-18deg);
+}
+.gsegs i {
+  height: 12px;
+}
+.segs i.on,
+.gsegs i.on {
+  background: #ff8a1f;
+}
+.hold.holding {
+  border-color: #ff8a1f;
+}
+/* 03 / 04 · swing speed gauge */
+.gauge {
+  display: grid;
+  gap: 12px;
+  padding: 20px 24px 18px;
+  border: 1px solid #2a2e48;
+  border-radius: 10px;
+  background: #0b0e1e;
+}
+.gtop {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.gtop span {
+  flex: 1;
+  font: 600 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.16em;
+  color: #c9cbe0;
+}
+.gtop b {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 42px;
+  line-height: 1;
+}
+.gtop small {
+  font: 600 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #c9cbe0;
+}
+#gRuler {
+  width: 100%;
+}
+#gRuler .tick {
+  stroke: #e6e9fa;
+  stroke-width: 1.5;
+}
+#gRuler text {
+  font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  fill: #9da0b8;
+}
+#gRuler .thr {
+  stroke: #9da0b8;
+  stroke-width: 1.5;
+  stroke-dasharray: 2 3;
+}
+#gRuler .needle {
+  stroke: #fff;
+  stroke-width: 3;
+}
+.gstatus {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2a2e48;
+  font: 600 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  color: #e6e7f2;
+}
+.gdashes {
+  display: flex;
+  gap: 5px;
+}
+.gdashes i {
+  width: 22px;
+  height: 5px;
+  border-radius: 2px;
+  background: #4a4e6a;
+}
+.gdashes i.done {
+  background: #ff8a1f;
+}
+.ghint {
+  margin: 0;
+  color: #c9cbe0;
+  font-size: 17px;
+}
+/* In-game card: settings tucked away */
+.more {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.more summary {
+  color: var(--muted);
+  font-size: 15px;
+  padding: 10px 0;
+}
+.more .link {
+  display: block;
+  min-height: 48px;
+}
+/* System display fonts have no italic: slant the heavy headings. */
+.phone h2.big,
+.phead .logo {
+  transform: skewX(-9deg);
+  transform-origin: left bottom;
+}
+.slant,
+.hold b,
+.gtop b {
+  font-style: normal;
+}
+.slant span,
+.hold b,
+.gtop b {
+  display: inline-block;
+  transform: skewX(-9deg);
+}
+.phead .logo {
+  font-size: 24px;
+}
+.pstat {
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  gap: 5px;
+}
+.caption {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+.gstatus {
+  font-size: 12.5px;
+  letter-spacing: 0.1em;
+}
+.diagram.short {
+  aspect-ratio: 400 / 165;
+}

@@ -4,6 +4,7 @@
  * matched, both screens and phones move to the match room, and the match starts by itself.
  */
 import { chromium } from "playwright";
+import { setUpPhone } from "./phone-setup.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,46 +66,7 @@ try {
     await phone.locator("#enable").waitFor({ state: "visible" });
     if ((await phone.locator("#nickname").count()) !== 0)
       throw Error("text field survived");
-    await phone.locator("#enable").click();
-    await phone.evaluate(() => {
-      setInterval(() => {
-        window.dispatchEvent(
-          new DeviceOrientationEvent("deviceorientation", {
-            alpha: 0,
-            beta: 35,
-            gamma: 0,
-          }),
-        );
-        window.dispatchEvent(
-          new DeviceMotionEvent("devicemotion", {
-            acceleration: { x: 0, y: 0, z: 0 },
-            rotationRate: { alpha: 0, beta: 0, gamma: 0 },
-          }),
-        );
-      }, 16);
-    });
-    await phone.locator("#calibrate").click();
-    await phone.waitForTimeout(150);
-    for (const [a, b, g] of [
-      [0, 0, -260],
-      [0, 0, 250],
-      [0, 240, 0],
-      [0, -250, 0],
-    ]) {
-      await phone.evaluate(
-        ([a, b, g]) =>
-          window.dispatchEvent(
-            new DeviceMotionEvent("devicemotion", {
-              acceleration: { x: 0, y: 0, z: 0 },
-              rotationRate: { alpha: a, beta: b, gamma: g },
-            }),
-          ),
-        [a, b, g],
-      );
-      await phone.waitForTimeout(450);
-    }
-    await phone.locator("#ready").click();
-    await phone.locator("#ingame").waitFor({ state: "visible" });
+    await setUpPhone(phone);
     if (!/RR/.test(await phone.locator("#igTitle").textContent()))
       throw Error("phone does not show its RR");
     return { display, phone, room };

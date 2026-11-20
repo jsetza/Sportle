@@ -99,6 +99,24 @@ export class MotionFilter {
   calibrated = false;
   sensitivity = 1;
   hand = 1;
+  /** "Toward the screen" from setup step 02; when set, angles and swing paths are screen-relative. */
+  fwd: [number, number] | null = null;
+  sideSign = 1;
+  faceSign = 1;
+  /** 1 = forehand side (screen toward the TV), -1 = backhand side; keeps its last clear value. */
+  face = 1;
+  abs = { alpha: 0, beta: 0, gamma: 0 };
+  path = { side: 0, up: 0, rad: 0 };
+  /** Set "toward the screen" (phone flat, top edge at the screen). Returns false if not flat. */
+  aim() {
+    const f = aimFrom(this.abs.alpha, this.abs.beta, this.abs.gamma);
+    if (!f) return false;
+    this.fwd = f;
+    this.calibrated = true;
+    this.armed = false;
+    this.strength = 0;
+    return true;
+  }
   calibrate() {
     this.neutral = { ...this.raw };
     this.angle = { pitch: 0, roll: 0, yaw: 0 };
@@ -107,6 +125,14 @@ export class MotionFilter {
     this.strength = 0;
   }
   orientation(alpha: number, beta: number, gamma: number, screenAngle: number) {
+    this.abs = { alpha, beta, gamma };
+    if (this.fwd) {
+      const p = paddlePose(alpha, beta, gamma, this.fwd, this.faceSign);
+      for (const key of ["pitch", "roll", "yaw"] as const)
+        this.angle[key] += 0.4 * wrap(p[key] - this.angle[key]);
+      if (p.face) this.face = p.face;
+      return;
+    }
     const a = (screenAngle * Math.PI) / 180;
     this.raw = {
       pitch: beta * Math.cos(a) + gamma * Math.sin(a),
@@ -131,7 +157,13 @@ export class MotionFilter {
     const energy = clamp((rate / 210 + force / 24) * this.sensitivity, 0, 1);
     this.strength = this.strength * 0.35 + energy * 0.65;
     this.rate = [rotation.alpha, rotation.beta, rotation.gamma];
-    if (this.axes) {
+    if (this.fwd) {
+      // Screen-relative swing path (setup steps 02–04).
+      const { alpha, beta, gamma } = this.abs;
+      this.path = swingPath(rotation, alpha, beta, gamma, this.fwd);
+      this.direction = clamp(this.path.up * 1.5, -1, 1);
+      this.side = clamp(this.path.side * 1.5 * this.sideSign, -1, 1);
+    } else if (this.axes) {
       // Project onto the directions learned from this player's own test swings.
       this.direction = clamp(vdot(this.rate, this.axes.up) / 130, -1, 1);
       this.side = clamp(vdot(this.rate, this.axes.side) / 150, -1, 1);
@@ -160,4 +192,163 @@ export class MotionFilter {
     }
     return swing;
   }
+}
+
+// ——— Screen-relative paddle pose ———
+// Step 02 of the phone setup records which horizontal direction points at the screen. With
+// that, the phone's own orientation gives the paddle face angle and which side of the phone
+// faces the TV, and the rotation rate gives the swing path. These are orientation and
+// rotation readings turned into intent, not a measured paddle position.
+
+/** World axes (x east, y north, z up) of the device's x, y (top edge) and z (screen) axes. */
+export function deviceAxes(alpha: number, beta: number, gamma: number) {
+  const r = Math.PI / 180;
+  const cA = Math.cos(alpha * r),
+    sA = Math.sin(alpha * r),
+    cB = Math.cos(beta * r),
+    sB = Math.sin(beta * r),
+    cG = Math.cos(gamma * r),
+    sG = Math.sin(gamma * r);
+  // W3C DeviceOrientation: R = Rz(alpha) · Rx(beta) · Ry(gamma); columns are the device axes.
+  const X: Vec3 = [cA * cG - sA * sB * sG, cG * sA + cA * sB * sG, -cB * sG];
+  const Y: Vec3 = [-cB * sA, cA * cB, sB];
+  const Z: Vec3 = [cG * sA * sB + cA * sG, sA * sG - cA * cG * sB, cB * cG];
+  return { X, Y, Z };
+}
+/**
+ * "Toward the screen" from the phone held flat like a TV remote, top edge pointing at the
+ * screen: the horizontal direction of the top edge. Null if the phone isn't roughly flat.
+ */
+export function aimFrom(alpha: number, beta: number, gamma: number): [number, number] | null {
+  const { Y } = deviceAxes(alpha, beta, gamma);
+  const h = Math.hypot(Y[0], Y[1]);
+  if (h < 0.5) return null;
+  return [Y[0] / h, Y[1] / h];
+}
+/** Screen-relative frame: forward (to the TV), right, up. */
+const frame = (fwd: [number, number]) => ({
+  F: [fwd[0], fwd[1], 0] as Vec3,
+  R: [fwd[1], -fwd[0], 0] as Vec3,
+  U: [0, 0, 1] as Vec3,
+});
+export type PaddlePose = {
+  /** Hitting-face tilt: + open (facing up), − closed (facing down), degrees. */
+  pitch: number;
+  /** Paddle turned to the right (+) or left (−) of the screen, degrees. */
+  yaw: number;
+  /** Paddle head leaning right (+) / left (−) from upright, degrees. */
+  roll: number;
+  /** 1 = screen toward the TV (forehand), -1 = back toward the TV (backhand), 0 = edge-on. */
+  face: number;
+};
+export function paddlePose(
+  alpha: number,
+  beta: number,
+  gamma: number,
+  fwd: [number, number],
+  faceSign = 1,
+): PaddlePose {
+  const { Y, Z } = deviceAxes(alpha, beta, gamma);
+  const { F, R, U } = frame(fwd);
+  const toward = vdot(Z, F) * faceSign;
+  const face = toward > 0.25 ? 1 : toward < -0.25 ? -1 : 0;
+  // The hitting face is whichever side of the phone points toward the TV.
+  const s = face === -1 ? -1 : 1;
+  const H: Vec3 = [Z[0] * s * faceSign, Z[1] * s * faceSign, Z[2] * s * faceSign];
+  const deg = 180 / Math.PI;
+  return {
+    pitch: Math.asin(clamp(vdot(H, U), -1, 1)) * deg,
+    yaw: Math.atan2(vdot(H, R), vdot(H, F)) * deg,
+    roll: Math.atan2(vdot(Y, R), vdot(Y, U)) * deg,
+    face,
+  };
+}
+/**
+ * Swing path from the rotation rate (deg/s, device axes: beta = x, gamma = y, alpha = z):
+ * the velocity of a point in front of the player, ω × forward, split into right and up.
+ * Returns unit-ish components and the rotation speed in rad/s.
+ */
+export function swingPath(
+  rate: { alpha: number; beta: number; gamma: number },
+  alpha: number,
+  beta: number,
+  gamma: number,
+  fwd: [number, number],
+) {
+  const { X, Y, Z } = deviceAxes(alpha, beta, gamma);
+  const w: Vec3 = [
+    X[0] * rate.beta + Y[0] * rate.gamma + Z[0] * rate.alpha,
+    X[1] * rate.beta + Y[1] * rate.gamma + Z[1] * rate.alpha,
+    X[2] * rate.beta + Y[2] * rate.gamma + Z[2] * rate.alpha,
+  ];
+  const { F, R, U } = frame(fwd);
+  const v: Vec3 = [
+    w[1] * F[2] - w[2] * F[1],
+    w[2] * F[0] - w[0] * F[2],
+    w[0] * F[1] - w[1] * F[0],
+  ];
+  const speed = Math.hypot(rate.alpha, rate.beta, rate.gamma);
+  const n = Math.max(vlen(v), speed * 0.35, 1);
+  return {
+    side: vdot(v, R) / n,
+    up: vdot(v, U) / n,
+    rad: (speed * Math.PI) / 180,
+  };
+}
+/** One recorded setup swing. */
+export type SetupSwing = { side: number; up: number; rad: number; face: number };
+export type SwingProfile = {
+  /** +1 or -1: corrects the left/right sign if this phone reads it reversed. */
+  sideSign: number;
+  /** +1 or -1: corrects which phone side counts as the forehand face. */
+  faceSign: number;
+  /** Swing feel: a typical setup swing becomes a medium (~60%) shot. */
+  sensitivity: number;
+  /** Typical swing speed (rad/s), for the gauge. */
+  typical: number;
+};
+/**
+ * Learn from three forehands and three backhands (setup steps 03–04).
+ * Forehands swing across the body toward the non-paddle side; backhands the other way.
+ */
+export function learnSwings(
+  fore: SetupSwing[],
+  back: SetupSwing[],
+  hand: "left" | "right",
+): { ok: true; profile: SwingProfile } | { ok: false; redo: "fore" | "back" | "both"; reason: string } {
+  if (fore.length < 3) return { ok: false, redo: "fore", reason: "Three forehands, please." };
+  if (back.length < 3) return { ok: false, redo: "back", reason: "Three backhands, please." };
+  const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+  const fs = avg(fore.map((s) => s.side)),
+    bs = avg(back.map((s) => s.side));
+  // Right hand: forehands go right→left (side < 0), backhands left→right (side > 0).
+  const want = hand === "left" ? -1 : 1;
+  const gap = (bs - fs) * want;
+  if (Math.abs(bs - fs) < 0.3)
+    return {
+      ok: false,
+      redo: "both",
+      reason: "Forehands and backhands looked the same. Swing clearly across your body.",
+    };
+  // Forehand faces: mostly the screen side toward the TV (or consistently the other way).
+  const ff = avg(fore.map((s) => s.face)),
+    bf = avg(back.map((s) => s.face));
+  if (Math.abs(ff - bf) < 0.6)
+    return {
+      ok: false,
+      redo: "back",
+      reason: "Turn the phone over for backhands, so its back faces the TV.",
+    };
+  const speeds = [...fore, ...back].map((s) => s.rad).sort((a, b) => a - b);
+  const typical = (speeds[2] + speeds[3]) / 2;
+  const deg = (typical * 180) / Math.PI;
+  return {
+    ok: true,
+    profile: {
+      sideSign: gap > 0 ? 1 : -1,
+      faceSign: ff >= bf ? 1 : -1,
+      sensitivity: clamp((0.6 * 210) / Math.max(60, deg), 0.5, 2.5),
+      typical,
+    },
+  };
 }

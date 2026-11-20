@@ -7,6 +7,7 @@
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { setUpPhone } from "./phone-setup.mjs";
 const out = process.argv[2] || "screens";
 const maps = (process.argv[3] || "arena,tokyo,nyc,centralpark,haas").split(",");
 const views = (process.env.VIEWS || "third,broadcast").split(",");
@@ -56,47 +57,7 @@ try {
     await phone.locator("#nickname").fill("Jordan");
     await phone.locator("#connect").click();
     await phone.locator("#controls").waitFor({ state: "visible" });
-    await phone.locator("#enable").click();
-    await phone.evaluate(() => {
-      window.testSensors = setInterval(() => {
-        window.dispatchEvent(
-          new DeviceOrientationEvent("deviceorientation", {
-            alpha: 0,
-            beta: 35,
-            gamma: 0,
-          }),
-        );
-        window.dispatchEvent(
-          new DeviceMotionEvent("devicemotion", {
-            acceleration: { x: 0, y: 0, z: 0 },
-            rotationRate: { alpha: 0, beta: 0, gamma: 0 },
-          }),
-        );
-      }, 16);
-    });
-    if (await phone.locator("#calibrate").isVisible()) {
-      await phone.locator("#calibrate").click();
-      await phone.waitForTimeout(150);
-      const rot = async (a, b, g) => {
-        await phone.evaluate(
-          ([a, b, g]) =>
-            window.dispatchEvent(
-              new DeviceMotionEvent("devicemotion", {
-                acceleration: { x: 0, y: 0, z: 0 },
-                rotationRate: { alpha: a, beta: b, gamma: g },
-              }),
-            ),
-          [a, b, g],
-        );
-        await phone.waitForTimeout(450);
-      };
-      await rot(0, 0, -260);
-      await rot(0, 0, 250);
-      await rot(0, 240, 0);
-      await rot(0, -250, 0);
-    }
-    await phone.locator("#ready").click();
-    await phone.locator("#ingame").waitFor({ state: "visible" });
+    await setUpPhone(phone);
     await display.locator("#start").click();
     await display.waitForTimeout(2500);
     const swing = () =>
@@ -104,7 +65,7 @@ try {
         window.dispatchEvent(
           new DeviceMotionEvent("devicemotion", {
             acceleration: { x: 0, y: 0, z: 0 },
-            rotationRate: { alpha: 0, beta: 330, gamma: 0 },
+            rotationRate: { alpha: 0, beta: -330, gamma: 0 },
           }),
         ),
       );

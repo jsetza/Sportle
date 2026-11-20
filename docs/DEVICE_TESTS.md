@@ -64,3 +64,15 @@ Run on **iPhone Safari** and **Android Chrome**, with both left/right hand selec
 - [ ] Small screens remain usable without overlapping buttons; buttons and sensor status are accessible.
 
 Do not mark an unchecked item complete based on unit tests. Add dated device results here after actual testing.
+
+
+## Four-step phone setup (added 2026-11-19, not yet tried on a real phone)
+
+1. Scan the QR, join, tap **ALLOW MOTION** and Allow. The header should read PADDLE · P1 · ● LIVE · <ms>.
+2. Step 02: hold the phone flat like a TV remote, top edge at the screen; press and hold **HOLD TO SET**. The bar should fill in about a second (it restarts if the phone is tilted or moving).
+3. Step 03: three forehands with the screen facing the TV. The SWING SPEED gauge should move live and each swing should fill one dash. REDO LAST removes one.
+4. Step 04: turn the phone over (back toward the TV), three backhands, FINISH. The phone should switch to the in-game card.
+5. In play: open-face high-to-low swings should come out as slices/chops, low-to-high closed-face swings as rolls/topspin, gentle swings near the kitchen as dinks. The display's paddle should tilt with the phone, and the timing callout should name the shot.
+6. Reload the controller page mid-match: it should show WELCOME BACK; Allow motion + HOLD TO SET should put you back in, and the match should resume by itself.
+7. Turn off Wi-Fi for a few seconds: only the header status should change (RECONNECTING); the screen should stay usable.
+8. Left hand: the diagrams and instructions should be mirrored.

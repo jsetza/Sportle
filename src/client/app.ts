@@ -1,6 +1,6 @@
 import { Connection } from "./net.ts";
-import { MotionFilter, learnAxes, wrap } from "../shared/motion.ts";
-import type { TestSwings, Vec3 } from "../shared/motion.ts";
+import { MotionFilter, aimFrom, learnSwings, wrap } from "../shared/motion.ts";
+import type { SetupSwing, SwingProfile } from "../shared/motion.ts";
 import {
   slots,
   MAPS,
@@ -143,7 +143,7 @@ function display() {
 <div class="callout hidden" id="callout" aria-live="assertive"><b>POP-UP!</b><span>Swing down to smash</span></div>
 <div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small id="goMode">MATCH</small><h2 id="goTitle">Blue wins</h2><div class="goscore" id="goScore">11 : 7</div><p id="goNames"></p><button class="cta" id="again">Play again <span>↻</span></button><button class="link" id="goMenu">Change mode</button><p class="fine" id="goWait"></p></div>
 <dialog id="photoDlg" class="photodlg"><h2>Your photo</h2><p class="fine">Line your face up in the oval.</p><div class="photorow"><div class="cam"><video id="camVideo" playsinline muted autoplay></video><canvas id="camShot" class="hidden" width="200" height="250"></canvas><div class="oval" aria-hidden="true"></div><p class="camerr" id="camErr"></p></div><div class="faceprev"><canvas id="facePrev" width="120" height="300"></canvas><small>On the court</small></div></div><p class="fine">The photo stays in this browser only and is never uploaded. Other screens see the drawn face.</p><div class="photobtns"><button class="link" id="drawnFace">Use a drawn face</button><span></span><button class="ghost" id="photoRetry">Try again</button><button class="cta" id="photoUse">Use photo <span>→</span></button></div></dialog>
-<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Enable motion</b> and take the <b>movement test</b>: swing right, left, up and down when asked. Your phone learns your swings and remembers them. Then tap Ready.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you. The paddle face and the swing path pick the shot: low-to-high with a closed face = topspin drive / roll; high-to-low with an open face = slice (harder = chop, backspin that skids low); gentle with an open face = dink near the kitchen or drop from the back; fast and flat = drive; big upward swing with an open face = lob; a high ball and a downward swing = smash; a firm face with almost no swing against a hard ball = block / reset. Swing left or right to aim.</li><li><b>No phone?</b> In the lobby choose <b>Use the keyboard instead</b>: hold and release <kbd>Space</kbd> to swing (longer = harder); hold <kbd>Shift</kbd> for a dink, <kbd>E</kbd> topspin, <kbd>Q</kbd> slice, <kbd>R</kbd> lob, <kbd>F</kbd> smash; <kbd>A</kbd>/<kbd>D</kbd> also aim; <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a drive/roll/slice serve.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
+<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Set up the paddle</b> in four steps on the phone: <b>Allow motion</b>; <b>aim at the screen</b> (hold the phone flat like a TV remote, top edge to the screen, and press and hold until the bar fills); <b>three forehands</b> (screen facing the TV, swing across your body); <b>three backhands</b> (turn the phone over). The phone learns your swings and remembers them: next time it's Allow motion, aim, and you're in.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you. The paddle face and the swing path pick the shot: low-to-high with a closed face = topspin drive / roll; high-to-low with an open face = slice (harder = chop, backspin that skids low); gentle with an open face = dink near the kitchen or drop from the back; fast and flat = drive; big upward swing with an open face = lob; a high ball and a downward swing = smash; a firm face with almost no swing against a hard ball = block / reset. Swing left or right to aim.</li><li><b>No phone?</b> In the lobby choose <b>Use the keyboard instead</b>: hold and release <kbd>Space</kbd> to swing (longer = harder); hold <kbd>Shift</kbd> for a dink, <kbd>E</kbd> topspin, <kbd>Q</kbd> slice, <kbd>R</kbd> lob, <kbd>F</kbd> smash; <kbd>A</kbd>/<kbd>D</kbd> also aim; <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a drive/roll/slice serve.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
     "here-practice": "Practice feeds and a live paddle mirror. Start here.",
     "here-solo": "One phone. Choose the bot level below.",
@@ -915,7 +915,7 @@ function display() {
             ? "Scan the QR with your phone to join."
             : allSet
               ? "Ready. Find a match when you are."
-              : "Finish the movement test on your phone, then tap Ready.";
+              : "Finish the paddle setup on your phone.";
     const mine = rk.results.filter((r) => h.some((p) => p.name === r.name));
     ui("rkLast").text = mine.length
       ? "Last match: " +
@@ -1091,7 +1091,7 @@ function display() {
   }
 }
 function phone() {
-  app.innerHTML = `<div class="phone"><div class="row"><div class="logo"><b>POV</b>pickle</div><span class="pill" id="connection">Not connected</span></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A quick movement test learns your swings. Small, comfortable swings work best.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><details class="gear" open><summary>Your gear</summary><label for="gearPaddle">Paddle</label><select id="gearPaddle">${PADDLES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearShoes">Shoes</label><select id="gearShoes">${SHOES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearEyes">Eyewear</label><select id="gearEyes">${EYEWEAR.map((g, i) => `<option value="${i}">${g}</option>`).join("")}</select></details><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><div id="setup" class="card"><div class="number" id="stage">02 / MOVEMENT TEST</div><h2 id="instruction">Let’s test your swings.</h2><p id="guidance">Tap Enable, then hold the phone like a paddle. Screen forward or back, either is fine.</p><button class="full" id="enable">Enable motion controls</button><button class="full secondary hidden" id="useSaved">Use my saved swings</button><button class="full secondary" id="calibrate" disabled>Hold still · start the test</button><ol class="checks" id="checks"><li data-k="right"><i>→</i>Swing right<b></b></li><li data-k="left"><i>←</i>Swing left<b></b></li><li data-k="up"><i>↑</i>Swing up<b></b></li><li data-k="down"><i>↓</i>Swing down<b></b></li></ol><div class="controller-graphic" id="paddle"></div><div class="meter"><div id="strength"></div></div><p class="fine" id="swingHint">Small, comfortable swings work best.</p><label for="sensitivity">Comfortable sensitivity</label><input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><div class="telemetry"><span>Sensors<strong id="sensorStatus">Not enabled</strong></span><span>Connection RTT<strong id="latency">—</strong></span><span>Pitch / roll<strong id="angles">—</strong></span><span>Live swing<strong id="direction">Neutral</strong></span></div><button class="full" id="ready" disabled>Ready to play</button><button class="link" id="reconnect">Reconnect</button></div><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div class="movepick servepick hidden" id="servePick" role="radiogroup" aria-label="Your serve"><span>Your serve</span><input type="radio" name="sv" id="sv-0" value="0" checked><label for="sv-0">Drive<small>straight</small></label><input type="radio" name="sv" id="sv-1" value="1"><label for="sv-1">Roll<small>topspin dip</small></label><input type="radio" name="sv" id="sv-2" value="2"><label for="sv-2">Slice<small>curves back in</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><div class="sidepick hidden" id="sidePick" role="radiogroup" aria-label="Your half of the screen"><span>Your side of the screen</span><button data-side="left">Left</button><button data-side="right">Right</button></div><button class="full secondary" id="phonePause">Pause</button><button class="link" id="redo">Redo movement test</button></div></div><div id="error" role="alert"></div></div>`;
+  app.innerHTML = `<div class="phone"><header class="phead"><div class="logo"><b>POV</b>pickle</div><span class="pstat"><span>PADDLE</span>·<span id="pSlot">P1</span>·<i class="dot" id="pDot"></i><span id="connection">NOT CONNECTED</span><span id="pLat"></span></span></header><div class="ruler" aria-hidden="true"></div><h1>A paddle.<br>In your pocket.</h1><p>Hold your phone like a paddle. A short setup learns your swings. Swing at your normal pace.</p><div id="join" class="card"><div class="number">01 / CLAIM YOUR SPOT</div><label for="code">Room code</label><input id="code" maxlength="6" autocomplete="off" placeholder="ABC123"><label for="nickname">Your nickname</label><input id="nickname" maxlength="20" placeholder="Player"><label for="hand">Paddle hand</label><select id="hand"><option value="right">Right hand</option><option value="left">Left hand</option></select><label for="outfit">Outfit</label><select id="outfit">${OUTFITS.map((o) => `<option value="${o.id}">${o.name}</option>`).join("")}</select><details class="gear" open><summary>Your gear</summary><label for="gearPaddle">Paddle</label><select id="gearPaddle">${PADDLES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearShoes">Shoes</label><select id="gearShoes">${SHOES.map((g, i) => `<option value="${i}">${g.name}</option>`).join("")}</select><label for="gearEyes">Eyewear</label><select id="gearEyes">${EYEWEAR.map((g, i) => `<option value="${i}">${g}</option>`).join("")}</select></details><button class="full" id="connect">Connect to court</button></div><div id="controls" class="hidden"><section id="setup" class="setup"><div class="stephead" id="stepHead"><span class="stepno"><b id="stepNo">01</b> / 04</span><span class="dashes" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="steptag" id="stepTag">MOTION</span></div><div class="eyebrow hidden" id="welcomeBack">WELCOME BACK</div><h2 class="big" id="stepTitle">Aim at the screen.</h2><p class="lead" id="stepText">First, let the paddle use this phone’s motion sensors. Tap Allow motion, then Allow.</p><figure class="diagram" id="diagram"></figure><p class="caption" id="diagramCap"></p><div class="gauge hidden" id="gauge"><div class="gtop"><span>SWING SPEED</span><b id="gValue">0.0</b><small>rad/s</small></div><svg id="gRuler" viewBox="0 0 300 52" aria-hidden="true"></svg><div class="gstatus"><span class="gdashes" id="gDashes"><i></i><i></i><i></i></span><span id="gText">WAITING FOR A SWING</span></div><div class="gsegs" id="gSegs"></div><p class="ghint" id="gHint">Swing at your normal rally pace.</p></div><button class="slant orange" id="enable"><span>ALLOW MOTION</span></button><button class="linkbig hidden" id="redoSetup">Set up my swings again</button><button class="hold hidden" id="hold" aria-label="Hold to set the screen direction"><span class="htop"><b>HOLD TO SET</b><small id="holdHint">PRESS AND HOLD</small></span><span class="segs" id="holdSegs"></span></button><div class="pairbtns hidden" id="swingBtns"><button class="slant dark" id="redoLast"><span>REDO LAST</span></button><button class="slant dark" id="next" disabled><span id="nextLabel">NEXT</span></button></div></section><div id="ingame" class="card hidden"><div class="number">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="matchStatus">Your display will start the game.</p><div class="movepick servepick hidden" id="servePick" role="radiogroup" aria-label="Your serve"><span>Your serve</span><input type="radio" name="sv" id="sv-0" value="0" checked><label for="sv-0">Drive<small>straight</small></label><input type="radio" name="sv" id="sv-1" value="1"><label for="sv-1">Roll<small>topspin dip</small></label><input type="radio" name="sv" id="sv-2" value="2"><label for="sv-2">Slice<small>curves back in</small></label></div><div id="pad" class="pad hidden" aria-label="Movement thumb pad"><div class="padring"><div id="knob" class="knob"></div></div></div><div class="sidepick hidden" id="sidePick" role="radiogroup" aria-label="Your half of the screen"><span>Your side of the screen</span><button data-side="left">Left</button><button data-side="right">Right</button></div><button class="full secondary" id="phonePause">Pause</button><details class="more"><summary>Paddle settings</summary><div class="movepick" role="radiogroup" aria-label="How you move"><span>How you move</span><input type="radio" name="ctl" id="ctl-2" value="2" checked><label for="ctl-2">Phone<small>thumb pad</small></label><input type="radio" name="ctl" id="ctl-1" value="1"><label for="ctl-1">Keyboard<small>WASD / arrows</small></label><input type="radio" name="ctl" id="ctl-0" value="0"><label for="ctl-0">Auto<small>moves for you</small></label></div><label for="sensitivity">Swing feel (learned from your setup swings)</label><input id="sensitivity" type="range" min="0.5" max="2.5" step="0.05" value="1"><button class="link" id="reaim">Aim at the screen again</button><button class="link" id="redo">Set up my swings again</button></details></div></div><div id="error" role="alert"></div></div>`;
   // Gripping the phone like a paddle presses on the screen: no text selection, look-up or
   // copy pop-ups anywhere on the controller.
   document.body.classList.add("controller");
@@ -1156,79 +1156,193 @@ function phone() {
     swingDirection = 0,
     swingSide = 0;
   let enabledAt = 0;
-  // ——— Movement test: four confirmed swings teach this phone's directions ———
-  const TESTS = ["right", "left", "up", "down"] as const;
-  const PROMPT: Record<(typeof TESTS)[number], string> = {
-    right: "Swing to your RIGHT →",
-    left: "← Swing to your LEFT",
-    up: "Swing UP ↑",
-    down: "Swing DOWN ↓",
-  };
-  let tests: Partial<TestSwings> = {},
-    testing = false,
-    testsDone = false;
-  const nextTest = () => TESTS.find((k) => !tests[k]);
-  const showChecks = () =>
-    document.querySelectorAll<HTMLElement>("#checks li").forEach((li) => {
-      const k = li.dataset.k as keyof TestSwings;
-      li.className = tests[k]
-        ? "done"
-        : testing && nextTest() === k
-          ? "now"
-          : "";
-      li.querySelector("b")!.textContent = tests[k] ? "✓" : "";
-    });
-  const promptNext = () => {
-    const k = nextTest();
-    showChecks();
-    if (k) {
-      $("instruction").textContent = PROMPT[k];
-      $("stage").textContent =
-        `02 / MOVEMENT TEST · ${TESTS.indexOf(k) + 1} OF 4`;
+  // ——— Phone setup (owner request: four steps) ———
+  // 01 allow motion · 02 aim at the screen (hold to set) · 03 three forehands · 04 three
+  // backhands. The swings teach this phone its left/right sign, which side is the forehand
+  // face and the player's normal swing speed (= a medium shot). Saved on the phone.
+  type Step = "motion" | "aim" | "fore" | "back" | "done";
+  let step: Step = "motion",
+    welcome = false,
+    redoRequested = false;
+  const swingsFore: SetupSwing[] = [],
+    swingsBack: SetupSwing[] = [];
+  const PROFILE = "pov-paddle";
+  type Saved = SwingProfile & { hand: string };
+  const savedProfile = (): Saved | null => {
+    try {
+      const p = JSON.parse(localStorage.getItem(PROFILE) || "null");
+      return p && (p.sideSign === 1 || p.sideSign === -1) ? p : null;
+    } catch {
+      return null;
     }
   };
-  const PROFILE = "pov-profile";
-  const saveProfile = () => {
+  const saveProfile = (p: SwingProfile) => {
     try {
       localStorage.setItem(
         PROFILE,
-        JSON.stringify({ axes: filter.axes, sensitivity: filter.sensitivity }),
+        JSON.stringify({ ...p, sensitivity: filter.sensitivity, hand: filter.hand < 0 ? "left" : "right" }),
       );
     } catch {
       /* ignore */
     }
   };
-  const savedProfile = () => {
-    try {
-      const p = JSON.parse(localStorage.getItem(PROFILE) || "null");
-      return p?.axes?.side?.length === 3 && p?.axes?.up?.length === 3
-        ? p
-        : null;
-    } catch {
-      return null;
+  const applyProfile = (p: SwingProfile) => {
+    filter.sideSign = p.sideSign;
+    filter.faceSign = p.faceSign;
+    filter.sensitivity = p.sensitivity;
+    $<HTMLInputElement>("sensitivity").value = String(p.sensitivity);
+  };
+  const lefty = () => filter.hand < 0;
+  // ——— diagrams (inline SVG; scale to their box so they never spill out) ———
+  const SVG = (inner: string, mirror = false) =>
+    `<svg viewBox="0 30 400 175" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><g${mirror ? ' transform="translate(400 0) scale(-1 1)"' : ""}>${inner}</g></svg>`;
+  const T = (x: number, y: number, s: string, anchor = "middle") =>
+    `<text x="${x}" y="${y}" text-anchor="${anchor}">${s}</text>`;
+  const aimDiagram = () =>
+    `<svg viewBox="0 0 400 210" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
+    T(52, 30, "PLAN", "start") +
+    `<rect x="50" y="42" width="110" height="7" rx="3" class="screenbar"/>` +
+    T(105, 68, "SCREEN") +
+    `<path d="M105 160 V80" class="dash"/><path d="M100 86 L105 76 L110 86" class="arrow"/>` +
+    `<rect x="86" y="120" width="38" height="70" rx="9" class="phoneoutline"/><rect x="99" y="127" width="12" height="4" rx="2" class="phoneoutline"/>` +
+    `<path d="M126 121 L146 104 H156" class="leader"/>` +
+    T(160, 108, "TOP EDGE", "start") +
+    `<path d="M215 25 V195" class="divider"/>` +
+    T(232, 30, "SIDE", "start") +
+    T(350, 52, "SCREEN") +
+    `<rect x="345" y="62" width="7" height="72" rx="3" class="screenbar"/><path d="M348 134 V188" class="thin"/>` +
+    `<path d="M235 188 H385" class="thin"/>` +
+    `<g transform="rotate(-10 290 158)"><rect x="248" y="154" width="84" height="9" rx="4.5" class="phoneoutline"/><rect x="250" y="153" width="80" height="3" class="facemark"/></g>` +
+    `<path d="M281 150 L277 118" class="thin"/><path d="M272 124 L277 114 L282 124" class="arrow"/>` +
+    T(286, 116, "SCREEN UP", "start") +
+    `<path d="M334 151 L346 147" class="dash"/>` +
+    `</svg>`;
+  const swingDiagram = (fore: boolean) => {
+    // Top-down view, right hand by default (mirrored for left-handers).
+    const arc = fore
+      ? `<path d="M300 150 C 300 70, 120 70, 110 140" class="swingarc"/><path d="M100 128 L110 145 L122 130" class="arrow"/>`
+      : `<path d="M110 150 C 110 70, 290 70, 300 140" class="swingarc"/><path d="M288 128 L300 145 L310 130" class="arrow"/>`;
+    const phone = fore
+      ? `<rect x="282" y="132" width="40" height="14" rx="4" class="phoneoutline"/><rect x="283" y="131" width="38" height="3" class="facemark"/>`
+      : `<rect x="88" y="132" width="40" height="14" rx="4" class="phoneoutline"/><rect x="89" y="144" width="38" height="3" class="facemark"/>`;
+    return SVG(
+      `<rect x="120" y="36" width="160" height="7" rx="3" class="screenbar"/><circle cx="205" cy="182" r="20" class="body"/><path d="M215 172 L${fore ? 296 : 112} 146" class="thin"/>${arc}${phone}`,
+      lefty(),
+    );
+  };
+  const segs = (el: HTMLElement, n: number) => {
+    if (el.childElementCount !== n) el.innerHTML = "<i></i>".repeat(n);
+  };
+  // ——— swing speed gauge (rad/s, 0–30) ———
+  const ruler = () => {
+    const thr = (0.24 * 210) / filter.sensitivity / (180 / Math.PI);
+    let s = "";
+    for (let v = 0; v <= 30; v++) {
+      const x = 10 + (v / 30) * 280,
+        major = v % 5 === 0;
+      s += `<path d="M${x} ${major ? 18 : 24} V30" class="tick"/>`;
+      if (major) s += `<text x="${x}" y="46" text-anchor="middle">${v}</text>`;
     }
+    const tx = 10 + (Math.min(30, thr) / 30) * 280;
+    s += `<path d="M10 30 H290" class="tick"/><path d="M${tx} 6 V30" class="thr"/><path id="gNeedle" d="M0 2 V30 M-5 2 H5" class="needle" transform="translate(10 0)"/>`;
+    $("gRuler").innerHTML = s;
   };
-  const finishTests = (saved = false) => {
-    testing = false;
-    testsDone = true;
-    showChecks();
-    document
-      .querySelectorAll<HTMLElement>("#checks li b")
-      .forEach((b) => (b.textContent = "✓"));
-    document
-      .querySelectorAll<HTMLElement>("#checks li")
-      .forEach((li) => (li.className = "done"));
-    $("instruction").textContent = "All four swings confirmed ✓";
-    $("guidance").textContent = saved
-      ? "Using your saved swings. Tap Ready when you're set."
-      : "Your phone learned right, left, up and down. Tap Ready when you're set.";
-    $("stage").textContent = "03 / READY TO RALLY";
-    saveProfile();
+  let gaugeRad = 0;
+  const showStep = (s: Step) => {
+    step = s;
+    const prof = savedProfile();
+    $("welcomeBack").classList.toggle("hidden", !(welcome && (s === "motion" || s === "aim")));
+    $("stepHead").classList.toggle("hidden", welcome && s === "motion");
+    const n = { motion: 1, aim: 2, fore: 3, back: 4, done: 4 }[s];
+    $("stepNo").textContent = "0" + n;
+    $("stepTag").textContent = { motion: "MOTION", aim: "AIM", fore: "FOREHANDS", back: "BACKHANDS", done: "DONE" }[s];
+    document.querySelectorAll<HTMLElement>("#stepHead .dashes i").forEach((d, i) => {
+      d.className = i + 1 < n ? "done" : i + 1 === n ? "now" : "";
+    });
+    const hand = lefty() ? "left" : "right";
+    const title = {
+      motion: "Aim at the screen.",
+      aim: "Aim at the screen.",
+      fore: "Swing three forehands.",
+      back: "Now three backhands.",
+      done: "All set.",
+    }[s];
+    const text = {
+      motion: "First, let the paddle use this phone’s motion sensors. Tap Allow motion, then Allow.",
+      aim: "Hold the phone flat like a TV remote, top edge pointing at the screen. Then press and hold the button until the bar fills. This tells the game where the screen is.",
+      fore: `Hold the bottom of the phone like a paddle handle in your ${hand} hand, screen facing the TV. Swing across your body, ${lefty() ? "left to right" : "right to left"}, like a normal forehand.`,
+      back: `Turn the phone over so its back faces the TV, and swing across from the other side, ${lefty() ? "right to left" : "left to right"}.`,
+      done: "Your swings are saved on this phone.",
+    }[s];
+    $("stepTitle").textContent = title;
+    $("stepText").textContent = text;
+    $("diagram").innerHTML = s === "fore" ? swingDiagram(true) : s === "back" ? swingDiagram(false) : aimDiagram();
+    $("diagram").classList.toggle("hidden", s === "done");
+    $("diagramCap").textContent =
+      s === "fore"
+        ? `FOREHAND SEEN FROM ABOVE, ${hand.toUpperCase()} HAND`
+        : s === "back"
+          ? `BACKHAND SEEN FROM ABOVE, ${hand.toUpperCase()} HAND`
+          : s === "done"
+            ? ""
+            : "TOP EDGE TO THE SCREEN, SCREEN FACING UP";
+    $("enable").classList.toggle("hidden", s !== "motion");
+    $("redoSetup").classList.toggle("hidden", !(s === "motion" && welcome && !!prof));
+    $("hold").classList.toggle("hidden", s !== "aim");
+    $("gauge").classList.toggle("hidden", s !== "fore" && s !== "back");
+    $("swingBtns").classList.toggle("hidden", s !== "fore" && s !== "back");
+    $("nextLabel").textContent = s === "back" ? "FINISH" : "NEXT";
+    $("diagram").classList.toggle("short", s === "fore" || s === "back");
+    if (s === "fore" || s === "back") ruler();
+    swingStatus();
   };
-  // Setup vs in-game screens: once Ready, the tester disappears so nothing gets changed.
+  const swingStatus = (note = "") => {
+    const list = step === "back" ? swingsBack : swingsFore;
+    document.querySelectorAll<HTMLElement>("#gDashes i").forEach((d, i) => {
+      d.className = i < list.length ? "done" : "";
+    });
+    $("gText").textContent =
+      note ||
+      (list.length >= 3
+        ? `THREE ${step === "back" ? "BACKHANDS" : "FOREHANDS"} ✓ · TAP ${step === "back" ? "FINISH" : "NEXT"}`
+        : list.length
+          ? `SWING ${list.length} OF 3 ✓ · ${list[list.length - 1].rad.toFixed(1)} RAD/S`
+          : "WAITING FOR A SWING");
+    $<HTMLButtonElement>("next").disabled = list.length < 3;
+    $<HTMLButtonElement>("redoLast").disabled = !list.length;
+    const last = list[list.length - 1];
+    const lit = last ? Math.round((Math.min(30, last.rad) / 30) * 20) : 0;
+    segs($("gSegs"), 20);
+    $("gSegs")
+      .querySelectorAll("i")
+      .forEach((x, i) => x.classList.toggle("on", i < lit));
+  };
+  /** A setup swing finished (called from the send loop with the swing's peak). */
+  const setupSwing = (sw: SetupSwing) => {
+    if (step !== "fore" && step !== "back") return;
+    const list = step === "fore" ? swingsFore : swingsBack;
+    if (list.length >= 3) return;
+    list.push(sw);
+    const want = step === "fore" ? 1 : -1;
+    swingStatus(
+      sw.face === -want
+        ? step === "fore"
+          ? "COUNTED · BUT THE BACK FACED THE TV"
+          : "COUNTED · BUT THE SCREEN FACED THE TV"
+        : "",
+    );
+    navigator.vibrate?.(30);
+  };
+  // Setup vs in-game screens: once Ready, the setup disappears so nothing gets changed.
   const showGame = (on: boolean) => {
     $("setup").classList.toggle("hidden", on);
     $("ingame").classList.toggle("hidden", !on);
+  };
+  const goReady = async () => {
+    showStep("done");
+    ready = true;
+    showGame(true);
+    await net.api("ready", { ready: true }).catch(error);
   };
   let wake: any = null;
   const screenAngle = () =>
@@ -1237,13 +1351,12 @@ function phone() {
     if (e.alpha === null || e.beta === null || e.gamma === null) return;
     orientationAt = performance.now();
     const angle = screenAngle();
-    if (angle !== lastOrientation) {
-      lastOrientation = angle;
-      // Screen rotated: re-set the start position on the next sample, keep playing.
-      if (filter.calibrated) setTimeout(() => filter.calibrate(), 300);
-    }
+    if (angle !== lastOrientation) lastOrientation = angle;
     filter.orientation(e.alpha, e.beta, e.gamma, angle);
   }
+  let swingRad = 0,
+    swingPathPeak = { side: 0, up: 0 },
+    swingFace = 1;
   function motion(e: DeviceMotionEvent) {
     const a = e.acceleration,
       r = e.rotationRate;
@@ -1255,18 +1368,25 @@ function phone() {
       screenAngle(),
       motionAt,
     );
-    peak = Math.max(peak, filter.strength);
+    const rad = (Math.hypot(r.alpha, r.beta, r.gamma) * Math.PI) / 180;
+    gaugeRad = Math.max(rad, gaugeRad * 0.92);
     if (swing) {
       pendingSwing = true;
       swingDue = motionAt + 65;
       swingPeak = filter.strength;
       swingDirection = filter.direction;
       swingSide = filter.side;
+      swingRad = rad;
+      swingPathPeak = { side: filter.path.side, up: filter.path.up };
+      swingFace = filter.face;
       filter.peakVec = [...filter.rate];
     }
     if (pendingSwing) {
-      if (Math.hypot(...filter.rate) > Math.hypot(...filter.peakVec))
-        filter.peakVec = [...filter.rate];
+      if (rad > swingRad) {
+        swingRad = rad;
+        swingPathPeak = { side: filter.path.side, up: filter.path.up };
+        swingFace = filter.face;
+      }
       swingPeak = Math.max(swingPeak, filter.strength);
       if (Math.abs(filter.direction) > Math.abs(swingDirection))
         swingDirection = filter.direction;
@@ -1330,43 +1450,21 @@ function phone() {
     document.body.classList.add("joined");
     seq = r.seq + 1;
     filter.hand = r.player.hand === "left" ? -1 : 1;
+    document.body.classList.toggle("lefty", filter.hand < 0);
     localStorage.setItem("visual-controller-" + net.room, net.credential);
     $("join").classList.add("hidden");
     $("controls").classList.remove("hidden");
     await net.clock();
     net.stream();
-    // Back into a game this phone was already ready for: skip the setup screens.
+    // A saved setup: "WELCOME BACK" — Allow motion, aim, and you're in.
+    welcome = !!savedProfile();
     rejoining = !!r.player.ready;
-    if (rejoining) {
-      $("guidance").textContent = enabled
-        ? "Reconnected · jumping back in…"
-        : "Reconnected · tap Enable motion controls to jump back in.";
-      tryRejoin();
-    } else if (reconnect)
-      $("guidance").textContent =
-        "Reconnected. Hold still, tap the button to set your start position, then Ready.";
+    if (!enabled) showStep("motion");
+    else if (!filter.fwd) showStep("aim");
+    else if (rejoining) goReady();
   }
   let rejoining = false;
-  /** One-tap rejoin: once sensors are live, use the saved swings and go straight back in. */
-  const tryRejoin = () => {
-    if (!rejoining || !sensorLive()) return;
-    const p = savedProfile();
-    if (!p) {
-      rejoining = false;
-      return;
-    }
-    rejoining = false;
-    if (!filter.calibrated) filter.calibrate();
-    filter.axes = p.axes;
-    filter.sensitivity = p.sensitivity || 1;
-    testsDone = true;
-    finishTests(true);
-    ready = true;
-    showGame(true);
-    net.api("ready", { ready: true }).catch(() => {});
-  };
   action("connect", () => claim());
-  action("reconnect", () => claim(true));
   // Reloaded page / reopened link: if this phone already has a seat in the room, take it back.
   {
     const room = (params.get("room") || "").toUpperCase();
@@ -1389,7 +1487,7 @@ function phone() {
       });
     }
   }
-  // Permission calls must occur directly in the click gesture, before network or other awaits.
+  // 01 · Allow motion. Permission calls must occur directly in the click gesture.
   $("enable").onclick = async () => {
     try {
       if (!window.isSecureContext)
@@ -1414,80 +1512,131 @@ function phone() {
       }
       enabled = true;
       enabledAt = performance.now();
-      $("useSaved").classList.toggle("hidden", !savedProfile() || testsDone);
-      $("enable").classList.add("hidden");
       $("error").textContent = "";
-      ui("sensorStatus").text = "Waiting for samples";
       if ("wakeLock" in navigator)
         try {
           wake = await (navigator as any).wakeLock.request("screen");
         } catch {}
+      showStep("aim");
     } catch (e) {
       error(e);
     }
   };
-  // Start position (neutral). Before the test it starts the four-swing test; afterwards it
-  // only re-sets the start position and keeps the learned swings.
-  action("calibrate", () => {
-    if (!sensorLive())
-      throw Error("Waiting for live orientation and motion samples");
-    filter.calibrate();
-    peak = 0;
-    pendingSwing = false;
-    ready = false;
-    net.api("ready", { ready: false }).catch(() => {});
-    if (testsDone) {
-      $("guidance").textContent = "Start position set. Tap Ready.";
+  action("redoSetup", () => {
+    redoRequested = true;
+    welcome = false;
+    $("enable").click();
+  });
+  // 02 · Aim: press and hold while the phone lies flat and still; the bar fills over ~1.2 s.
+  const HOLD_MS = 1200;
+  let holdStart = 0,
+    holdTimer: ReturnType<typeof setInterval> | undefined;
+  const holdSegs = $("holdSegs");
+  segs(holdSegs, 20);
+  const holdReset = (hint = "PRESS AND HOLD") => {
+    clearInterval(holdTimer);
+    holdTimer = undefined;
+    holdStart = 0;
+    holdSegs.querySelectorAll("i").forEach((x) => x.classList.remove("on"));
+    $("holdHint").textContent = hint;
+    $("hold").classList.remove("holding");
+  };
+  $("hold").addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    if (!sensorLive()) {
+      holdReset("WAITING FOR SENSORS");
       return;
     }
-    filter.axes = null;
-    tests = {};
-    testing = true;
-    $("useSaved").classList.add("hidden");
-    $("guidance").textContent =
-      "Make one clear, comfortable swing in each direction when asked. Hold still between swings.";
-    promptNext();
+    holdStart = performance.now();
+    $("hold").classList.add("holding");
+    $("holdHint").textContent = "HOLD STILL…";
+    clearInterval(holdTimer);
+    holdTimer = setInterval(() => {
+      const { alpha, beta, gamma } = filter.abs;
+      const flat = aimFrom(alpha, beta, gamma) && Math.abs(beta) < 40 && Math.abs(gamma) < 40;
+      const still = Math.hypot(...filter.rate) < 60;
+      if (!flat || !still) {
+        holdStart = performance.now();
+        $("holdHint").textContent = !flat ? "HOLD IT FLAT, SCREEN UP" : "HOLD STILL…";
+      } else $("holdHint").textContent = "HOLD STILL…";
+      const k = Math.min(1, (performance.now() - holdStart) / HOLD_MS);
+      const lit = Math.round(k * 20);
+      holdSegs.querySelectorAll("i").forEach((x, i) => x.classList.toggle("on", i < lit));
+      if (k >= 1) {
+        holdReset("SET ✓");
+        if (!filter.aim()) {
+          holdReset("HOLD IT FLAT, SCREEN UP");
+          return;
+        }
+        navigator.vibrate?.(40);
+        const prof = savedProfile();
+        if (prof && !redoRequested) {
+          applyProfile(prof);
+          goReady();
+        } else {
+          swingsFore.length = 0;
+          swingsBack.length = 0;
+          showStep("fore");
+        }
+      }
+    }, 40);
   });
-  action("useSaved", () => {
-    const p = savedProfile();
-    if (!p) throw Error("No saved swings on this phone");
-    if (!sensorLive())
-      throw Error("Waiting for live orientation and motion samples");
-    filter.calibrate();
-    filter.axes = p.axes;
-    filter.sensitivity = p.sensitivity || 1;
-    $<HTMLInputElement>("sensitivity").value = String(filter.sensitivity);
-    tests = {};
-    $("useSaved").classList.add("hidden");
-    finishTests(true);
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"])
+    $("hold").addEventListener(ev, () => {
+      if (holdStart) holdReset();
+    });
+  // 03 / 04 · swings
+  action("redoLast", () => {
+    (step === "back" ? swingsBack : swingsFore).pop();
+    swingStatus();
   });
-  action("ready", async () => {
-    await net.api("ready", { ready: true });
-    ready = true;
-    saveProfile();
-    showGame(true);
+  action("next", async () => {
+    if (step === "fore") return showStep("back");
+    const r = learnSwings(swingsFore, swingsBack, lefty() ? "left" : "right");
+    if (!r.ok) {
+      if (r.redo !== "back") swingsFore.length = 0;
+      if (r.redo !== "fore") swingsBack.length = 0;
+      showStep(r.redo === "back" ? "back" : "fore");
+      swingStatus(r.reason.toUpperCase());
+      return;
+    }
+    applyProfile(r.profile);
+    saveProfile(r.profile);
+    redoRequested = false;
+    welcome = true;
+    await goReady();
   });
-  // Redo needs a second tap so a stray touch mid-game can't wipe the settings.
-  let redoArmed = 0;
+  // In-game: re-aim (the TV direction) or redo the whole setup. Two taps, so a stray touch
+  // mid-game can't wipe the settings.
+  let redoArmed = 0,
+    reaimArmed = 0;
   action("redo", async () => {
     if (performance.now() - redoArmed > 3000) {
       redoArmed = performance.now();
-      $("redo").textContent = "Tap again to redo the movement test";
+      $("redo").textContent = "Tap again to set up your swings again";
       return;
     }
-    $("redo").textContent = "Redo movement test";
+    $("redo").textContent = "Set up my swings again";
     await net.api("ready", { ready: false }).catch(() => {});
     ready = false;
-    testsDone = false;
-    testing = false;
-    tests = {};
-    filter.axes = null;
-    showChecks();
+    redoRequested = true;
+    welcome = false;
     showGame(false);
-    $("instruction").textContent = "Let’s test your swings.";
-    $("guidance").textContent =
-      "Hold the phone like a paddle and tap the button to start the test.";
-    $("stage").textContent = "02 / MOVEMENT TEST";
+    showStep("aim");
+  });
+  action("reaim", async () => {
+    if (performance.now() - reaimArmed > 3000) {
+      reaimArmed = performance.now();
+      $("reaim").textContent = "Tap again to aim at the screen again";
+      return;
+    }
+    $("reaim").textContent = "Aim at the screen again";
+    await net.api("ready", { ready: false }).catch(() => {});
+    ready = false;
+    redoRequested = false;
+    welcome = true;
+    showGame(false);
+    showStep("aim");
   });
   $("sidePick").addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-side]");
@@ -1496,10 +1645,16 @@ function phone() {
   action("phonePause", () => net.api(current?.paused ? "resume" : "pause", {}));
   $<HTMLInputElement>("sensitivity").oninput = () => {
     filter.sensitivity = Number($<HTMLInputElement>("sensitivity").value);
-    if (testsDone) saveProfile();
+    const p = savedProfile();
+    if (p) saveProfile({ ...p, sensitivity: filter.sensitivity });
   };
+  // Header: PADDLE · P1 · ● LIVE · 15 MS. Connection trouble only changes this small status;
+  // it never covers the setup.
+  let connState = "";
   net.onStatus = (s) => {
-    ui("connection").text = s;
+    connState = /Connected/.test(s) ? "LIVE" : /Reconnect/.test(s) ? "RECONNECTING" : "CONNECTING";
+    ui("connection").text = connState;
+    $("pDot").className = "dot " + (connState === "LIVE" ? "live" : "wait");
   };
   // ——— Movement style + thumb pad (phone-only movement) ———
   const moveStyle = () =>
@@ -1605,10 +1760,11 @@ function phone() {
     const wasReady = ready;
     ready = p?.ready || false;
     // The server can un-ready a phone (backgrounded, sensors lost): back to setup.
-    if (wasReady && !ready) {
+    if (wasReady && !ready && step === "done") {
+      // Back to aiming: one press-and-hold and you're in again (swings are kept).
       showGame(false);
-      $("guidance").textContent =
-        "Paused for you. Hold still, tap the button to set your start position, then Ready.";
+      welcome = true;
+      showStep(filter.fwd ? "aim" : "motion");
     }
     if (p)
       ui("igTitle").text =
@@ -1709,36 +1865,22 @@ function phone() {
   };
   setInterval(() => {
     const live = sensorLive();
-    if (rejoining && live) tryRejoin();
-    $<HTMLButtonElement>("calibrate").disabled = !live;
-    $<HTMLButtonElement>("ready").disabled =
-      !live || !testsDone || !filter.calibrated;
-    ui("sensorStatus").text = live
-      ? "Live"
-      : enabled
-        ? "No live samples"
-        : "Not enabled";
-    ui("latency").text = net.credential ? net.latency + " ms" : "—";
-    ui("angles").text =
-      Math.round(filter.angle.pitch) +
-      "° / " +
-      Math.round(filter.angle.roll) +
-      "°";
-    ui("direction").text =
-      filter.strength < 0.1
-        ? "Neutral"
-        : (filter.direction > 0.25
-            ? "Up"
-            : filter.direction < -0.25
-              ? "Down"
-              : "Level") +
-          (filter.side > 0.2 ? " · →" : filter.side < -0.2 ? " · ←" : "");
-    $("strength").style.width = Math.round(filter.strength * 100) + "%";
-    $("paddle").style.transform =
-      `perspective(400px) rotateX(${filter.angle.pitch}deg) rotateZ(${-filter.angle.roll}deg)`;
+    ui("pLat").text = net.credential && connState === "LIVE" ? " · " + net.latency + " MS" : "";
+    if (current && playerId) {
+      const n = current.players.filter((p) => !p.bot).findIndex((p) => p.id === playerId);
+      if (n >= 0) ui("pSlot").text = "P" + (n + 1);
+    }
+    // Live swing speed gauge (setup steps 03–04).
+    if (step === "fore" || step === "back") {
+      ui("gValue").text = gaugeRad.toFixed(1);
+      const nd = document.getElementById("gNeedle");
+      if (nd) nd.setAttribute("transform", `translate(${(10 + (Math.min(30, gaugeRad) / 30) * 280).toFixed(1)} 0)`);
+    }
     if (enabled && !live && performance.now() - enabledAt > 5000)
       $("error").textContent =
         "No live sensor data. Check browser motion permissions. If your device has no supported sensors, use another phone.";
+    else if (live && /sensor data/.test($("error").textContent || ""))
+      $("error").textContent = "";
   }, 100);
   setInterval(async () => {
     // Up to two packets in flight hides tunnel/cellular round trips; the server drops any
@@ -1755,33 +1897,7 @@ function phone() {
     if (swing) swingRepeats--;
     if (fresh) {
       pendingSwing = false;
-      const k = testing ? nextTest() : undefined;
-      if (k) {
-        tests[k] = [...filter.peakVec] as Vec3;
-        if (!nextTest()) {
-          const result = learnAxes(tests as TestSwings);
-          if (result.ok) {
-            filter.axes = result.axes;
-            finishTests();
-          } else {
-            for (const r of result.redo) delete tests[r];
-            $("guidance").textContent = result.reason + " Let's redo those.";
-            promptNext();
-          }
-        } else {
-          $("guidance").textContent = "Got it. Hold still, then the next one.";
-          promptNext();
-        }
-      }
-      $("swingHint").textContent =
-        "Swing detected · " +
-        Math.round(swingPeak * 100) +
-        "% · " +
-        (swingSide > 0.2
-          ? "toward your right →"
-          : swingSide < -0.2
-            ? "← toward your left"
-            : "straight");
+      setupSwing({ side: swingPathPeak.side, up: swingPathPeak.up, rad: swingRad, face: swingFace });
     }
     const live = sensorLive();
     const input: Input = {
@@ -1795,6 +1911,7 @@ function phone() {
       side: swing ? swingSide : filter.side,
       swing: swing && live,
       swingId,
+      face: filter.fwd ? filter.face : undefined,
       sensors: live,
       calibrated: filter.calibrated && live,
       ctl: moveStyle(),
@@ -1805,7 +1922,10 @@ function phone() {
     try {
       await net.api("input", input);
     } catch {
-      ui("connection").text = "Connection lost";
+      // Small status only: setup and controls stay usable while it reconnects.
+      connState = "RECONNECTING";
+      ui("connection").text = connState;
+      $("pDot").className = "dot wait";
     } finally {
       inflight--;
     }

@@ -2,6 +2,7 @@
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
+import { setUpPhone, sensors, holdToAim, FOREHAND, setPose } from "./phone-setup.mjs";
 const child = spawn(process.execPath, ["src/server/index.ts"], {
   env: { ...process.env, HOST: "127.0.0.1", PORT: "31492" },
   stdio: ["ignore", "pipe", "pipe"],
@@ -48,67 +49,25 @@ try {
   await phone.locator("#controls").waitFor({ state: "visible" });
   if ((await phone.locator("#nickname, #code").count()) !== 0)
     throw Error("Text fields still on the page after joining");
-  await phone.locator("#enable").click();
-  await phone.evaluate(() => {
-    window.testSensors = setInterval(() => {
-      window.dispatchEvent(
-        new DeviceOrientationEvent("deviceorientation", {
-          alpha: 0,
-          beta: 35,
-          gamma: 0,
-        }),
-      );
-      window.dispatchEvent(
-        new DeviceMotionEvent("devicemotion", {
-          acceleration: { x: 0, y: 0, z: 0 },
-          rotationRate: { alpha: 0, beta: 0, gamma: 0 },
-        }),
-      );
-    }, 16);
-  });
-  await phone.locator("#calibrate").click();
-  await phone.waitForTimeout(150);
+  // Four-step setup with synthetic sensors; the phone reads left/right reversed, and the
+  // setup must learn that from the forehand/backhand swings.
+  const profile = await setUpPhone(phone, { reversed: true });
+  if (await phone.locator("#setup").isVisible())
+    throw Error("Setup still visible after finishing");
   const swing = async (rate) => {
-    // Practice shots: upward swings (the learned "up" axis).
+    // Practice shots: low-to-high swings in the forehand grip (−beta = upward path).
     await phone.evaluate(
       (value) =>
         window.dispatchEvent(
           new DeviceMotionEvent("devicemotion", {
             acceleration: { x: 0, y: 0, z: 0 },
-            rotationRate: { alpha: 0, beta: value, gamma: 0 },
+            rotationRate: { alpha: 0, beta: -value, gamma: 0 },
           }),
         ),
       rate,
     );
   };
-  // Movement test: right, left, up, down. Right/left use the opposite sensor sign from what a
-  // "screen forward" grip would give, to prove the phone learns whatever it actually reads.
-  const rot = async (alpha, beta, gamma) => {
-    await phone.evaluate(
-      ([a, b, g]) =>
-        window.dispatchEvent(
-          new DeviceMotionEvent("devicemotion", {
-            acceleration: { x: 0, y: 0, z: 0 },
-            rotationRate: { alpha: a, beta: b, gamma: g },
-          }),
-        ),
-      [alpha, beta, gamma],
-    );
-    await phone.waitForTimeout(450);
-  };
-  await rot(0, 0, -260); // right
-  await rot(0, 0, 250); // left
-  await rot(0, 240, 0); // up
-  await rot(0, -250, 0); // down
-  const checks = await phone.locator("#checks li.done").count();
-  if (checks !== 4)
-    throw Error("Movement test confirmed " + checks + " of 4 swings");
-  await phone.locator("#ready").click();
-  await phone.locator("#ingame").waitFor({ state: "visible" });
-  if (await phone.locator("#setup").isVisible())
-    throw Error("Movement tester still visible after Ready");
-  const saved = await phone.evaluate(() => localStorage.getItem("pov-profile"));
-  if (!saved || !JSON.parse(saved).axes) throw Error("Swings were not saved");
+  void profile;
   await display.locator("#start").click();
   const host = JSON.parse(
       await display.evaluate(() => sessionStorage.getItem("visual-host")),
@@ -153,7 +112,7 @@ try {
         ) {
           contacts = m.contacts;
           fired = true;
-          await swing(results.length ? 320 : 120);
+          await swing(results.length ? 700 : 300); // relative to the learned 420°/s "normal pace"
         }
       }
     }
@@ -208,24 +167,6 @@ try {
   }
   console.log("ball lock (degrees off centre):", JSON.stringify(lock));
   // Phone reloads mid-match: it takes its seat back, one tap on Enable, play resumes itself.
-  const sensorsOn = () =>
-    phone.evaluate(() => {
-      window.testSensors = setInterval(() => {
-        window.dispatchEvent(
-          new DeviceOrientationEvent("deviceorientation", {
-            alpha: 0,
-            beta: 35,
-            gamma: 0,
-          }),
-        );
-        window.dispatchEvent(
-          new DeviceMotionEvent("devicemotion", {
-            acceleration: { x: 0, y: 0, z: 0 },
-            rotationRate: { alpha: 0, beta: 0, gamma: 0 },
-          }),
-        );
-      }, 16);
-    });
   await phone.reload();
   const state = async () =>
     (
@@ -238,9 +179,13 @@ try {
   for (let i = 0; i < 40 && !(await state()).paused; i++)
     await phone.waitForTimeout(100);
   if (!(await state()).paused) throw Error("Reload did not pause the match");
+  // WELCOME BACK: allow motion, hold to aim, and the saved swings are used — no swing steps.
+  await phone.locator("#welcomeBack").waitFor({ state: "visible", timeout: 5000 });
   await phone.locator("#enable").click();
-  await sensorsOn();
+  await sensors(phone);
+  await holdToAim(phone);
   await phone.locator("#ingame").waitFor({ state: "visible", timeout: 5000 });
+  await setPose(phone, FOREHAND);
   let resumed = false;
   for (let i = 0; i < 80 && !resumed; i++) {
     await phone.waitForTimeout(100);
@@ -260,7 +205,7 @@ try {
   if (qr.supported) assert.equal(qr.decoded, qr.value);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: display → phone join → synthetic sensors → calibration → ready → practice → 2 distinct shots → reload → one-tap rejoin → auto resume",
+    "PASS: display → phone join → synthetic sensors → 4-step setup (learned reversed left/right) → ready → practice → 2 distinct shots → reload → welcome back (allow + aim) → auto resume",
   );
   console.log(JSON.stringify({ results, qr }, null, 2));
   await phone.evaluate(() => {
