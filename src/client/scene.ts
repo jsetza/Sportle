@@ -383,7 +383,7 @@ export class Scene {
     o.frequency.exponentialRampToValueAtTime(to, a.currentTime + dur * 0.8);
     g.gain.setValueAtTime(gain, a.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
-    o.connect(g).connect(a.destination);
+    o.connect(g).connect(this.sfxOut());
     o.start();
     o.stop(a.currentTime + dur + 0.01);
   }
@@ -408,7 +408,7 @@ export class Scene {
     f.Q.value = q;
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
-    src.connect(f).connect(g).connect(a.destination);
+    src.connect(f).connect(g).connect(this.sfxOut());
     src.start(t);
     src.stop(t + dur + 0.01);
   }
@@ -1709,6 +1709,23 @@ export class Scene {
     this.roar(size === "match" ? 1 : size === "game" ? 0.8 : 0.55);
   }
   roarNoise: AudioBuffer | null = null;
+  /** Sound-effects volume 0..1 (Settings). */
+  sfxVolume = 0.8;
+  sfxGain: GainNode | null = null;
+  sfxOut() {
+    const a = this.audio!;
+    if (!this.sfxGain) {
+      this.sfxGain = a.createGain();
+      this.sfxGain.gain.value = this.sfxVolume;
+      this.sfxGain.connect(a.destination);
+    }
+    return this.sfxGain;
+  }
+  setSfxVolume(v: number) {
+    this.sfxVolume = Math.min(1, Math.max(0, v));
+    if (this.sfxGain && this.audio)
+      this.sfxGain.gain.setTargetAtTime(this.sfxVolume, this.audio.currentTime, 0.05);
+  }
   /** Crowd roar: a swell of band-passed noise with a little shimmer. */
   roar(level: number) {
     if (this.muted || !this.audio) return;
@@ -1739,7 +1756,7 @@ export class Scene {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(peak, t + 0.25);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(a.destination);
+    src.connect(f).connect(g).connect(this.sfxOut());
     src.start(t);
     src.stop(t + dur + 0.05);
   }

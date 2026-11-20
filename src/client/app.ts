@@ -79,7 +79,7 @@ function display() {
   ) =>
     `<input type="radio" name="mode" id="m-${group}-${mode}" value="${mode}" data-group="${group}" ${checked ? "checked" : ""}><label class="item" for="m-${group}-${mode}"><span class="ball"></span><b>${name}</b><small>${hint}</small></label>`;
   app.innerHTML = `<canvas id="court" aria-label="3D pickleball arena"></canvas><div class="beams" aria-hidden="true"></div>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="quality" title="Graphics quality (Auto lowers it if frames run slow)">Graphics: Auto</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="quality" title="Graphics quality (Auto lowers it if frames run slow)">Graphics: Auto</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="POVpickle"><span><b>POV</b>PICKLE</span><i></i></div>
   <p class="tagline">Pickleball. <b>Your phone is the paddle.</b></p>
@@ -149,7 +149,8 @@ function display() {
 <div class="callout hidden" id="callout" aria-live="assertive"><b>POP-UP!</b><span>Swing down to smash</span></div>
 <div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small id="goMode">MATCH</small><h2 id="goTitle">Blue wins</h2><div class="goscore" id="goScore">11 : 7</div><p id="goNames"></p><button class="cta" id="again">Play again <span>↻</span></button><button class="link" id="goMenu">Change mode</button><p class="fine" id="goWait"></p></div>
 <dialog id="photoDlg" class="photodlg"><h2>Your photo</h2><p class="fine">Line your face up in the oval.</p><div class="photorow"><div class="cam"><video id="camVideo" playsinline muted autoplay></video><canvas id="camShot" class="hidden" width="200" height="250"></canvas><div class="oval" aria-hidden="true"></div><p class="camerr" id="camErr"></p></div><div class="faceprev"><canvas id="facePrev" width="120" height="300"></canvas><small>On the court</small></div></div><p class="fine">The photo stays in this browser only and is never uploaded. Other screens see the drawn face.</p><div class="photobtns"><button class="link" id="drawnFace">Use a drawn face</button><span></span><button class="ghost" id="photoRetry">Try again</button><button class="cta" id="photoUse">Use photo <span>→</span></button></div></dialog>
-<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Set up the paddle</b> in three steps on the phone: <b>aim at the screen</b> (hold the phone flat like a TV remote, top edge to the screen; tap, then press and hold until the bar fills); <b>three forehands</b> (screen facing the TV); <b>three backhands</b> (turn the phone over). Swing firmly: gentle waves don't count. Next time it's tap, hold, and you're in.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you. The paddle face and the swing path pick the shot: low-to-high with a closed face = topspin drive / roll; high-to-low with an open face = slice (harder = chop, backspin that skids low); gentle with an open face = dink near the kitchen or drop from the back; fast and flat = drive; big upward swing with an open face = lob; a high ball and a downward swing = smash; a firm face with almost no swing against a hard ball = block / reset. Swing left or right to aim.</li><li><b>No phone?</b> In the lobby choose <b>Use the keyboard instead</b>: hold and release <kbd>Space</kbd> to swing (longer = harder); hold <kbd>Shift</kbd> for a dink, <kbd>E</kbd> topspin, <kbd>Q</kbd> slice, <kbd>R</kbd> lob, <kbd>F</kbd> smash; <kbd>A</kbd>/<kbd>D</kbd> also aim; <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a drive/roll/slice serve.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
+<dialog id="settings" class="settings"><h2>Music &amp; sound</h2><label for="setMusic">Music</label><select id="setMusic">${MUSIC_STYLES.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}<option value="off">Off</option></select><label for="setMusicVol">Music volume <b id="setMusicVolV"></b></label><input id="setMusicVol" type="range" min="0" max="100" step="1"><label class="check"><input id="setSfx" type="checkbox"> Sound effects (hits, bounces, crowd)</label><label for="setSfxVol">Sound effects volume <b id="setSfxVolV"></b></label><input id="setSfxVol" type="range" min="0" max="100" step="1"><p class="fine">House music: “COULD BE WRONG (Edit)” by LOSTBOYJAY, used with the artist’s permission. Settings are saved in this browser.</p><button class="cta" id="settingsClose">Done</button></dialog>
+<dialog id="howto"><h2>How to play</h2><ol><li><b>Press Play</b>, pick <b>Offline</b> (everyone on this screen) or <b>Online</b> (other homes), then a mode, a map and a difficulty, and <b>Create game</b>. A QR code and room code appear.</li><li><b>Scan the QR</b> with your phone camera, choose your nickname, hand, outfit and gear (paddle, shoes, eyewear).</li><li><b>Set up the paddle</b> in three steps on the phone: <b>aim at the screen</b> (hold the phone flat like a TV remote, top edge to the screen; tap, then press and hold until the bar fills); <b>three forehands</b> (screen facing the TV); <b>three backhands</b> (turn the phone over). Swing firmly: gentle waves don't count. Next time it's tap, hold, and you're in.</li><li><b>Move with the keyboard</b> on this screen: <kbd>W A S D</kbd> moves player 1, the <kbd>arrow keys</kbd> move player 2. Until you press a key, your character positions itself. Stay out of the kitchen when volleying!</li><li><b>Time compact swings</b> as the ball reaches you. The paddle face and the swing path pick the shot: low-to-high with a closed face = topspin drive / roll; high-to-low with an open face = slice (harder = chop, backspin that skids low); gentle with an open face = dink near the kitchen or drop from the back; fast and flat = drive; big upward swing with an open face = lob; a high ball and a downward swing = smash; a firm face with almost no swing against a hard ball = block / reset. Swing left or right to aim.</li><li><b>No phone?</b> In the lobby choose <b>Use the keyboard instead</b>: hold and release <kbd>Space</kbd> to swing (longer = harder); hold <kbd>Shift</kbd> for a dink, <kbd>E</kbd> topspin, <kbd>Q</kbd> slice, <kbd>R</kbd> lob, <kbd>F</kbd> smash; <kbd>A</kbd>/<kbd>D</kbd> also aim; <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a drive/roll/slice serve.</li><li><b>Serve:</b> when it’s your serve, pick <b>Drive</b>, <b>Roll</b> (topspin that dips and kicks) or <b>Slice</b> (curves back in) on your phone, then swing. A harder swing serves deeper and faster; swing left or right to steer.</li></ol><p class="fine">Music: <b>House</b> is “COULD BE WRONG (Edit)” by LOSTBOYJAY, used with the artist’s permission.</p><p class="fine">If a phone drops out (locked screen, app switch, weak signal), the game pauses and carries on by itself a few seconds after it's back. Your feet and the low underhand contact are placed for you when serving. Phone sensors estimate swing intent, not exact paddle position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   const modeNotes: Record<string, string> = {
     "here-practice": "Practice feeds and a live paddle mirror. Start here.",
     "here-solo": "One phone. Choose the bot level below.",
@@ -345,6 +346,7 @@ function display() {
     } catch {
       /* ignore */
     }
+    if ($<HTMLDialogElement>("settings").open) syncSettings();
   });
   let host = false,
     displayId = "",
@@ -859,8 +861,8 @@ function display() {
   };
   addEventListener("pointerdown", firstGesture);
   addEventListener("keydown", firstGesture);
-  $("music").onclick = () => {
-    choice = order[(order.indexOf(choice) + 1) % order.length];
+  const pickMusic = (c: Pick) => {
+    choice = c;
     try {
       localStorage.setItem("visual-music", choice);
     } catch {
@@ -868,8 +870,67 @@ function display() {
     }
     userActed = true;
     syncMusic();
+    syncSettings();
   };
+  $("music").onclick = () => pickMusic(order[(order.indexOf(choice) + 1) % order.length]);
+  // ——— Settings: music style + volume, sound effects on/off + volume (saved per browser) ———
+  const savedVol = (key: string, d: number) => {
+    try {
+      const raw = localStorage.getItem(key);
+      const v = Number(raw);
+      return raw !== null && Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : d;
+    } catch {
+      return d;
+    }
+  };
+  const saveVol = (key: string, v: number) => {
+    try {
+      localStorage.setItem(key, String(v));
+    } catch {
+      /* ignore */
+    }
+  };
+  music.setVolume(savedVol("pov-music-vol", 80) / 100);
+  scene.setSfxVolume(savedVol("pov-sfx-vol", 80) / 100);
+  const syncSettings = () => {
+    $<HTMLSelectElement>("setMusic").value = choice;
+    const mv = Math.round(music.volume * 100),
+      sv = Math.round(scene.sfxVolume * 100);
+    $<HTMLInputElement>("setMusicVol").value = String(mv);
+    $("setMusicVolV").textContent = mv + "%";
+    $<HTMLInputElement>("setSfxVol").value = String(sv);
+    $("setSfxVolV").textContent = sv + "%";
+    $<HTMLInputElement>("setSfx").checked = !scene.muted;
+    $<HTMLInputElement>("setSfxVol").disabled = scene.muted;
+  };
+  $("setMusic").onchange = () =>
+    pickMusic($<HTMLSelectElement>("setMusic").value as Pick);
+  $("setMusicVol").oninput = () => {
+    const v = Number($<HTMLInputElement>("setMusicVol").value);
+    music.setVolume(v / 100);
+    saveVol("pov-music-vol", v);
+    syncSettings();
+  };
+  $("setSfxVol").oninput = () => {
+    const v = Number($<HTMLInputElement>("setSfxVol").value);
+    scene.setSfxVolume(v / 100);
+    saveVol("pov-sfx-vol", v);
+    syncSettings();
+  };
+  // A sample "pock" when you let go of the slider, at the new volume.
+  $("setSfxVol").onchange = () => scene.hitSound(0.6);
+  $("setSfx").onchange = () => {
+    if ($<HTMLInputElement>("setSfx").checked === scene.muted) $("sound").click();
+    syncSettings();
+  };
+  const settings = $<HTMLDialogElement>("settings");
+  $("settingsOpen").onclick = () => {
+    syncSettings();
+    settings.showModal();
+  };
+  $("settingsClose").onclick = () => settings.close();
   syncMusic();
+  syncSettings();
   // ——— Game over: result card with Play again (host) ———
   const gameOver = (state: Match) => {
     const over = state.phase === "over" && state.winner !== null;

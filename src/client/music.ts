@@ -209,6 +209,14 @@ export class Music {
   // ——— Licensed audio file (owner request): if src/client/music/<style>.<ext> exists, that
   // style plays the file on loop instead of the synthesised loop. ———
   files: Partial<Record<MusicStyle, string>> = {};
+  /** Music volume 0..1 (Settings), applied after everything else. */
+  volume = 0.8;
+  out: GainNode | null = null;
+  setVolume(v: number) {
+    this.volume = Math.min(1, Math.max(0, v));
+    if (this.out && this.ctx)
+      this.out.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
+  }
   audio: HTMLAudioElement | null = null;
   fileGain: GainNode | null = null;
   filePlaying = false;
@@ -239,7 +247,7 @@ export class Music {
       this.audio.preload = "auto";
       this.fileGain = ctx.createGain();
       this.fileGain.gain.value = 0.0001;
-      ctx.createMediaElementSource(this.audio).connect(this.fileGain).connect(ctx.destination);
+      ctx.createMediaElementSource(this.audio).connect(this.fileGain).connect(this.out!);
     }
     const url = this.files[this.style]!;
     if (!this.audio.src.endsWith(url)) this.audio.src = url;
@@ -347,7 +355,11 @@ export class Music {
     const tone = ctx.createBiquadFilter();
     tone.type = "lowpass";
     tone.frequency.value = 9000;
-    master.connect(tone).connect(ctx.destination);
+    const out = ctx.createGain();
+    out.gain.value = this.volume;
+    out.connect(ctx.destination);
+    this.out = out;
+    master.connect(tone).connect(out);
     this.master = master;
     const pump = ctx.createGain();
     pump.gain.value = 1;

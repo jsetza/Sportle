@@ -2438,3 +2438,44 @@ body.controller {
   aspect-ratio: 400 / 165;
 }
 
+/* Music & sound settings */
+.settings {
+  width: min(440px, 92vw);
+}
+.settings label {
+  display: flex;
+  justify-content: space-between;
+  margin: 16px 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.settings label b {
+  color: var(--ink);
+}
+.settings label.check {
+  justify-content: flex-start;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 15px;
+}
+.settings select,
+.settings input[type="range"] {
+  width: 100%;
+}
+.settings input[type="range"]:disabled {
+  opacity: 0.4;
+}
+.settings .cta {
+  margin-top: 18px;
+}
+.settings label.check input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin: 0;
+}
+/* Music and Sound live in Settings now; the old top-bar buttons stay in the page (hidden). */
+.topbar #music,
+.topbar #sound {
+  display: none;
+}
