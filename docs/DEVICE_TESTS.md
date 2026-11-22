@@ -76,3 +76,19 @@ Do not mark an unchecked item complete based on unit tests. Add dated device res
 6. Reload the controller page mid-match: it should show WELCOME BACK; Allow motion + HOLD TO SET should put you back in, and the match should resume by itself.
 7. Turn off Wi-Fi for a few seconds: only the header status should change (RECONNECTING); the screen should stay usable.
 8. Left hand: the diagrams and instructions should be mirrored.
+
+## Sportle Bowling phone checks (added 2026-11-22, not yet tried on a real phone)
+
+Use `npm run tunnel`, pick **Bowling** on the TV, then Multiplayer and a lane.
+
+1. Two or more phones scan the **same** QR; each lands on `/bowling/phone`, enters a name/hand/outfit/ball colour, and the page reloads once into setup (no text fields left).
+2. Step 01: hold the phone upright in your bowling hand, screen to the TV. Tap (allow motion), then press and hold: the bar should fill in about a second.
+3. Step 02: two practice bowls. Each should fill one dash and show the peak rad/s. Note the typical values for a gentle, normal and hard bowl: ____ / ____ / ____ rad/s. Check that walking around or waving the phone gently never counts.
+4. The TV lists everyone in join order; drag (or ▲) to reorder; Start.
+5. Only the bowler who is up should see **YOUR TURN** (orange card, a buzz). The others show Up next / Nth in line. A swing from a phone that isn't up must not bowl (it shows "Not your turn yet").
+6. Bowl with the phone upright: the curve indicator should read STRAIGHT and the ball should go straight. Tilt the top edge left by ~20–40° before releasing: SLIGHT/BIG HOOK and the ball hooks left late on the lane. Repeat to the right, and with a left-handed player.
+7. Gentle vs hard bowls: the km/h readout should clearly differ (it is game speed, not your real arm speed). Swing across your body: the ball should start across the lane.
+8. Drag the strip to stand left/right; the bowler and the ball's starting point should move.
+9. Lock one phone during its turn: the TV says "Waiting for <name>'s phone…"; after 30 s the host gets **Skip turn** / **Let a bot bowl**. Unlock: the turn resumes. Reload a phone: it rejoins the same seat and score after aim (tap, hold).
+10. Play a full 10-frame game with two phones: check the scoresheet (strikes/spares/10th frame) and the winner card.
+11. Record: does underhand bowling feel right with the phone screen-forward? Is the hook amount controllable? Any accidental releases during the backswing?

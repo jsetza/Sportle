@@ -265,6 +265,8 @@ export type Input = {
   kb?: boolean;
   /** Which side of the phone faced the screen: 1 = screen (forehand), -1 = back (backhand). */
   face?: number;
+  /** Bowling: hook/curve from the phone's tilt, -1..1 (+ = breaks right). */
+  hook?: number;
 };
 export type Player = {
   id: string;

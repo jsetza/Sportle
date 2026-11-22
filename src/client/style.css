@@ -2518,3 +2518,374 @@ body.controller {
   font-size: 14px;
   font-weight: 600;
 }
+
+/* ——— Sportle game hub tiles (start screen) ——— */
+.gametiles {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 4px;
+}
+.gametile {
+  scroll-snap-align: start;
+  min-width: 180px;
+  margin-top: 0;
+  gap: 10px;
+  text-decoration: none;
+  font-size: clamp(22px, 1.75vw, 28px);
+  padding: 18px 18px;
+  align-items: flex-start;
+  overflow: hidden;
+}
+.gametile > span:last-child {
+  display: grid;
+  gap: 6px;
+}
+.gametile small {
+  font-family: Inter, system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 650;
+  font-size: 13px;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+.gametile .playicon {
+  margin-top: 0.28em;
+}
+.bowltile {
+  background: var(--orange);
+  box-shadow: 0 10px 40px rgba(255, 140, 46, 0.25);
+}
+.bowltile:hover,
+.bowltile:focus-visible {
+  box-shadow: 0 14px 50px rgba(255, 140, 46, 0.4);
+}
+
+/* ——— Sportle Bowling: TV ——— */
+.bsheet {
+  position: fixed;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+  pointer-events: none;
+}
+body.playing .bsheet {
+  top: 12px;
+}
+body.bowling:not(.playing) .bsheet {
+  display: none;
+}
+.bsheet table {
+  border-collapse: collapse;
+  background: rgba(8, 8, 16, 0.78);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.bsheet th,
+.bsheet td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  font-size: 13px;
+  text-align: center;
+  min-width: 46px;
+}
+.bsheet thead th {
+  font: 700 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.bsheet tbody th {
+  text-align: left;
+  min-width: 96px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 750;
+}
+.bsheet th small {
+  font: 700 9px ui-monospace, Menlo, monospace;
+  color: var(--muted);
+}
+.bsheet .mk {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 16px;
+}
+.bsheet .mk i {
+  font-style: normal;
+  font-weight: 800;
+  width: 14px;
+  font-size: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+.bsheet td b {
+  display: block;
+  font-size: 15px;
+  min-height: 19px;
+}
+.bsheet td.now {
+  background: rgba(255, 140, 46, 0.22);
+}
+.bsheet td.missed {
+  background: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255, 255, 255, 0.05) 5px 10px);
+}
+.bsheet tr.up th {
+  color: var(--orange);
+}
+.bsheet tr.away {
+  opacity: 0.55;
+}
+.bsheet .tot {
+  font: 900 20px var(--display);
+  min-width: 64px;
+}
+.bsheet .tot small {
+  display: block;
+  font: 700 9px ui-monospace, Menlo, monospace;
+  color: var(--muted);
+}
+.bpractice {
+  background: rgba(8, 8, 16, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font: 700 12px/1.4 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.1em;
+}
+.bturn {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 12px 20px;
+  border-radius: 14px;
+  background: rgba(8, 8, 16, 0.78);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.bwho {
+  display: grid;
+  gap: 2px;
+}
+.bwho b {
+  font: italic 900 clamp(24px, 2.6vw, 36px) / 1 var(--display);
+}
+.bwho small {
+  font: 700 11px/1.3 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.bwho small.nxt {
+  color: var(--ink);
+}
+.bcurve {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+}
+.bcurve b {
+  font: italic 900 18px/1 var(--display);
+  color: var(--orange);
+  align-self: end;
+}
+.bcurve small {
+  font: 700 11px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  grid-column: 2;
+  align-self: start;
+}
+.curvesvg {
+  width: 42px;
+  height: 54px;
+  grid-row: span 2;
+}
+.curvesvg .clane {
+  fill: rgba(255, 210, 150, 0.12);
+  stroke: rgba(255, 255, 255, 0.25);
+}
+.curvesvg .cpath {
+  fill: none;
+  stroke: var(--orange);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.curvesvg .cball {
+  fill: #fff;
+}
+.bread {
+  position: fixed;
+  right: 18px;
+  bottom: 22px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  max-width: 300px;
+  justify-content: flex-end;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(8, 8, 16, 0.72);
+  border: 1px solid var(--line);
+  font: 700 12px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  pointer-events: none;
+}
+.bread b {
+  color: var(--ink);
+  font-size: 18px;
+  font-family: var(--display);
+}
+.bread .foul {
+  color: var(--orange);
+}
+.bcall {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  bottom: auto;
+  z-index: 6;
+}
+.bcall .callout-name {
+  font-size: clamp(56px, 8vw, 120px);
+}
+.kind-strike .callout-name {
+  color: #ff8a1f;
+  text-shadow:
+    0 3px 0 rgba(60, 20, 0, 0.7),
+    0 0 40px rgba(255, 120, 20, 0.8);
+}
+.kind-spare .callout-name {
+  color: var(--ball);
+}
+.kind-gutter .callout-name {
+  color: rgba(235, 235, 245, 0.6);
+}
+.kind-split .callout-name {
+  color: var(--blue);
+}
+.bhead {
+  margin: 16px 0 6px;
+  font-size: 15px;
+  display: flex;
+  justify-content: space-between;
+}
+.bhead small {
+  color: var(--muted);
+  font-weight: 500;
+}
+.border {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.border li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+.border li[draggable="true"] {
+  cursor: grab;
+}
+.border li.up {
+  border-color: var(--orange);
+}
+.border li .num {
+  grid-row: span 2;
+  font: italic 900 20px var(--display);
+  color: var(--orange);
+}
+.border li small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+}
+.border li button {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  padding: 4px 8px;
+}
+.border li.empty,
+.border li.botrow {
+  display: block;
+  color: var(--muted);
+}
+.border li.botrow b,
+.border li.botrow small {
+  margin-left: 8px;
+}
+
+/* ——— Sportle Bowling: phone ——— */
+.bphone .bcurve {
+  justify-content: center;
+  margin: 10px 0;
+}
+.bphone .curvesvg {
+  width: 64px;
+  height: 80px;
+}
+.bphone .bcurve b {
+  font-size: 26px;
+}
+.bstrip {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 56px;
+  margin: 12px 0 4px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(90deg, rgba(255, 210, 150, 0.08), rgba(255, 210, 150, 0.18), rgba(255, 210, 150, 0.08));
+  font: 700 11px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  touch-action: none;
+  user-select: none;
+}
+.bstrip i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 4px 16px rgba(255, 140, 46, 0.5);
+}
+body.myturn .bphone #ingame {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px var(--orange), 0 0 40px rgba(255, 140, 46, 0.35);
+}
+body.myturn .bphone #igNum {
+  color: var(--orange);
+}

@@ -3,13 +3,19 @@
  * Real server and browser; the phone is a synthetic-sensor page (NOT a physical phone test).
  * Uses the machine's GPU (no SwiftShader) so the renderer looks the way it does for players.
  * Env: CHROME_PATH, QUALITY (high/medium/low), VIEWS (comma list of third,first,broadcast).
+ * Bowling: `node scripts/screenshots.mjs <outDir> bowling` (every lane) or `bowling:neon,beach`;
+ * each lane is shot in every camera view at the aim, mid-roll and at the pins.
  */
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { setUpPhone } from "./phone-setup.mjs";
+import { joinPhone, bowl } from "./bowling-phone.mjs";
 const out = process.argv[2] || "screens";
 const maps = (process.argv[3] || "arena,tokyo,nyc,centralpark,haas").split(",");
+const lanes = (process.argv[3] || "").startsWith("bowling")
+  ? (process.argv[3].split(":")[1] || "neon,championship,rooftop,beach").split(",")
+  : null;
 const views = (process.env.VIEWS || "third,broadcast").split(",");
 fs.mkdirSync(out, { recursive: true });
 const PORT = 31493;
@@ -31,7 +37,38 @@ try {
       : {}),
     args: ["--enable-gpu", "--ignore-gpu-blocklist"],
   });
-  for (const map of maps) {
+  for (const lane of lanes ?? []) {
+    const ctx = await browser.newContext();
+    const tv = await ctx.newPage({ viewport: { width: 1440, height: 900 } }),
+      phone = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+    const errors = [];
+    for (const p of [tv, phone]) p.on("pageerror", (e) => errors.push(e.message));
+    await tv.goto(`http://127.0.0.1:${PORT}/bowling#test`);
+    await tv.locator("#goSingle").click();
+    await tv.locator(`label[for=bl-${lane}]`).click();
+    await tv.locator("label[for=bm-practice]").click();
+    await tv.locator("#create").click();
+    await tv.locator("#lobby").waitFor({ state: "visible" });
+    const room = (await tv.locator("#roomcode").textContent()).trim();
+    await joinPhone(phone, `http://127.0.0.1:${PORT}`, room, "Jordan");
+    await tv.waitForFunction(() => window.__bowlScene.bowl?.players[0]?.ready);
+    await tv.locator("#start").click();
+    for (const v of ["follow", "behind", "broadcast"]) {
+      await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "aim", null, { timeout: 15000 });
+      await tv.evaluate((v) => (window.__bowlScene.viewMode2 = v), v);
+      await tv.waitForTimeout(900);
+      await tv.screenshot({ path: `${out}/bowling-${lane}-${v}-aim.png` });
+      await bowl(phone);
+      await tv.waitForTimeout(900);
+      await tv.screenshot({ path: `${out}/bowling-${lane}-${v}-roll.png` });
+      await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "result", null, { timeout: 12000 });
+      await tv.waitForTimeout(300);
+      await tv.screenshot({ path: `${out}/bowling-${lane}-${v}-pins.png` });
+    }
+    console.log("bowling", lane, errors.length ? errors : "ok");
+    await ctx.close();
+  }
+  for (const map of lanes ? [] : maps) {
     const ctx = await browser.newContext();
     const display = await ctx.newPage({
         viewport: { width: 1440, height: 900 },

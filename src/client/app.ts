@@ -84,11 +84,14 @@ function display() {
 <header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="quality" title="Graphics quality (Auto lowers it if frames run slow)">Graphics: Auto</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="Sportle"><span><b>SPORT</b>LE</span><i></i></div>
-  <p class="tagline">Pickleball. <b>Your phone is the paddle.</b></p>
+  <p class="tagline">Motion games. <b>Your phone is the controller.</b></p>
   <div id="setup">
     <div class="step" id="stepIntro">
-      <button class="play" id="play"><span class="playicon" aria-hidden="true"></span>Play</button>
-      <p class="fine">Pick a mode, scan the QR code with your phone, swing.</p>
+      <div class="gametiles" role="list" aria-label="Sportle games">
+        <button class="play gametile" id="play" role="listitem"><span class="playicon" aria-hidden="true"></span><span>Pickleball<small>Your phone is the paddle</small></span></button>
+        <a class="play gametile bowltile" id="playBowling" href="/bowling" role="listitem"><span class="playicon" aria-hidden="true"></span><span>Bowling<small>Your phone is the ball</small></span></a>
+      </div>
+      <p class="fine">Pick a game, scan the QR code with your phone, swing.</p>
     </div>
     <div class="step hidden" id="stepWhere">
       <button class="link back" data-back="stepIntro">← Back</button>

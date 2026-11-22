@@ -31,7 +31,7 @@ function multiply(a: V, b: V) {
   return o;
 }
 /** View-projection with a horizontal lens shift, so the court can sit beside the menu panel. */
-function camera(aspect: number, eye: V, target: V, fov: number, shift: number) {
+export function camera(aspect: number, eye: V, target: V, fov: number, shift: number) {
   const z = norm(sub(eye, target)),
     x = norm(cross([0, 1, 0], z)),
     y = cross(z, x);
@@ -123,6 +123,29 @@ const GLYPHS: Record<string, string[]> = {
   R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
   T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
   ">": ["0000", "1100", "0110", "0011", "0110", "1100", "0000"],
+  // Added for Sportle Bowling boards (STRIKE, SPARE, BOWLING, GUTTER, SPLIT, scores).
+  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
+  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+  G: ["01111", "10000", "10000", "10111", "10001", "10001", "01111"],
+  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+  Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+  "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+  "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
+  "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
+  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+  "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
+  "/": ["00001", "00010", "00010", "00100", "01000", "01000", "10000"],
+  "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
 };
 type View = { eye: V; target: V; fov: number; shift: number };
 export type ViewMode = "third" | "first" | "broadcast";
@@ -987,6 +1010,8 @@ export class Scene {
       server: boolean;
       owner: boolean;
       cheer?: number;
+      /** Sportle Bowling: bowling arm angle (0 = hanging, + = swung forward) and the ball. */
+      bowl?: { arm: number; ball: V | null };
     },
   ) {
     const col = teamColor(p.team),
@@ -1156,6 +1181,10 @@ export class Scene {
       );
     const paddleColor = (PADDLES[p.gear?.paddle ?? 0] ?? PADDLES[0])
       .color as unknown as V;
+    if (opts.bowl && !(cheer > 0)) {
+      this.bowlArm(pos, y0, hand, facing, col, opts.bowl.arm, opts.bowl.ball);
+      return;
+    }
     // paddle arm + paddle (orientation mirrors the phone); arms up when cheering
     const swing = opts.swing;
     let [px, py, pz] = this.reach(
@@ -1212,6 +1241,37 @@ export class Scene {
     if (opts.server) {
       this.blob(pos.x, y0 + 2.25, pos.z, 0.1, 0.1, 0.1, palette.ball);
       this.box(pos.x, y0 + 2.05, pos.z, 0.02, 0.2, 0.02, palette.ball);
+    }
+  }
+  /** Bowling arm: a pendulum from the shoulder, with the ball in the hand until release. */
+  bowlArm(
+    pos: Vec,
+    y0: number,
+    hand: number,
+    facing: number,
+    col: V,
+    arm: number,
+    ball: V | null,
+  ) {
+    const sx = pos.x + hand * 0.36,
+      sy = y0 + 1.42,
+      sz = pos.z;
+    const len = 0.68;
+    // The arm swings in the y-z plane; forward is toward -z when facing is 1.
+    const hx = sx,
+      hy = sy - Math.cos(arm) * len,
+      hz = sz - Math.sin(arm) * len * facing;
+    const n = 5;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      this.blob(sx + (hx - sx) * t, sy + (hy - sy) * t, sz + (hz - sz) * t, 0.055, 0.055, 0.055, col, 0, 6, 8);
+    }
+    this.sphere(hx, hy, hz, 0.075, palette.white);
+    if (ball) {
+      const prev = this.mat;
+      this.material(0.85, 0.05, 0.3);
+      this.blob(hx, hy - 0.1, hz - 0.04 * facing, 0.11, 0.11, 0.11, ball, 0, 10, 14);
+      this.mat = prev;
     }
   }
   /** Outfit accessories on top of the team-coloured body (owner request). */

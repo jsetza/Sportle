@@ -13,7 +13,7 @@
     "test": "DATA_DIR=${TMPDIR:-/tmp}/povpickle-test-data node --experimental-strip-types --test tests/*.test.ts",
     "check": "npm run typecheck && npm run build && npm test",
     "typecheck": "tsc --noEmit",
-    "test:browser": "node scripts/browser-smoke.mjs && node scripts/ranked-smoke.mjs && node scripts/keyboard-smoke.mjs && node scripts/restart-smoke.mjs",
+    "test:browser": "node scripts/browser-smoke.mjs && node scripts/ranked-smoke.mjs && node scripts/keyboard-smoke.mjs && node scripts/restart-smoke.mjs && node scripts/bowling-smoke.mjs",
     "format": "prettier --write src tests scripts docs README.md CLAUDE.md package.json tsconfig.json",
     "test:load": "node scripts/load.mjs",
     "tunnel": "node scripts/tunnel.mjs"

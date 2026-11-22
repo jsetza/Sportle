@@ -1,8 +1,8 @@
-# Sportle — motion-controlled pickleball
+# Sportle — motion-controlled pickleball and bowling
 
 _(Formerly “visual”. The GitHub repository is still named `visual-pickleball`.)_
 
-An experimental browser-based 3D pickleball game. A computer renders the court; phones provide paddle orientation and swing intent. No phone app and no runtime packages are required.
+An experimental browser-based hub of 3D motion games. A computer renders the court or lane; phones provide orientation and swing intent. No phone app and no runtime packages are required. The start screen offers **Pickleball** (your phone is the paddle) and **Bowling** (your phone is the ball); see [Sportle Bowling](#sportle-bowling) below.
 
 **Status:** Working local prototype with a real authoritative server, real controller connections, practice, singles, and doubles mode paths. TypeScript/build and 42 automated tests pass, including a real-HTTP/SSE four-phone, two-household doubles scenario. A Chromium smoke test connects a synthetic phone, calibrates, starts practice, and hits distinct 37% and 65% shots. `npm run tunnel` provides a no-account public HTTPS URL for phone testing. **No physical iPhone/Android testing or permanent public deployment has been completed.** Do not interpret browser sensor simulation as device validation.
 
@@ -72,6 +72,22 @@ Another household opens the same origin, expands **Join another household’s di
 
 Phones must stay visible. Backgrounding, lost sensor data, or a disconnected phone pauses the match and clears readiness. Reconnect restores the reserved player slot using a credential stored on that phone; recalibrate and ready, then the host resumes. Refreshing the host tab restores its session within that browser tab.
 
+## Sportle Bowling
+
+Pick **Bowling** on the start screen (or open `/bowling`). Choose **Single player** (one phone; practice or a 10-frame game, optional bot: Rookie / Club / Pro) or **Multiplayer** (up to six phones on one TV, all scanning the **same QR**), then a lane: **Neon alley**, **Championship**, **Rooftop** (New York scenery) or **Beach** (Hawaii scenery).
+
+1. Each phone scans the QR (`/bowling/phone`), enters a name, bowling hand, outfit and ball colour.
+2. **Setup, two steps:** 01 hold the phone in your bowling hand, upright, screen toward the TV; tap, then press and hold until the bar fills. 02 two practice bowls (one normal, one a little toward the left) teach the phone which way is your forward swing, your normal swing speed and its left/right sign. It's saved on that phone (**✓ Saved on this phone**); **Skip** uses a standard bowl.
+3. The host starts the game; the bowling order is the join order and the host can drag (or ▲) to reorder it in the lobby.
+4. **Turns are run by the server.** Only the bowler who is up is armed: that phone buzzes and shows **YOUR TURN · Frame 4 · Ball 1**; every other phone shows **You're up next** / **3rd in line** and its score. Swings from a phone that isn't up are ignored on the server.
+5. **Bowl:** a backswing, then an underhand forward swing. The release is read at the swing's peak (`SwingCapture`). Speed comes from the peak forward-swing speed (gentle → slow, hard → fast, with a floor and a cap); the line comes from the swing path's left/right part; the **hook** comes from the phone's tilt (roll) at release, plus a little from wrist twist: upright = straight, tilted = hooks toward that side, more tilt = more hook (capped). A live curve indicator on the phone and the TV reads STRAIGHT / SLIGHT HOOK / BIG HOOK before you bowl. Drag the strip on the phone to choose where you stand.
+6. Real ten-pin scoring: strikes, spares, bonuses, a 10th frame with up to three balls, and a classic scoresheet on the TV. STRIKE! / SPARE! / GUTTER / SPLIT callouts, the LED board flashes on strikes, a slow-motion pin-cam replay plays after a strike, and each ball shows its speed (km/h and mph) and hook in boards. The winner shows after frame 10.
+7. Cameras (**View** or `V`): behind the bowler, ball cam (follows the ball and cuts to the pin cam), broadcast.
+
+If the bowler who is up drops out or locks their phone, the game waits (“Waiting for Sam's phone…”); after 30 s the host can **Skip turn** (scores an open frame of zeros) or **Let a bot bowl** that frame for them. Rejoining with the same phone resumes the same seat and score. Late joiners start at the next frame; their missed frames count as empty, or, with **Handicap** on, they're credited with the field's average per frame.
+
+Simplifications (honest list): the ball is simulated as sliding on the oiled front and hooking on the dry back third, then rolling; pins are simulated on the deck as standing circles that tip over into falling capsules (2D plus tilt, not full 3D rigid bodies), with a seeded random scatter so the same bowl gives a similar, not identical, result. Stepping over the foul line is a warning only (casual), triggered by very hard bowls since the phone can't see your feet. The km/h readout is the game's ball speed, not a measurement of your arm, and the phone does not track your hand's exact position. Online bowling between households is not built yet; the turn system is per room and could take a second display later.
+
 ## Controls and simulation
 
 - Acceleration, rotation rate, and relative orientation estimate **intent**, not real-world velocity or position. There is no sustained acceleration integration.
@@ -129,8 +145,10 @@ Court dimensions, diagonal service, two-bounce restrictions, kitchen volleys/mom
 
 ```text
 src/client/    Typed DOM menus, phone sensors, WebGL renderer, QR encoder, transport
+               (bowling: bowling.ts TV + phone pages, bowlscene.ts lane/pins on the same renderer)
 src/shared/    Shared types, motion filter, pure scoring and rule decisions
 src/server/    Node HTTP/SSE transport, rooms/auth, authoritative simulation
+               (bowling: bowling.ts turns/scoring/bots, bowlphysics.ts ball and pins)
 scripts/       Type-stripping build, browser smoke test, HTTPS tunnel launcher, load probe
 tests/         Rules, physics, input/room lifecycle and real HTTP integration
 ```

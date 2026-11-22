@@ -24,6 +24,9 @@ import type {
   MapId,
   Outfit,
 } from "../shared/types.ts";
+import type { Bowl } from "../shared/bowling.ts";
+import { addBowler, bowlInput, newBowl } from "./bowling.ts";
+import type { BotLevel, LaneId } from "../shared/bowling.ts";
 export const token = () => randomBytes(24).toString("base64url");
 export type Session = {
   role: "host" | "display" | "controller";
@@ -48,6 +51,8 @@ export type Room = {
   pairs: Map<string, { expires: number; team: number | null; display: string }>;
   sessions: Map<string, Session>;
   updated: number;
+  /** Set for a Sportle Bowling room (then `state` is an idle pickleball placeholder). */
+  bowl?: Bowl;
 };
 export const rooms = new Map<string, Room>();
 export const PAIR_TTL = 600000;
@@ -133,6 +138,50 @@ export function createRoom(
   });
   rooms.set(code, r);
   return r;
+}
+/** A Sportle Bowling room: same pairing, sessions and transport; its own game state. */
+export function createBowlRoom(
+  mode: "practice" | "game",
+  lane: LaneId,
+  bot: BotLevel,
+  cap: number,
+): Room {
+  const r = createRoom("practice", "easy");
+  r.bowl = newBowl(mode, lane, bot, cap);
+  return r;
+}
+/** A phone joins (or rejoins) a bowling room. Rejoining resumes the same seat and score. */
+export function joinBowler(
+  r: Room,
+  name: string,
+  hand: "left" | "right",
+  credential: string | undefined,
+  display: string,
+  outfit: Outfit,
+  gear: Gear,
+) {
+  const b = r.bowl!;
+  if (credential) {
+    const session = r.sessions.get(credential);
+    const p = b.players.find((q) => q.id === session?.playerId);
+    if (!session || session.role !== "controller" || session.expires < Date.now() || !p)
+      throw Error("Reconnect expired. Scan the QR again.");
+    p.outfit = outfit;
+    p.gear = gear;
+    p.connected = true;
+    p.lastSeen = Date.now();
+    return { credential, player: p, seq: session.lastSeq };
+  }
+  const p = addBowler(b, token().slice(0, 10), name, hand, outfit, gear, display);
+  const key = token();
+  r.sessions.set(key, {
+    role: "controller",
+    playerId: p.id,
+    expires: Date.now() + 86400000,
+    lastSeq: -1,
+    lastInput: 0,
+  });
+  return { credential: key, player: p, seq: -1 };
 }
 export function joinController(
   r: Room,
@@ -234,12 +283,11 @@ export function begin(r: Room) {
     m.players.push(player("practice-feed", "Ball machine", 1, true));
   start(m);
 }
-export function acceptInput(
-  r: Room,
-  s: Session,
-  a: Input,
-  now = Date.now(),
-): boolean {
+/**
+ * Validate a controller packet (types, ranges, timestamp within 1.2 s, increasing sequence,
+ * per-session rate) and record its sequence. Shared by pickleball and bowling.
+ */
+export function admitInput(s: Session, a: Input, now = Date.now()): boolean {
   if (
     s.role !== "controller" ||
     !a ||
@@ -282,9 +330,37 @@ export function acceptInput(
   if (a.face !== undefined && a.face !== 1 && a.face !== -1) return false;
   if (a.sv !== undefined && a.sv !== 0 && a.sv !== 1 && a.sv !== 2)
     return false;
+  if (
+    a.hook !== undefined &&
+    (typeof a.hook !== "number" || !Number.isFinite(a.hook) || Math.abs(a.hook) > 1)
+  )
+    return false;
   if (now - s.lastInput < 15) return false;
   s.lastSeq = a.seq;
   s.lastInput = now;
+  return true;
+}
+/** A swing id not applied before (swings repeat across packets so a late one can't lose it). */
+function freshSwing(s: Session, a: Input) {
+  if (a.swingId === undefined) return true;
+  if (a.swingId <= (s.lastSwingId ?? -1)) return false;
+  s.lastSwingId = a.swingId;
+  return true;
+}
+export function acceptInput(
+  r: Room,
+  s: Session,
+  a: Input,
+  now = Date.now(),
+): boolean {
+  if (!admitInput(s, a, now)) return false;
+  r.updated = now;
+  if (r.bowl) {
+    const p = r.bowl.players.find((p) => p.id === s.playerId);
+    if (!p) return false;
+    bowlInput(r.bowl, p, a, a.swing ? freshSwing(s, a) : false, now);
+    return true;
+  }
   const p = r.state.players.find((p) => p.id === s.playerId);
   if (!p) return false;
   p.input = { ...a };
@@ -301,16 +377,17 @@ export function acceptInput(
   }
   if (p.moveStyle === "phone" && r.state.phase !== "lobby" && !r.state.paused)
     setPhoneMove(r.state, p, a.mx ?? 0, a.mz ?? 0);
-  if (a.swing && a.sensors && a.calibrated) {
-    if (a.swingId === undefined) queueSwing(r.state, p, a);
-    else if (a.swingId > (s.lastSwingId ?? -1)) {
-      s.lastSwingId = a.swingId;
-      queueSwing(r.state, p, a);
-    }
-  }
+  if (a.swing && a.sensors && a.calibrated && freshSwing(s, a))
+    queueSwing(r.state, p, a);
   return true;
 }
 export function housekeeping(r: Room, now = Date.now()) {
+  if (r.bowl)
+    for (const p of r.bowl.players)
+      if (!p.bot && p.connected && now - p.lastSeen > 2500) {
+        p.connected = false;
+        r.bowl.event++;
+      }
   for (const p of r.state.players) {
     if (!p.bot && p.connected && now - p.lastSeen > 2500) {
       p.connected = false;

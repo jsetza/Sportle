@@ -3,6 +3,9 @@
 // Finds coplanar overlapping faces (z-fighting) in each map's static geometry.
 import { buildMap, LOOKS } from "../../src/client/maps.ts";
 import { MAPS } from "../../src/shared/types.ts";
+import { LANES } from "../../src/shared/bowling.ts";
+import { BowlScene } from "../../src/client/bowlscene.ts";
+import type { MapId } from "../../src/shared/types.ts";
 type Box = {
   x: number;
   y: number;
@@ -61,7 +64,12 @@ const WRAP =
   readFileSync(new URL("../../src/client/maps.ts", import.meta.url), "utf8")
     .split("\n")
     .findIndex((l) => l.startsWith("export function buildMap")) + 1;
-for (const map of MAPS.map((m) => m.id)) {
+// Every pickleball map, then every Sportle Bowling lane ("bowling:<lane>").
+for (const map of [
+  ...MAPS.map((m) => m.id as string),
+  ...LANES.map((l) => "bowling:" + l.id),
+]) {
+  const bowling = map.startsWith("bowling:");
   const boxes: Box[] = [];
   const blobs: {
     x: number;
@@ -76,8 +84,8 @@ for (const map of MAPS.map((m) => m.id)) {
   const caller = () =>
     new Error()
       .stack!.split("\n")
-      .map((l) => /maps\.ts:(\d+)/.exec(l)?.[1])
-      .filter((n) => n && (Number(n) < WRAP || Number(n) > WRAP + 20))[0] ??
+      .map((l) => /maps\.ts:(\d+)/.exec(l)?.[1] ?? (/bowlscene\.ts:(\d+)/.exec(l) ? "bowlscene:" + /bowlscene\.ts:(\d+)/.exec(l)![1] : undefined))
+      .filter((n) => n && (n.startsWith("bowlscene") || Number(n) < WRAP || Number(n) > WRAP + 20))[0] ??
     "?";
   const b = {
     box(
@@ -116,8 +124,24 @@ for (const map of MAPS.map((m) => m.id)) {
       glow = k;
     },
   };
+  if (bowling) {
+    // The bowling scene's static build (lane, alley, scenery) with this recorder as the builder.
+    const fake = Object.assign(Object.create(BowlScene.prototype), b, {
+      lane: map.slice(8),
+      map: "arena",
+      mat: [0, 0, 0, 0],
+      material() {},
+      with(_m: unknown, fn: () => void) {
+        fn();
+      },
+      pin() {},
+      vertex() {},
+    });
+    fake.alley();
+  }
   // The scene's own court-area layers (scene.ts arena()).
-  const look = LOOKS[map];
+  const look = LOOKS[(bowling ? "arena" : map) as MapId];
+  if (!bowling) {
   if (look.ground)
     boxes.push({
       x: 0,
@@ -155,7 +179,8 @@ for (const map of MAPS.map((m) => m.id)) {
     src: "scene court",
     glow: 0,
   });
-  if (map !== "arena") buildMap(b as never, map);
+  if (map !== "arena") buildMap(b as never, map as MapId);
+  }
   const flat = boxes.filter((q) => !q.rot);
   const hits = new Map<string, { n: number; area: number; ex: string }>();
   const overl = (a0: number, a1: number, b0: number, b1: number) =>
@@ -258,7 +283,7 @@ for (const map of MAPS.map((m) => m.id)) {
       Math.abs(q.x) - hw < 5.5 && Math.abs(q.z) - hd < 10.5 && top > 0.3;
     const nearCams =
       Math.abs(q.x) - hw < 8 && Math.abs(q.z) - hd < 16.5 && top > 1.5;
-    if (onApron || nearCams) blocked.add(q.src);
+    if (!bowling && (onApron || nearCams)) blocked.add(q.src);
   }
   if (blocked.size)
     console.log(

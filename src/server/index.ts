@@ -25,6 +25,17 @@ import {
   token,
 } from "./rooms.ts";
 import { step, announce } from "./engine.ts";
+import { createBowlRoom, joinBowler } from "./rooms.ts";
+import {
+  botForTurn,
+  reorder,
+  setOptions,
+  skipTurn,
+  startBowl,
+  stepBowl,
+} from "./bowling.ts";
+import { LANES, MAX_BOWLERS } from "../shared/bowling.ts";
+import type { BotLevel, LaneId } from "../shared/bowling.ts";
 import {
   createLobby,
   search,
@@ -74,6 +85,8 @@ function json(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data));
 }
 function view(r: Room) {
+  if (r.bowl)
+    return { code: r.code, game: "bowling", state: r.bowl, serverTime: Date.now() };
   return { code: r.code, state: r.state, serverTime: Date.now() };
 }
 async function body(req: any) {
@@ -152,6 +165,25 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === "POST" && path === "/api/create") {
         const a = await body(req);
+        if (a.game === "bowling") {
+          if (rooms.size >= 100) throw Error("Server room limit reached");
+          const lane = (LANES.some((l) => l.id === a.lane) ? a.lane : "neon") as LaneId;
+          const bot = (["easy", "medium", "hard"].includes(a.bot) ? a.bot : "") as BotLevel;
+          const r = createBowlRoom(
+            a.mode === "practice" ? "practice" : "game",
+            lane,
+            bot,
+            a.players === "single" ? 1 : MAX_BOWLERS,
+          );
+          return json(res, {
+            ...view(r),
+            credential: r.host,
+            displayId: "host",
+            pair: r.pair,
+            pairExpires: r.pairExpires,
+            publicOrigin: publicURL,
+          });
+        }
         if (
           !["practice", "solo", "singles", "coop", "doubles"].includes(
             a.mode,
@@ -252,6 +284,20 @@ const server = createServer(async (req, res) => {
         }
         const name =
           typeof a.name === "string" ? a.name.trim().slice(0, 20) : "Player";
+        if (r.bowl) {
+          const result = joinBowler(
+            r,
+            name || "Player",
+            a.hand === "left" ? "left" : "right",
+            a.credential,
+            display,
+            (OUTFITS.some((o) => o.id === a.outfit) ? a.outfit : "classic") as Outfit,
+            cleanGear(a.gear),
+          );
+          r.updated = Date.now();
+          r.bowl.event++;
+          return json(res, { ...view(r), ...result });
+        }
         const result = joinController(
           r,
           name || "Player",
@@ -305,6 +351,39 @@ const server = createServer(async (req, res) => {
         return json(res, { accepted: acceptInput(r, session, a) });
       if (path === "/api/move")
         return json(res, { accepted: acceptMove(r, session, a) });
+      if (r.bowl) {
+        const b = r.bowl;
+        const bp = b.players.find((p) => p.id === session.playerId);
+        if (path === "/api/ready" && bp) {
+          if (!bp.sensors || !bp.calibrated || Date.now() - bp.lastSeen > 2000)
+            throw Error("Turn on motion and aim at the screen first");
+          bp.ready = !!a.ready;
+          b.event++;
+          return json(res, { ok: true });
+        }
+        if (path === "/api/background" && bp) {
+          bp.connected = false;
+          b.event++;
+          return json(res, { ok: true });
+        }
+        if (path === "/api/pair" && session.role !== "controller")
+          return json(res, issuePair(r, session, null));
+        if ((path === "/api/pause" || path === "/api/resume") && (session.role !== "controller" || bp)) {
+          if (b.phase !== "lobby" && b.phase !== "over") b.paused = path === "/api/pause";
+          b.message = b.paused ? "Paused · press Resume to keep bowling" : "Back to bowling";
+          b.event++;
+          return json(res, { ok: true });
+        }
+        if (session.role !== "host")
+          return json(res, { error: "Host action only" }, 403);
+        if (path === "/api/start" || path === "/api/rematch") startBowl(b);
+        else if (path === "/api/bowl/order") reorder(b, a.ids);
+        else if (path === "/api/bowl/options") setOptions(b, a);
+        else if (path === "/api/bowl/skip") skipTurn(b);
+        else if (path === "/api/bowl/bot") botForTurn(b);
+        else return json(res, { error: "Unknown action" }, 404);
+        return json(res, { ok: true });
+      }
       const p = r.state.players.find((p) => p.id === session.playerId);
       if (path === "/api/ready" && p) {
         if (
@@ -379,6 +458,8 @@ const server = createServer(async (req, res) => {
     let file =
       path === "/" || path === "/controller"
         ? resolve(root, "index.html")
+        : path === "/bowling" || path === "/bowling/phone"
+          ? resolve(root, "bowling.html")
         : resolve(root, "." + decodeURIComponent(path));
     if (path.startsWith("/shared/")) file = resolve(source, "..", "." + path);
     const allowed =
@@ -456,7 +537,12 @@ function safely(r: Room, fn: () => void) {
     fn();
   } catch (e) {
     console.error(`[room ${r.code}] simulation error:`, e);
-    if (!r.state.paused) {
+    if (r.bowl && !r.bowl.paused) {
+      r.bowl.paused = true;
+      r.bowl.message = "Something went wrong in this game. Host: press Resume.";
+      r.bowl.event++;
+    }
+    if (!r.bowl && !r.state.paused) {
       r.state.paused = true;
       r.state.pauseReason = "host";
       r.state.message =
@@ -473,7 +559,8 @@ const interval = setInterval(() => {
   acc += Math.min(0.1, (now - last) / 1000);
   last = now;
   while (acc >= 1 / 120) {
-    for (const r of rooms.values()) safely(r, () => step(r.state));
+    for (const r of rooms.values())
+      safely(r, () => (r.bowl ? stepBowl(r.bowl) : step(r.state)));
     acc -= 1 / 120;
   }
   if (++tick % 4 === 0) {
