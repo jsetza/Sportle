@@ -82,7 +82,19 @@ export const SWING_SPAN = 13;
 /** Swing strength needed to count as a swing (≈ 6 rad/s at the default feel). */
 export const SWING_TRIGGER = 0.24;
 /** Rotation speed (rad/s) at which a swing starts to count, for the setup gauge. */
-export const swingThreshold = (sensitivity = 1) => SWING_FLOOR + (SWING_TRIGGER / sensitivity) * SWING_SPAN;
+export const swingThreshold = (sensitivity = 1) =>
+  SWING_FLOOR + (SWING_TRIGGER / sensitivity) * SWING_SPAN;
+/**
+ * Smoothing factor for a reading that arrived dtMs after the last one, so smoothing takes the
+ * same time on every phone: sensor events come at ~60 Hz on most phones but up to 200 Hz on
+ * some Android ones, and a fixed per-event factor made those feel twitchier.
+ */
+export const ease = (dtMs: number, tauMs: number) =>
+  1 - Math.exp(-clamp(dtMs, 1, 100) / tauMs);
+const tauFor = (perEventAt60Hz: number) =>
+  -(1000 / 60) / Math.log(1 - perEventAt60Hz);
+/** Same feel as the old per-event factors at 60 Hz. */
+const TAU = { strength: tauFor(0.65), pose: tauFor(0.4), angle: tauFor(0.28) };
 export class MotionFilter {
   /** Learned from the movement test; null until then (fallback formulas are used). */
   axes: SwingAxes | null = null;
@@ -115,6 +127,10 @@ export class MotionFilter {
   face = 1;
   abs = { alpha: 0, beta: 0, gamma: 0 };
   path = { side: 0, up: 0, rad: 0 };
+  /** Rotation speed (rad/s) of the latest motion reading. */
+  rad = 0;
+  private motionAt = -1;
+  private orientAt = -1;
   /** Set "toward the screen" (phone flat, top edge at the screen). Returns false if not flat. */
   aim() {
     const f = aimFrom(this.abs.alpha, this.abs.beta, this.abs.gamma);
@@ -132,12 +148,22 @@ export class MotionFilter {
     this.armed = false;
     this.strength = 0;
   }
-  orientation(alpha: number, beta: number, gamma: number, screenAngle: number) {
+  orientation(
+    alpha: number,
+    beta: number,
+    gamma: number,
+    screenAngle: number,
+    now?: number,
+  ) {
     this.abs = { alpha, beta, gamma };
+    const dt =
+      now === undefined || this.orientAt < 0 ? 1000 / 60 : now - this.orientAt;
+    if (now !== undefined) this.orientAt = now;
     if (this.fwd) {
       const p = paddlePose(alpha, beta, gamma, this.fwd, this.faceSign);
+      const k = ease(dt, TAU.pose);
       for (const key of ["pitch", "roll", "yaw"] as const)
-        this.angle[key] += 0.4 * wrap(p[key] - this.angle[key]);
+        this.angle[key] += k * wrap(p[key] - this.angle[key]);
       if (p.face) this.face = p.face;
       return;
     }
@@ -147,9 +173,10 @@ export class MotionFilter {
       roll: gamma * Math.cos(a) - beta * Math.sin(a),
       yaw: alpha,
     };
+    const k = ease(dt, TAU.angle);
     for (const key of ["pitch", "roll", "yaw"] as const) {
       const v = wrap(this.raw[key] - this.neutral[key]);
-      this.angle[key] += 0.28 * wrap(v - this.angle[key]);
+      this.angle[key] += k * wrap(v - this.angle[key]);
       if (Math.abs(this.angle[key]) < 1.5) this.angle[key] = 0;
     }
   }
@@ -170,7 +197,10 @@ export class MotionFilter {
       0,
       1,
     );
-    this.strength = this.strength * 0.35 + energy * 0.65;
+    const dt = this.motionAt < 0 ? 1000 / 60 : now - this.motionAt;
+    this.motionAt = now;
+    this.rad = rad;
+    this.strength += ease(dt, TAU.strength) * (energy - this.strength);
     this.rate = [rotation.alpha, rotation.beta, rotation.gamma];
     if (this.fwd) {
       // Screen-relative swing path (setup steps 02–04).
@@ -234,11 +264,18 @@ export function deviceAxes(alpha: number, beta: number, gamma: number) {
  * "Toward the screen" from the phone held flat like a TV remote, top edge pointing at the
  * screen: the horizontal direction of the top edge. Null if the phone isn't roughly flat.
  */
-export function aimFrom(alpha: number, beta: number, gamma: number): [number, number] | null {
-  const { Y } = deviceAxes(alpha, beta, gamma);
+export function aimFrom(
+  alpha: number,
+  beta: number,
+  gamma: number,
+): [number, number] | null {
+  const { Y, Z } = deviceAxes(alpha, beta, gamma);
   const h = Math.hypot(Y[0], Y[1]);
-  if (h < 0.5) return null;
-  return [Y[0] / h, Y[1] / h];
+  if (h >= 0.5) return [Y[0] / h, Y[1] / h];
+  // Held upright instead (like a paddle, screen toward the TV): the screen points at the TV.
+  const hz = Math.hypot(Z[0], Z[1]);
+  if (hz >= 0.5) return [Z[0] / hz, Z[1] / hz];
+  return null;
 }
 /** Screen-relative frame: forward (to the TV), right, up. */
 const frame = (fwd: [number, number]) => ({
@@ -269,7 +306,11 @@ export function paddlePose(
   const face = toward > 0.25 ? 1 : toward < -0.25 ? -1 : 0;
   // The hitting face is whichever side of the phone points toward the TV.
   const s = face === -1 ? -1 : 1;
-  const H: Vec3 = [Z[0] * s * faceSign, Z[1] * s * faceSign, Z[2] * s * faceSign];
+  const H: Vec3 = [
+    Z[0] * s * faceSign,
+    Z[1] * s * faceSign,
+    Z[2] * s * faceSign,
+  ];
   const deg = 180 / Math.PI;
   return {
     pitch: Math.asin(clamp(vdot(H, U), -1, 1)) * deg,
@@ -311,7 +352,12 @@ export function swingPath(
   };
 }
 /** One recorded setup swing. */
-export type SetupSwing = { side: number; up: number; rad: number; face: number };
+export type SetupSwing = {
+  side: number;
+  up: number;
+  rad: number;
+  face: number;
+};
 export type SwingProfile = {
   /** +1 or -1: corrects the left/right sign if this phone reads it reversed. */
   sideSign: number;
@@ -330,9 +376,13 @@ export function learnSwings(
   fore: SetupSwing[],
   back: SetupSwing[],
   hand: "left" | "right",
-): { ok: true; profile: SwingProfile } | { ok: false; redo: "fore" | "back" | "both"; reason: string } {
-  if (fore.length < 3) return { ok: false, redo: "fore", reason: "Three forehands, please." };
-  if (back.length < 3) return { ok: false, redo: "back", reason: "Three backhands, please." };
+):
+  | { ok: true; profile: SwingProfile }
+  | { ok: false; redo: "fore" | "back" | "both"; reason: string } {
+  if (fore.length < 3)
+    return { ok: false, redo: "fore", reason: "Three forehands, please." };
+  if (back.length < 3)
+    return { ok: false, redo: "back", reason: "Three backhands, please." };
   // Robust to an odd swing: count which way most swings went instead of averaging.
   const vote = (a: number[]) => a.reduce((s, v) => s + Math.sign(v), 0);
   const fs = vote(fore.map((s) => s.side)),
@@ -356,4 +406,112 @@ export function learnSwings(
       typical,
     },
   };
+}
+
+// ——— Reading a swing at its peak ———
+// A swing is noticed as soon as it crosses the trigger speed, but the shot is read where the
+// swing is fastest: power from the peak, direction from the fast part of the swing
+// (not one noisy reading) and the face angle at that moment. The same effort then gives the
+// same shot whatever the phone's sensor rate or how quickly the swing built up.
+
+/** A swing is read at least this long after it's noticed (ms)… */
+export const SWING_MIN_MS = 30;
+/** …and sent once it has clearly peaked, or after this long at most (ms). */
+export const SWING_MAX_MS = 85;
+export type SwingSample = {
+  t: number;
+  rad: number;
+  strength: number;
+  direction: number;
+  side: number;
+  path: { side: number; up: number };
+  face: number;
+  pitch: number;
+  roll: number;
+  yaw: number;
+};
+export type SwingShot = Omit<SwingSample, "t">;
+/** Snapshot of the filter for the swing reader. */
+export const sampleOf = (f: MotionFilter, t: number): SwingSample => ({
+  t,
+  rad: f.rad,
+  strength: f.strength,
+  direction: f.direction,
+  side: f.side,
+  path: { side: f.path.side, up: f.path.up },
+  face: f.face,
+  pitch: f.angle.pitch,
+  roll: f.angle.roll,
+  yaw: f.angle.yaw,
+});
+export class SwingCapture {
+  private samples: SwingSample[] = [];
+  private startAt = -1;
+  private minMs = SWING_MIN_MS;
+  private maxMs = SWING_MAX_MS;
+  private peaked = false;
+  get active() {
+    return this.startAt >= 0;
+  }
+  /** Start reading a swing; setup uses one fixed window so backswing + swing count once. */
+  start(t: number, minMs = SWING_MIN_MS, maxMs = SWING_MAX_MS) {
+    this.samples = [];
+    this.startAt = t;
+    this.minMs = minMs;
+    this.maxMs = maxMs;
+    this.peaked = false;
+  }
+  add(x: SwingSample) {
+    if (!this.active) return;
+    this.samples.push(x);
+    const top = Math.max(...this.samples.map((q) => q.rad));
+    // Slowing down from its fastest point: the swing has peaked.
+    if (x.rad < top * 0.93) this.peaked = true;
+  }
+  ready(t: number) {
+    const age = t - this.startAt;
+    return (
+      this.active && age >= this.minMs && (this.peaked || age >= this.maxMs)
+    );
+  }
+  cancel() {
+    this.startAt = -1;
+    this.samples = [];
+  }
+  finish(): SwingShot {
+    const all = this.samples;
+    this.cancel();
+    if (!all.length)
+      return {
+        rad: 0,
+        strength: SWING_TRIGGER,
+        direction: 0,
+        side: 0,
+        path: { side: 0, up: 0 },
+        face: 1,
+        pitch: 0,
+        roll: 0,
+        yaw: 0,
+      };
+    const peak = all.reduce((a, q) => (q.rad > a.rad ? q : a));
+    // The fast part of the swing (readings at 60%+ of the peak speed); the median ignores a
+    // single odd reading.
+    const core = all.filter((q) => q.rad >= peak.rad * 0.6);
+    const avg = (get: (q: SwingSample) => number) => {
+      const v = core.map(get).sort((a, b) => a - b),
+        m = v.length >> 1;
+      return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+    };
+    return {
+      rad: peak.rad,
+      strength: Math.max(...all.map((q) => q.strength)),
+      direction: avg((q) => q.direction),
+      side: avg((q) => q.side),
+      path: peak.path,
+      face: peak.face,
+      pitch: peak.pitch,
+      roll: peak.roll,
+      yaw: peak.yaw,
+    };
+  }
 }

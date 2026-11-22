@@ -55,7 +55,7 @@ An existing Chrome installation may be used with `CHROME_PATH=/absolute/path/to/
 
 1. Create a **Motion lab** room on the display.
 2. Scan its QR code on a phone, or open `/controller` on the same public origin and enter its six-character room code.
-3. Choose nickname and hand, then the three setup steps: **01 Aim** — hold the phone flat like a TV remote, top edge at the screen; tap **TAP TO START** (allow motion if asked), then press and hold until the bar fills · **02 three forehands** (screen facing the TV, swing across your body) · **03 three backhands** (turn the phone over). Each step moves on by itself after the third swing.
+3. Choose nickname and hand, then the three setup steps: **01 Aim** — hold the phone flat like a TV remote, top edge at the screen; tap **TAP TO START** (allow motion if asked), then press and hold until the bar fills · **02 three forehands** (screen facing the TV, swing across your body) · **03 three backhands** (turn the phone over). Each step moves on by itself after the third swing. Your swings are then saved on that phone (it says so), so next time it's just tap, hold to aim, and you're in. **Skip: use standard swings** goes straight in without the swing steps.
 4. You're in (no separate Ready tap). Next time it says **WELCOME BACK**: tap, hold to aim, and you're in; **Set up my swings again** redoes the swings. Swings take real effort: gentle waves don't count, and full power needs a hard swing.
 5. Tap **Ready**. On the display, select **Start practice**. Let the practice ball bounce and swing when it comes within your character's reach.
 6. For matches, create a new room in the desired mode. Every required human slot must be connected and ready before starting.
@@ -109,7 +109,7 @@ Phones must stay visible. Backgrounding, lost sensor data, or a disconnected pho
 - **Swing strength sets speed:** weaker forehand/backhand swings send slower balls.
 - **Ball slowdown:** the ball leaves the paddle fastest (up to 3× its average speed) and loses 15% of its speed every 0.2 s, still landing where aimed.
 - **Difficulty** (every mode) sets your hitbox: Easy 2.3×, Medium 1.6×, Hard normal. In bot modes it also sets bot strength.
-- **Maps:** Arena, Tokyo, Manila rooftop, San Francisco rooftop, Central Park NY — pick one on the start screen.
+- **Maps (22):** Arena, Tokyo, Manila rooftop, San Francisco rooftop, Central Park NY, NYC rooftop at night, Fancy, campus impressions (Berkeley, UCLA, USC, Stanford, Harvard, MIT, Michigan, Texas, Notre Dame — school colours only, no logos), Iceland waterfall, Swiss Alps, Hawaii beach, Sahara, Paris and the Grand Canyon — pick one on the start screen.
 - **Outfits:** pick one on your phone when you join (jersey, cap, sweatband, chef, astronaut, cowboy).
 - **Dropouts:** if a phone drops out the game pauses and resumes by itself when it's back; a reloaded phone needs one tap to rejoin.
 - **Ranked:** Online → Ranked 1 v 1 or 2 v 2 finds players near your rating (RR), each on their own screen and phone. Ratings live on the server in `DATA_DIR` (they reset on hosts without a persistent disk, like Render's free plan).

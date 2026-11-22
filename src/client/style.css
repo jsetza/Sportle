@@ -2479,3 +2479,42 @@ body.controller {
 .topbar #sound {
   display: none;
 }
+
+/* Setup finished: swings saved */
+.savedcard {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 26px 18px;
+  border: 2px solid #2fd06a;
+  border-radius: 12px;
+  background: #0d2a18;
+  text-align: center;
+  animation: callout-in 0.35s both;
+}
+.savedtick {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #2fd06a;
+  color: #0b2a14;
+  font-size: 32px;
+  font-weight: 900;
+}
+.savedcard b {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 26px;
+}
+.savedcard small {
+  color: #c9cbe0;
+  font-size: 16px;
+}
+.savednote {
+  margin: 6px 0 0;
+  color: #2fd06a;
+  font-size: 14px;
+  font-weight: 600;
+}

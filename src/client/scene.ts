@@ -304,7 +304,8 @@ export class Scene {
     this.gl.setStatic(new Float32Array(this.vertices));
     // Static glow: light shafts under each spotlight.
     this.vertices = [];
-    for (const sp of lightingFor(this.map).spots) this.shaft(sp.pos, sp.dir, sp.outer, sp.color);
+    for (const sp of lightingFor(this.map).spots)
+      this.shaft(sp.pos, sp.dir, sp.outer, sp.color);
     this.gl.setStaticFx(new Float32Array(this.vertices));
     this.vertices = [];
     this.mat = [0.15, 0, 0, 0];
@@ -328,22 +329,47 @@ export class Scene {
         const a0 = (i / n) * Math.PI * 2,
           a1 = ((i + 1) / n) * Math.PI * 2;
         const ring = (a: number) =>
-          end.map((e, j) => e + (u[j] * Math.cos(a) + v[j] * Math.sin(a)) * rad);
+          end.map(
+            (e, j) => e + (u[j] * Math.cos(a) + v[j] * Math.sin(a)) * rad,
+          );
         const p0 = ring(a0),
           p1 = ring(a1);
-        const nrm = (a: number) => norm(u.map((x, j) => x * Math.cos(a) + v[j] * Math.sin(a)));
+        const nrm = (a: number) =>
+          norm(u.map((x, j) => x * Math.cos(a) + v[j] * Math.sin(a)));
         // Bright at the lamp, fading to nothing at the floor; edges fade by view angle.
         this.mat = [0, str, 1, 0];
         this.vertex(pos, nrm((a0 + a1) / 2), c);
-        this.vertex(p0, nrm(a0), c.map((x) => x * 0.25));
-        this.vertex(p1, nrm(a1), c.map((x) => x * 0.25));
+        this.vertex(
+          p0,
+          nrm(a0),
+          c.map((x) => x * 0.25),
+        );
+        this.vertex(
+          p1,
+          nrm(a1),
+          c.map((x) => x * 0.25),
+        );
       }
   }
   /** Append one vertex (position, normal, colour, current material). */
   vertex(p: V, n: V, c: V, light = 1) {
     const out = this.vertices,
       m = this.mat;
-    out.push(p[0], p[1], p[2], n[0], n[1], n[2], c[0] * light, c[1] * light, c[2] * light, m[0], m[1], m[2], m[3]);
+    out.push(
+      p[0],
+      p[1],
+      p[2],
+      n[0],
+      n[1],
+      n[2],
+      c[0] * light,
+      c[1] * light,
+      c[2] * light,
+      m[0],
+      m[1],
+      m[2],
+      m[3],
+    );
   }
   /** Flip sound effects on/off; returns true when sound is now on. */
   sound() {
@@ -499,7 +525,11 @@ export class Scene {
     const l = Math.hypot(n[0], n[1], n[2]) || 1;
     n = [n[0] / l, n[1] / l, n[2] / l];
     if (inside) {
-      const ctr = [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3];
+      const ctr = [
+        (a[0] + b[0] + c[0]) / 3,
+        (a[1] + b[1] + c[1]) / 3,
+        (a[2] + b[2] + c[2]) / 3,
+      ];
       if (dot(n, sub(ctr, inside)) < 0) n = [-n[0], -n[1], -n[2]];
     } else if (n[1] < 0) n = [-n[0], -n[1], -n[2]];
     this.vertex(a, n, color, light);
@@ -778,8 +808,24 @@ export class Scene {
     this.box(0, boardH / 2, -bz, 12.5, boardH, 0.12, P.board);
     // LED strip along the top edge of the boards
     this.material(0.2, 0.9);
-    this.box(-bx + 0.07, boardH + 0.01, -0.3, 0.02, 0.025, 22.4, [0.75, 0.55, 1]);
-    this.box(bx - 0.07, boardH + 0.01, -0.3, 0.02, 0.025, 22.4, [0.75, 0.55, 1]);
+    this.box(
+      -bx + 0.07,
+      boardH + 0.01,
+      -0.3,
+      0.02,
+      0.025,
+      22.4,
+      [0.75, 0.55, 1],
+    );
+    this.box(
+      bx - 0.07,
+      boardH + 0.01,
+      -0.3,
+      0.02,
+      0.025,
+      22.4,
+      [0.75, 0.55, 1],
+    );
     this.box(0, boardH + 0.01, -bz + 0.07, 12.5, 0.025, 0.02, [0.75, 0.55, 1]);
     // LED lettering (emissive, blooms)
     this.material(0.2, 0.75);
@@ -870,9 +916,28 @@ export class Scene {
     for (const x of [-5, 0, 5])
       this.box(x, 10.8, -2, 0.3, 0.3, 26, [0.1, 0.1, 0.14]);
     for (const sp of lightingFor("arena").spots) {
-      this.box(sp.pos[0], sp.pos[1] + 0.15, sp.pos[2], 0.6, 0.45, 0.6, [0.08, 0.08, 0.1]);
+      this.box(
+        sp.pos[0],
+        sp.pos[1] + 0.15,
+        sp.pos[2],
+        0.6,
+        0.45,
+        0.6,
+        [0.08, 0.08, 0.1],
+      );
       this.with([0.2, 3], () =>
-        this.blob(sp.pos[0], sp.pos[1] - 0.08, sp.pos[2], 0.24, 0.05, 0.24, [1, 0.95, 0.86], 0, 2, 10),
+        this.blob(
+          sp.pos[0],
+          sp.pos[1] - 0.08,
+          sp.pos[2],
+          0.24,
+          0.05,
+          0.24,
+          [1, 0.95, 0.86],
+          0,
+          2,
+          10,
+        ),
       );
     }
     this.material(0.15);
@@ -929,8 +994,7 @@ export class Scene {
         Math.sin(performance.now() / 85) * Math.min(0.05, opts.moving * 0.015);
     const cheer = opts.cheer ?? 0;
     // Celebration hop.
-    const y0 =
-      bob + cheer * Math.abs(Math.sin(performance.now() / 160)) * 0.16;
+    const y0 = bob + cheer * Math.abs(Math.sin(performance.now() / 160)) * 0.16;
     // player indicator ring (and a fake shadow when real shadows are off)
     if (!this.gl.shadows)
       this.blob(
@@ -947,9 +1011,9 @@ export class Scene {
       );
     this.with([0.3, opts.owner ? 0.5 : 0.35], () =>
       this.ring(
-      pos.x,
-      pos.z,
-      0.55,
+        pos.x,
+        pos.z,
+        0.55,
         opts.owner ? palette.white : col,
         0.035,
         0.05,
@@ -1105,7 +1169,17 @@ export class Scene {
       pz = lerp(pz, pos.z, cheer);
       // the free arm goes up too
       const ox = pos.x - hand * 0.42 - wave;
-      this.box(ox, y0 + 1.62, pos.z, 0.09, 0.62, 0.09, col, 0, -hand * 0.25 * cheer);
+      this.box(
+        ox,
+        y0 + 1.62,
+        pos.z,
+        0.09,
+        0.62,
+        0.09,
+        col,
+        0,
+        -hand * 0.25 * cheer,
+      );
       this.sphere(ox - hand * 0.06, y0 + 1.98, pos.z, 0.08, palette.white);
     }
     this.box(
@@ -1345,7 +1419,12 @@ export class Scene {
     const sw = w * 0.7,
       sy = h * 0.45,
       sh = 0.018 * k;
-    const q = [rot(-sw, sy - sh, z), rot(sw, sy - sh, z), rot(sw, sy + sh, z), rot(-sw, sy + sh, z)];
+    const q = [
+      rot(-sw, sy - sh, z),
+      rot(sw, sy - sh, z),
+      rot(sw, sy + sh, z),
+      rot(-sw, sy + sh, z),
+    ];
     for (const i of [0, 1, 2, 0, 2, 3]) this.vertex(q[i], sn, palette.white);
     // The back shows a white sweet-spot ring, so you can tell which face you're looking at.
     const bn = rot(0, 0, -front, false),
@@ -1355,8 +1434,16 @@ export class Scene {
         a1 = ((i + 1) / 16) * Math.PI * 2,
         r0 = 0.055 * k,
         r1 = 0.075 * k;
-      const p = (a: number, rr: number) => rot(Math.cos(a) * rr, Math.sin(a) * rr + h * 0.1, bz);
-      for (const v of [p(a0, r0), p(a1, r0), p(a1, r1), p(a0, r0), p(a1, r1), p(a0, r1)])
+      const p = (a: number, rr: number) =>
+        rot(Math.cos(a) * rr, Math.sin(a) * rr + h * 0.1, bz);
+      for (const v of [
+        p(a0, r0),
+        p(a1, r0),
+        p(a1, r1),
+        p(a0, r0),
+        p(a1, r1),
+        p(a0, r1),
+      ])
         this.vertex(v, bn, palette.white);
     }
     // Grip.
@@ -1383,8 +1470,22 @@ export class Scene {
       [3, 2, 6, 7],
       [0, 1, 5, 4],
     ]) {
-      this.tri(corners[f[0]], corners[f[1]], corners[f[2]], [0.12, 0.12, 0.15], 1, center);
-      this.tri(corners[f[0]], corners[f[2]], corners[f[3]], [0.12, 0.12, 0.15], 1, center);
+      this.tri(
+        corners[f[0]],
+        corners[f[1]],
+        corners[f[2]],
+        [0.12, 0.12, 0.15],
+        1,
+        center,
+      );
+      this.tri(
+        corners[f[0]],
+        corners[f[2]],
+        corners[f[3]],
+        [0.12, 0.12, 0.15],
+        1,
+        center,
+      );
     }
     this.mat = prev;
   }
@@ -1468,9 +1569,18 @@ export class Scene {
    * Presentation camera moves on top of the normal view: the match intro (close-up on the
    * opponent, then a swoop down to the play camera) and a short move after a won point.
    */
-  stage(goal: View, m: Match | null, positions: Map<string, Vec>, now: number): View & { snap?: boolean } {
+  stage(
+    goal: View,
+    m: Match | null,
+    positions: Map<string, Vec>,
+    now: number,
+  ): View & { snap?: boolean } {
     if (!m) return goal;
-    if (m.introUntil > m.time && m.phase === "serve" && this.introSeen !== m.introUntil) {
+    if (
+      m.introUntil > m.time &&
+      m.phase === "serve" &&
+      this.introSeen !== m.introUntil
+    ) {
       this.introSeen = m.introUntil;
       this.introT0 = now;
       this.introDur = (m.introUntil - m.time) * 1000;
@@ -1480,8 +1590,9 @@ export class Scene {
       // Close-up of the other side's first player (or the far team's player).
       const me = m.players.find((p) => p.id === this.follow);
       const opp =
-        m.players.find((p) => p.team !== (me?.team ?? 0) && p.id !== "practice-feed") ??
-        m.players[0];
+        m.players.find(
+          (p) => p.team !== (me?.team ?? 0) && p.id !== "practice-feed",
+        ) ?? m.players[0];
       const op = positions.get(opp.id) ?? opp.pos;
       const f = opp.team ? 1 : -1; // direction the opponent faces (toward the net)
       const close: View = {
@@ -1494,7 +1605,9 @@ export class Scene {
       // Swoop: rise up and over on the way back.
       const arc = Math.sin(k * Math.PI) * 2.2;
       return {
-        eye: close.eye.map((v, i) => lerp(v, goal.eye[i], k) + (i === 1 ? arc : 0)),
+        eye: close.eye.map(
+          (v, i) => lerp(v, goal.eye[i], k) + (i === 1 ? arc : 0),
+        ),
         target: close.target.map((v, i) => lerp(v, goal.target[i], k)),
         fov: lerp(close.fov, goal.fov, k),
         shift: lerp(0, goal.shift, k),
@@ -1504,12 +1617,20 @@ export class Scene {
     const age = (now - this.cheerAt) / 1000;
     if (age >= 0 && age < 1.8 && this.cheerTeam >= 0 && m.phase !== "rally") {
       // Point won: drift toward the winners and rise a little, then settle back.
-      const k = Math.sin((age / 1.8) * Math.PI) * (this.cheerSize === "point" ? 0.6 : 1);
+      const k =
+        Math.sin((age / 1.8) * Math.PI) *
+        (this.cheerSize === "point" ? 0.6 : 1);
       const z = this.cheerTeam ? -4 : 4;
       return {
         ...goal,
-        eye: [goal.eye[0], goal.eye[1] + k * 0.6, goal.eye[2] + (z - goal.eye[2]) * 0.08 * k],
-        target: goal.target.map((v, i) => lerp(v, i === 2 ? z : i === 1 ? 1 : 0, 0.25 * k)),
+        eye: [
+          goal.eye[0],
+          goal.eye[1] + k * 0.6,
+          goal.eye[2] + (z - goal.eye[2]) * 0.08 * k,
+        ],
+        target: goal.target.map((v, i) =>
+          lerp(v, i === 2 ? z : i === 1 ? 1 : 0, 0.25 * k),
+        ),
         fov: goal.fov - 3 * k,
       };
     }
@@ -1615,7 +1736,9 @@ export class Scene {
     return {
       ...p,
       vignette:
-        (this.map === "arena" || this.map === "nyc" || this.map === "tokyo" ? 0.55 : 0.3) +
+        (this.map === "arena" || this.map === "nyc" || this.map === "tokyo"
+          ? 0.55
+          : 0.3) +
         p.speedLines * 0.25,
       focus: [0.5, 0.45],
     };
@@ -1623,7 +1746,13 @@ export class Scene {
   calloutEls: HTMLDivElement[] = [];
   calloutKey: string[] = [];
   /** Timing callout + EARLY ↔ LATE meter at the bottom of this view (the hitter's half). */
-  placeCallout(pass: number, split: boolean, ox: number, cw: number, now: number) {
+  placeCallout(
+    pass: number,
+    split: boolean,
+    ox: number,
+    cw: number,
+    now: number,
+  ) {
     let el = this.calloutEls[pass];
     if (!el) {
       el = document.createElement("div");
@@ -1703,11 +1832,17 @@ export class Scene {
     this.cheerSize = size;
     const big = size === "match" ? 2 : size === "game" ? 1.5 : 1;
     // Burst over each winning player.
-    const winners = this.state?.players.filter((p) => p.team === team && p.id !== "practice-feed") ?? [];
-    for (const p of winners.length ? winners : [{ pos: { x: 0, y: 0, z: team ? -4 : 4 } }]) {
+    const winners =
+      this.state?.players.filter(
+        (p) => p.team === team && p.id !== "practice-feed",
+      ) ?? [];
+    for (const p of winners.length
+      ? winners
+      : [{ pos: { x: 0, y: 0, z: team ? -4 : 4 } }]) {
       const at = this.shown.get("p:" + (p as Player).id) ?? p.pos;
       this.fx.confetti(at, teamColor(team), now, big);
-      if (size !== "point") this.fx.confetti(at, teamColor(team), now + 400, big * 0.8);
+      if (size !== "point")
+        this.fx.confetti(at, teamColor(team), now + 400, big * 0.8);
     }
     this.roar(size === "match" ? 1 : size === "game" ? 0.8 : 0.55);
   }
@@ -1727,7 +1862,11 @@ export class Scene {
   setSfxVolume(v: number) {
     this.sfxVolume = Math.min(1, Math.max(0, v));
     if (this.sfxGain && this.audio)
-      this.sfxGain.gain.setTargetAtTime(this.sfxVolume, this.audio.currentTime, 0.05);
+      this.sfxGain.gain.setTargetAtTime(
+        this.sfxVolume,
+        this.audio.currentTime,
+        0.05,
+      );
   }
   /** Crowd roar: a swell of band-passed noise with a little shimmer. */
   roar(level: number) {
@@ -1742,7 +1881,8 @@ export class Scene {
         for (let i = 0; i < len; i++) {
           // Pinkish noise with slow "voices" rising and falling.
           b = b * 0.97 + (Math.random() * 2 - 1) * 0.3;
-          d[i] = b * (0.7 + 0.3 * Math.sin(i / (a.sampleRate * (0.11 + ch * 0.03))));
+          d[i] =
+            b * (0.7 + 0.3 * Math.sin(i / (a.sampleRate * (0.11 + ch * 0.03))));
         }
       }
     }
@@ -1933,8 +2073,13 @@ export class Scene {
             });
           const cheerAge = (now - this.cheerAt) / 1000;
           const cheer =
-            p.team === this.cheerTeam && cheerAge < (this.cheerSize === "point" ? 1.9 : 3.2)
-              ? Math.min(1, cheerAge / 0.15) * Math.min(1, ((this.cheerSize === "point" ? 1.9 : 3.2) - cheerAge) / 0.3)
+            p.team === this.cheerTeam &&
+            cheerAge < (this.cheerSize === "point" ? 1.9 : 3.2)
+              ? Math.min(1, cheerAge / 0.15) *
+                Math.min(
+                  1,
+                  ((this.cheerSize === "point" ? 1.9 : 3.2) - cheerAge) / 0.3,
+                )
               : 0;
           this.mascot(p, pos, {
             cheer,
@@ -2077,6 +2222,41 @@ export class Scene {
             t,
           );
         }
+      // Iceland: water streaks pouring down the falls and spray rising from the pool.
+      if (this.map === "iceland") {
+        const s = now / 1000;
+        for (let i = 0; i < 80; i++) {
+          const fall = 44,
+            t = s * (0.55 + (i % 5) * 0.04) + i * 0.613;
+          const k = t % 1,
+            y = fall * (1 - k * k);
+          const x = -5.6 + ((i * 4.37) % 11.2);
+          this.box(
+            x,
+            y,
+            -73.3 + (i % 3) * 0.25,
+            0.35,
+            3.5,
+            0.08,
+            i % 4 ? [0.92, 0.96, 1] : [0.78, 0.88, 0.95],
+          );
+        }
+        for (let i = 0; i < 30; i++) {
+          const t = s * 0.35 + i * 0.41,
+            k = t % 1;
+          this.box(
+            -7 + ((i * 3.13) % 14),
+            0.3 + k * 5,
+            -71 + ((i * 1.7) % 5),
+            0.35 + k * 0.8,
+            0.35 + k * 0.8,
+            0.35 + k * 0.8,
+            [0.86, 0.9, 0.94],
+            t,
+            t * 0.7,
+          );
+        }
+      }
       // Camera for this viewer, eased toward the view for the current phase.
       // Each half keeps its own camera; a new one starts from the current view.
       this.view = this.views[pass] || { ...this.view };
@@ -2115,7 +2295,11 @@ export class Scene {
       const vp = camera(
         vw / Math.max(1, h),
         [this.view.eye[0] + sh.x, this.view.eye[1] + sh.y, this.view.eye[2]],
-        [this.view.target[0] + sh.x * 0.5, this.view.target[1] + sh.y * 0.5, this.view.target[2]],
+        [
+          this.view.target[0] + sh.x * 0.5,
+          this.view.target[1] + sh.y * 0.5,
+          this.view.target[2],
+        ],
         this.view.fov + sh.fov,
         this.view.shift,
       );
@@ -2127,7 +2311,13 @@ export class Scene {
         seenTags,
       );
       this.effects(now, ball, pass, split);
-      this.placeCallout(pass, split, (vx / w) * canvas.clientWidth, (vw / w) * canvas.clientWidth, now);
+      this.placeCallout(
+        pass,
+        split,
+        (vx / w) * canvas.clientWidth,
+        (vw / w) * canvas.clientWidth,
+        now,
+      );
       drawViews.push({
         rect: [vx, 0, vw, h],
         vp,

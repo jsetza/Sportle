@@ -15,7 +15,19 @@ export type MapId =
   | "berkeley"
   | "haas"
   | "ucla"
-  | "usc";
+  | "usc"
+  | "stanford"
+  | "harvard"
+  | "mit"
+  | "michigan"
+  | "texas"
+  | "notredame"
+  | "iceland"
+  | "alps"
+  | "hawaii"
+  | "sahara"
+  | "paris"
+  | "grandcanyon";
 export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
   [
     {
@@ -77,6 +89,78 @@ export const MAPS: { id: MapId; name: string; short: string; note: string }[] =
       name: "USC campus",
       short: "USC",
       note: "Cardinal and gold, brick arches",
+    },
+    {
+      id: "stanford",
+      name: "Stanford campus",
+      short: "Stanford",
+      note: "Sandstone arcades, palms",
+    },
+    {
+      id: "harvard",
+      name: "Harvard Yard",
+      short: "Harvard",
+      note: "Brick halls, autumn elms",
+    },
+    {
+      id: "mit",
+      name: "MIT campus",
+      short: "MIT",
+      note: "Great dome by the river",
+    },
+    {
+      id: "michigan",
+      name: "Michigan campus",
+      short: "Michigan",
+      note: "Maize and blue, big stadium",
+    },
+    {
+      id: "texas",
+      name: "Texas campus",
+      short: "Texas",
+      note: "Burnt orange, tall tower",
+    },
+    {
+      id: "notredame",
+      name: "Notre Dame campus",
+      short: "Notre Dame",
+      note: "Golden dome, lakeside",
+    },
+    {
+      id: "iceland",
+      name: "Iceland waterfall",
+      short: "Iceland",
+      note: "Black sand under the falls",
+    },
+    {
+      id: "alps",
+      name: "Swiss Alps",
+      short: "Alps",
+      note: "Meadow, chalets, snowy peaks",
+    },
+    {
+      id: "hawaii",
+      name: "Hawaii beach",
+      short: "Hawaii",
+      note: "Palms, surf and a volcano",
+    },
+    {
+      id: "sahara",
+      name: "Sahara desert",
+      short: "Sahara",
+      note: "Dunes, oasis, mud-brick fort",
+    },
+    {
+      id: "paris",
+      name: "Paris",
+      short: "Paris",
+      note: "Iron tower down the park",
+    },
+    {
+      id: "grandcanyon",
+      name: "Grand Canyon",
+      short: "Grand Canyon",
+      note: "On the rim, layered red rock",
     },
   ];
 /** Character outfits (owner request). Team colour still shows which side you're on. */

@@ -150,6 +150,114 @@ export const LOOKS: Record<MapId, Look> = {
     ground: [0.38, 0.56, 0.27],
     apron: [0.55, 0.05, 0.07],
   },
+  stanford: {
+    sky: [0.6, 0.79, 0.97],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1.02,
+    spots: 0.15,
+    ground: [0.36, 0.58, 0.27],
+    apron: [0.55, 0.08, 0.1],
+  },
+  harvard: {
+    sky: [0.62, 0.76, 0.92],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1,
+    spots: 0.15,
+    ground: [0.34, 0.54, 0.26],
+    apron: [0.6, 0.06, 0.12],
+  },
+  mit: {
+    sky: [0.6, 0.76, 0.94],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1,
+    spots: 0.15,
+    ground: [0.36, 0.58, 0.28],
+    apron: [0.5, 0.52, 0.56],
+  },
+  michigan: {
+    sky: [0.6, 0.76, 0.95],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1,
+    spots: 0.15,
+    ground: [0.34, 0.56, 0.26],
+    apron: [0.02, 0.16, 0.32],
+  },
+  texas: {
+    sky: [0.56, 0.76, 0.98],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1.04,
+    spots: 0.15,
+    ground: [0.4, 0.56, 0.26],
+    apron: [0.75, 0.34, 0.05],
+  },
+  notredame: {
+    sky: [0.6, 0.78, 0.96],
+    fogNear: 60,
+    fogFar: 200,
+    ambient: 1.02,
+    spots: 0.15,
+    ground: [0.34, 0.56, 0.26],
+    apron: [0.05, 0.12, 0.3],
+  },
+  iceland: {
+    sky: [0.7, 0.75, 0.8],
+    fogNear: 35,
+    fogFar: 190,
+    ambient: 1.05,
+    spots: 0.15,
+    ground: [0.16, 0.16, 0.17],
+    apron: [0.18, 0.26, 0.32],
+  },
+  alps: {
+    sky: [0.5, 0.72, 0.98],
+    fogNear: 70,
+    fogFar: 210,
+    ambient: 1.02,
+    spots: 0.15,
+    ground: [0.38, 0.6, 0.26],
+    apron: [0.6, 0.1, 0.12],
+  },
+  hawaii: {
+    sky: [0.5, 0.78, 0.98],
+    fogNear: 60,
+    fogFar: 210,
+    ambient: 1.02,
+    spots: 0.15,
+    ground: [0.92, 0.84, 0.64],
+    apron: [0.1, 0.5, 0.56],
+  },
+  sahara: {
+    sky: [0.95, 0.84, 0.66],
+    fogNear: 50,
+    fogFar: 200,
+    ambient: 1.02,
+    spots: 0.15,
+    ground: [0.88, 0.66, 0.4],
+    apron: [0.66, 0.38, 0.2],
+  },
+  paris: {
+    sky: [0.66, 0.78, 0.92],
+    fogNear: 55,
+    fogFar: 205,
+    ambient: 1,
+    spots: 0.15,
+    ground: [0.8, 0.75, 0.64],
+    apron: [0.16, 0.2, 0.4],
+  },
+  grandcanyon: {
+    sky: [0.66, 0.8, 0.95],
+    fogNear: 140,
+    fogFar: 218,
+    ambient: 1.02,
+    spots: 0.15,
+    ground: null,
+    apron: [0.5, 0.3, 0.2],
+  },
 };
 
 let seed = 1;
@@ -1601,6 +1709,1331 @@ function usc(b: Builder) {
   });
 }
 
+// ——— More maps (owner request): six more campus impressions (school colours and campus-style
+// buildings only; no logos, mascots, seals or lettering) and six places: an Icelandic
+// waterfall, the Swiss Alps, a Hawaiian beach, the Sahara, Paris and the Grand Canyon.
+// The play area (|x| < 10, |z| < 18 up to head height) stays clear of scenery.
+
+/** Offset (ox, oz) turned by ry, matching the renderer's box rotation. */
+const turn = (ry: number, ox: number, oz: number) => [
+  ox * Math.cos(ry) + oz * Math.sin(ry),
+  -ox * Math.sin(ry) + oz * Math.cos(ry),
+];
+/** Wide flat ground, top at -5 cm (same height as the campus lawns). */
+function plain(b: Builder, c: V, size = 320) {
+  b.box(0, -0.1, 0, size, 0.1, size, c);
+}
+/** Low-poly peak (six-sided double cone, half below ground); `snow` = share of it that's white. */
+function peak(
+  b: Builder,
+  x: number,
+  z: number,
+  r: number,
+  h: number,
+  rock: V,
+  snow = 0,
+  y = 0,
+  cap: V = [0.95, 0.96, 0.98],
+) {
+  b.blob(x, y, z, r, h, r, rock, 0, 2, 6);
+  if (snow > 0) {
+    const k = snow / (1 - (1 - snow) / 1.05);
+    b.blob(x, y, z, r * k, h * 1.05, r * k, cap, 0, 2, 6);
+  }
+}
+/** Conifer: trunk and three stacked low-poly tiers. */
+function pine(b: Builder, x: number, z: number, s: number, c: V, y = 0) {
+  b.box(x, y + 0.7 * s, z, 0.26 * s, 1.4 * s, 0.26 * s, [0.3, 0.2, 0.13]);
+  for (let i = 0; i < 3; i++)
+    b.blob(
+      x,
+      y + (2 + i * 1.3) * s,
+      z,
+      (1.6 - i * 0.42) * s,
+      1.5 * s,
+      (1.6 - i * 0.42) * s,
+      shade(c, 1 + i * 0.07),
+      0,
+      2,
+      7,
+    );
+}
+/** Pitched roof: two slabs meeting at a ridge along the building's width. */
+function gable(
+  b: Builder,
+  x: number,
+  top: number,
+  z: number,
+  w: number,
+  d: number,
+  pitch: number,
+  c: V,
+  ry = 0,
+) {
+  const half = d / 2 + 0.5,
+    len = half / Math.cos(pitch),
+    rise = Math.tan(pitch) * half;
+  for (const s of [-1, 1]) {
+    const [ox, oz] = turn(ry, 0, (s * half) / 2);
+    b.box(
+      x + ox,
+      top + rise / 2 + 0.12,
+      z + oz,
+      w + 0.8,
+      0.24,
+      len,
+      c,
+      s * pitch,
+      0,
+      ry,
+    );
+  }
+  return top + rise;
+}
+/** Rows of windows on both long faces of a w×h×d block (frame + darker pane). */
+function windows(
+  b: Builder,
+  x: number,
+  z: number,
+  w: number,
+  h: number,
+  d: number,
+  frame: V,
+  pane: V,
+  ry = 0,
+  first = 1.6,
+  every = 2.8,
+) {
+  const n = Math.max(2, Math.floor(w / 2.4));
+  for (const fs of [-1, 1])
+    for (let y = first; y < h - 1; y += every)
+      for (let i = 0; i < n; i++) {
+        const u = ((i + 0.5) / n - 0.5) * w;
+        const [fx, fz] = turn(ry, u, fs * (d / 2 + 0.05));
+        const [px, pz] = turn(ry, u, fs * (d / 2 + 0.09));
+        b.box(x + fx, y, z + fz, 1.0, 1.5, 0.1, frame, 0, 0, ry);
+        b.box(x + px, y + 0.02, z + pz, 0.74, 1.18, 0.1, pane, 0, 0, ry);
+      }
+}
+/** Georgian brick hall: white-framed windows, slate roof, small white cupola. */
+function georgian(
+  b: Builder,
+  x: number,
+  z: number,
+  w: number,
+  h: number,
+  d: number,
+  wall: V,
+  ry = 0,
+  cupola = true,
+) {
+  const white = [0.95, 0.94, 0.9];
+  b.box(x, h / 2, z, w, h, d, wall, 0, 0, ry);
+  windows(b, x, z, w, h, d, white, [0.14, 0.16, 0.2], ry);
+  b.box(x, h + 0.15, z, w + 0.5, 0.3, d + 0.5, white, 0, 0, ry);
+  const ridge = gable(b, x, h + 0.3, z, w, d, 0.55, [0.32, 0.34, 0.38], ry);
+  if (cupola) {
+    b.box(x, ridge + 0.6, z, 2.2, 2.4, 2.2, white);
+    b.box(x, ridge + 1.95, z, 2.6, 0.3, 2.6, white);
+    b.blob(x, ridge + 2.1, z, 1.1, 1.2, 1.1, [0.28, 0.42, 0.38], 0, 4, 8);
+  }
+}
+/** White church tower with stacked stages and a needle spire. */
+function steeple(
+  b: Builder,
+  x: number,
+  z: number,
+  s: number,
+  c: V = [0.95, 0.94, 0.9],
+) {
+  b.box(x, 6 * s, z, 4 * s, 12 * s, 4 * s, c);
+  b.box(x, 13 * s, z, 3.2 * s, 2 * s, 3.2 * s, shade(c, 0.97));
+  b.box(x, 15.5 * s, z, 2.4 * s, 3 * s, 2.4 * s, c);
+  b.box(x, 15.5 * s, z, 1.2 * s, 1.6 * s, 2.5 * s, [0.2, 0.2, 0.24]);
+  b.blob(x, 17 * s, z, 1.1 * s, 9 * s, 1.1 * s, c, 0, 2, 8);
+}
+/** Live oak: low wide crown on a short trunk. */
+function oak(b: Builder, x: number, z: number, s: number, leaf: V) {
+  b.box(x, 1 * s, z, 0.4 * s, 2 * s, 0.4 * s, [0.3, 0.22, 0.15]);
+  b.blob(x, 2.8 * s, z, 3.4 * s, 1.3 * s, 3 * s, leaf, 0, 4, 9);
+  b.blob(
+    x + 1.2 * s,
+    3.3 * s,
+    z - 0.6 * s,
+    2 * s,
+    1 * s,
+    2 * s,
+    shade(leaf, 1.1),
+    0,
+    4,
+    8,
+  );
+}
+/** Tower with a clock face on each side, a belfry and a stepped roof. */
+function clockTower(
+  b: Builder,
+  x: number,
+  z: number,
+  w: number,
+  h: number,
+  stone: V,
+  roof: V,
+  face: V = [0.95, 0.93, 0.85],
+) {
+  b.box(x, h / 2, z, w, h, w, stone);
+  for (let y = 8; y < h - 8; y += 9)
+    b.box(x, y, z, w + 0.3, 0.4, w + 0.3, shade(stone, 0.92));
+  for (const [dx, dz] of [
+    [0, 1],
+    [0, -1],
+    [1, 0],
+    [-1, 0],
+  ])
+    b.blob(
+      x + dx * (w / 2 + 0.1),
+      h - 5,
+      z + dz * (w / 2 + 0.1),
+      dz ? w * 0.3 : 0.12,
+      w * 0.3,
+      dx ? w * 0.3 : 0.12,
+      face,
+      0,
+      4,
+      12,
+    );
+  b.box(x, h + 0.5, z, w + 1, 1, w + 1, shade(stone, 0.95));
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    b.box(
+      x + sx * (w / 2 - 0.4),
+      h + 3,
+      z + sz * (w / 2 - 0.4),
+      0.8,
+      4,
+      0.8,
+      stone,
+    );
+  b.box(x, h + 2.6, z, w * 0.6, 3.2, w * 0.6, [0.2, 0.18, 0.18]);
+  b.box(x, h + 5.4, z, w + 0.6, 0.8, w + 0.6, shade(stone, 0.95));
+  for (let i = 0; i < 6; i++)
+    b.box(x, h + 6.4 + i * 1.3, z, w - i * (w / 7), 1.3, w - i * (w / 7), roof);
+}
+/** Classical dome on a drum (centre x, z; drum bottom at y). */
+function dome(
+  b: Builder,
+  x: number,
+  y: number,
+  z: number,
+  r: number,
+  stone: V,
+  cap: V,
+) {
+  // Drum and columns reach 1 m down into the roof below, so they never float on it.
+  b.box(x, y + r * 0.55 - 0.5, z, r * 2.1, r * 1.1 + 1, r * 2.1, stone);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    b.box(
+      x + Math.cos(a) * r * 1.12,
+      y + r * 0.55 - 0.48,
+      z + Math.sin(a) * r * 1.12,
+      0.6,
+      r * 1.1 + 0.85,
+      0.6,
+      shade(stone, 1.06),
+    );
+  }
+  b.box(x, y + r * 1.15, z, r * 2.3, 0.4, r * 2.3, shade(stone, 0.95));
+  b.blob(x, y + r * 1.35, z, r, r * 0.95, r, cap, 0, 8, 16);
+  b.box(x, y + r * 2.45, z, 0.9, 1.6, 0.9, stone);
+  b.blob(x, y + r * 3.3, z, 0.55, 0.55, 0.55, cap, 0, 4, 8);
+}
+/** Seating bowl of a big stadium (generic), centred at x, z. */
+function stadium(
+  b: Builder,
+  x: number,
+  z: number,
+  rx: number,
+  rz: number,
+  seat: V,
+  rim: V,
+) {
+  b.box(x, 0.02, z, rx * 1.2, 0.08, rz * 1.2, [0.3, 0.55, 0.25]);
+  const n = 36;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2,
+      ca = Math.cos(a),
+      sa = Math.sin(a),
+      ry = Math.atan2(ca, sa),
+      seg = (Math.PI * 2 * Math.max(rx, rz)) / n + 2;
+    for (let k = 0; k < 5; k++) {
+      const out = 0.62 + k * 0.1,
+        h = 2 + k * 3.2 + (i % 2) * 0.03;
+      b.box(
+        x + ca * rx * out,
+        h / 2,
+        z + sa * rz * out,
+        seg,
+        h,
+        4.6,
+        shade(seat, 1 + k * 0.05),
+        0,
+        0,
+        ry,
+      );
+    }
+    b.box(
+      x + ca * rx * 1.04,
+      16.2,
+      z + sa * rz * 1.04,
+      seg,
+      1.4,
+      1.2,
+      rim,
+      0,
+      0,
+      ry,
+    );
+  }
+}
+/** Two-storey Alpine chalet: stone base, timber upper floor, wide roof, flower boxes. */
+function chalet(
+  b: Builder,
+  x: number,
+  z: number,
+  w: number,
+  d: number,
+  ry: number,
+) {
+  const wood = [0.5, 0.31, 0.17];
+  b.box(x, 1, z, w, 2, d, [0.92, 0.9, 0.86], 0, 0, ry);
+  b.box(x, 3.6, z, w + 0.1, 3.2, d + 0.1, wood, 0, 0, ry);
+  windows(
+    b,
+    x,
+    z,
+    w,
+    5.2,
+    d,
+    [0.36, 0.22, 0.12],
+    [0.16, 0.18, 0.22],
+    ry,
+    1.4,
+    2.6,
+  );
+  for (const fs of [-1, 1]) {
+    const [bx, bz] = turn(ry, 0, fs * (d / 2 + 0.6));
+    b.box(x + bx, 2.75, z + bz, w * 0.8, 0.3, 1.1, shade(wood, 0.8), 0, 0, ry);
+    const [fx, fz] = turn(ry, 0, fs * (d / 2 + 1.05));
+    b.box(
+      x + fx,
+      3.05,
+      z + fz,
+      w * 0.78,
+      0.35,
+      0.25,
+      [0.85, 0.15, 0.18],
+      0,
+      0,
+      ry,
+    );
+  }
+  gable(b, x, 5.2, z, w + 1.4, d + 1.6, 0.42, [0.34, 0.24, 0.18], ry);
+}
+/** Sandstone/mud-brick block with crenellations. */
+function kasbah(
+  b: Builder,
+  x: number,
+  z: number,
+  w: number,
+  h: number,
+  d: number,
+  c: V,
+) {
+  b.box(x, h / 2, z, w, h, d, c);
+  const n = Math.floor(w / 1.6);
+  for (let i = 0; i < n; i++)
+    for (const s of [-1, 1])
+      b.box(
+        x + ((i + 0.5) / n - 0.5) * w,
+        h + 0.4,
+        z + s * (d / 2 - 0.3),
+        0.8,
+        0.8,
+        0.6,
+        c,
+      );
+  for (let i = 1; i < 3; i++)
+    for (let k = 0; k < n; k += 2)
+      b.box(
+        x + ((k + 0.5) / n - 0.5) * w,
+        (h * i) / 3,
+        z + d / 2 + 0.05,
+        0.5,
+        0.9,
+        0.12,
+        [0.25, 0.16, 0.1],
+      );
+}
+function camel(b: Builder, x: number, z: number, ry: number) {
+  const c = [0.74, 0.56, 0.36];
+  const at = (
+    u: number,
+    y: number,
+    rx: number,
+    ryy: number,
+    rz: number,
+    col = c,
+  ) => {
+    const [ox, oz] = turn(ry, u, 0);
+    b.blob(x + ox, y, z + oz, rx, ryy, rz, col, 0, 5, 8);
+  };
+  at(0, 1.9, 1.1, 0.5, 0.45);
+  at(0, 2.35, 0.45, 0.45, 0.38);
+  at(1.2, 2.4, 0.25, 0.7, 0.2);
+  at(1.45, 3.0, 0.38, 0.2, 0.18);
+  for (const [u, s] of [
+    [-0.7, -1],
+    [-0.7, 1],
+    [0.7, -1],
+    [0.7, 1],
+  ]) {
+    const [ox, oz] = turn(ry, u, s * 0.25);
+    b.box(x + ox, 0.75, z + oz, 0.16, 1.5, 0.16, shade(c, 0.85));
+  }
+}
+function umbrella(b: Builder, x: number, z: number, c: V) {
+  b.box(x, 1.2, z, 0.08, 2.4, 0.08, [0.9, 0.9, 0.88]);
+  b.blob(x, 2.4, z, 1.6, 0.5, 1.6, c, 0, 2, 8);
+}
+/** Ocean: deep water far out, lighter shallows near the shore (shore along z = shore). */
+function ocean(b: Builder, shore: number, deep: V, shallow: V) {
+  b.box(0, -0.35, shore - 130.25, 400, 0.2, 259.5, deep);
+  b.box(0, -0.22, shore - 9, 400, 0.1, 18, shallow);
+  b.box(0, -0.15, shore - 1.2, 400, 0.06, 1.6, [0.95, 0.97, 0.98]);
+}
+
+function stanford(b: Builder) {
+  seed = 131;
+  const sand = [0.86, 0.74, 0.56],
+    trim = [0.92, 0.84, 0.68],
+    cardinal = [0.55, 0.08, 0.1];
+  quad(b, [0.36, 0.58, 0.27], [0.88, 0.8, 0.64]);
+  // sandstone arcades with red tile roofs around the quad
+  brick(b, -36, -66, 32, 9, 12, sand, trim);
+  brick(b, 36, -66, 32, 9, 12, sand, trim);
+  brick(b, -52, -8, 40, 9, 12, shade(sand, 1.03), trim, -Math.PI / 2);
+  brick(b, 52, -8, 40, 9, 12, shade(sand, 1.03), trim, Math.PI / 2);
+  // memorial church at the head of the quad: tall facade with a bright mosaic panel
+  b.box(0, 9, -82, 26, 18, 16, sand);
+  gable(b, 0, 18, -82, 16, 26, 0.5, [0.7, 0.3, 0.2], Math.PI / 2);
+  b.glow?.(0.25);
+  const tiles = [
+    [0.95, 0.75, 0.25],
+    [0.25, 0.45, 0.75],
+    [0.8, 0.3, 0.2],
+    [0.98, 0.85, 0.4],
+  ];
+  for (let i = 0; i < 6; i++)
+    for (let j = 0; j < 3; j++)
+      b.box(-6 + i * 2.4, 10 + j * 2.4, -73.9, 2.3, 2.3, 0.12, pick(tiles));
+  b.glow?.(0);
+  for (const sd of [-1, 1]) b.box(sd * 9, 4, -73.6, 2.6, 8, 0.7, trim);
+  // the slim observation tower with a red dome, off to one side
+  const tx = 48,
+    tz = -110;
+  b.box(tx, 22, tz, 8, 44, 8, trim);
+  for (let y = 6; y < 40; y += 5) {
+    b.box(tx, y, tz, 8.2, 2.6, 2.2, [0.2, 0.22, 0.26]);
+    b.box(tx, y, tz, 2.2, 2.5, 8.2, [0.2, 0.22, 0.26]);
+  }
+  b.box(tx, 44.5, tz, 10, 1, 10, sand);
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    b.box(tx + sx * 3.6, 47, tz + sz * 3.6, 0.8, 4, 0.8, trim);
+  b.box(tx, 49.4, tz, 9, 0.8, 9, sand);
+  b.blob(tx, 49.8, tz, 3.8, 4.2, 3.8, [0.72, 0.3, 0.2], 0, 8, 14);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1])
+      banner(b, sd * 13.8, z, cardinal, [0.95, 0.95, 0.95]);
+  // the palm-lined drive behind, oaks around, golden foothills
+  for (let z = 22; z <= 100; z += 7)
+    for (const sd of [-1, 1]) palm(b, sd * 8, z, 1.1 + rnd() * 0.2);
+  for (let z = -46; z <= 6; z += 8)
+    for (const sd of [-1, 1]) palm(b, sd * 22, z, 1 + rnd() * 0.2);
+  for (let i = 0; i < 80; i++) {
+    const x = (rnd() * 2 - 1) * 95,
+      z = (rnd() * 2 - 1) * 95;
+    if (Math.abs(x) < 70 && z < 20 && z > -95) continue;
+    if (Math.abs(x) < 14) continue;
+    oak(
+      b,
+      x,
+      z,
+      0.9 + rnd() * 0.5,
+      pick([
+        [0.26, 0.42, 0.2],
+        [0.32, 0.46, 0.24],
+      ]),
+    );
+  }
+  for (let i = 0; i < 9; i++)
+    b.blob(
+      -130 + i * 32,
+      0,
+      -150 - rnd() * 20,
+      42 + rnd() * 18,
+      22 + rnd() * 14,
+      30,
+      i % 2 ? [0.72, 0.62, 0.34] : [0.46, 0.54, 0.28],
+      0,
+      5,
+      12,
+    );
+}
+
+function harvard(b: Builder) {
+  seed = 151;
+  const red = [0.58, 0.24, 0.18],
+    crimson = [0.6, 0.06, 0.12];
+  quad(b, [0.34, 0.54, 0.26], [0.62, 0.32, 0.24]);
+  // Georgian brick halls around the yard
+  georgian(b, -34, -48, 30, 12, 12, red);
+  georgian(b, 34, -48, 30, 12, 12, shade(red, 0.94));
+  georgian(b, -48, 4, 34, 12, 12, shade(red, 1.04), -Math.PI / 2);
+  georgian(b, 48, 4, 34, 12, 12, red, Math.PI / 2);
+  georgian(b, -30, 52, 28, 10, 12, shade(red, 0.97), Math.PI, false);
+  georgian(b, 30, 52, 28, 10, 12, red, Math.PI, false);
+  // white church steeple at the head of the yard, a library with columns beside it
+  b.box(0, 6, -86, 18, 12, 26, red);
+  gable(b, 0, 12, -86, 26, 18, 0.6, [0.32, 0.34, 0.38], Math.PI / 2);
+  steeple(b, 0, -71, 1.4);
+  hall(b, 52, -84, 34, 14, 16, [0.88, 0.85, 0.78], [0.5, 0.48, 0.45], 0.25);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1])
+      banner(b, sd * 13.8, z, crimson, [0.95, 0.95, 0.95]);
+  // elms in their autumn colours
+  const fall = [
+    [0.85, 0.45, 0.12],
+    [0.75, 0.2, 0.1],
+    [0.9, 0.7, 0.2],
+    [0.36, 0.5, 0.24],
+    [0.7, 0.32, 0.12],
+  ];
+  for (let i = 0; i < 110; i++) {
+    const x = (rnd() * 2 - 1) * 80,
+      z = (rnd() * 2 - 1) * 80;
+    if (Math.abs(x) < 16 && Math.abs(z) < 20) continue;
+    if (Math.abs(z + 48) < 10 && Math.abs(Math.abs(x) - 34) < 18) continue;
+    if (Math.abs(Math.abs(x) - 48) < 10 && Math.abs(z - 4) < 20) continue;
+    if (Math.abs(z - 52) < 10 && Math.abs(Math.abs(x) - 30) < 17) continue;
+    if (z < -60 && Math.abs(x) < 72) continue;
+    tree(b, x, z, 1.1 + rnd() * 0.7, pick(fall));
+  }
+  city(b, {
+    ground: 0,
+    clearX: 95,
+    clearZ: 100,
+    reach: 190,
+    minH: 10,
+    maxH: 40,
+    colors: [
+      [0.62, 0.3, 0.22],
+      [0.75, 0.72, 0.68],
+      [0.55, 0.52, 0.5],
+    ],
+    lit: [[0.95, 0.9, 0.75]],
+    count: 70,
+  });
+}
+
+function mit(b: Builder) {
+  seed = 173;
+  const lime = [0.86, 0.84, 0.78],
+    roof = [0.55, 0.55, 0.55];
+  quad(b, [0.36, 0.58, 0.28], [0.84, 0.82, 0.76]);
+  // the great domed building at the head of the court, wings either side
+  hall(b, 0, -62, 56, 16, 18, lime, roof);
+  dome(b, 0, 18, -64, 8, lime, [0.62, 0.64, 0.62]);
+  hall(b, -46, -28, 40, 16, 16, shade(lime, 0.97), roof, -Math.PI / 2);
+  hall(b, 46, -28, 40, 16, 16, shade(lime, 0.97), roof, Math.PI / 2);
+  // newer glass-and-concrete labs further out
+  for (const [x, z, w, h, d] of [
+    [-80, -70, 20, 26, 16],
+    [82, -76, 18, 34, 18],
+    [-90, 10, 16, 20, 30],
+    [90, 20, 18, 22, 24],
+  ])
+    tower(b, x, 0, z, w, h, d, [0.7, 0.72, 0.74], [[0.55, 0.7, 0.85]], 3.2, 1);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1])
+      banner(b, sd * 13.8, z, [0.64, 0.12, 0.16], [0.6, 0.62, 0.65]);
+  for (let i = 0; i < 60; i++) {
+    const x = (rnd() * 2 - 1) * 70,
+      z = 20 + rnd() * 25;
+    if (Math.abs(x) < 16 && z < 22) continue;
+    tree(
+      b,
+      x,
+      z,
+      1 + rnd() * 0.6,
+      pick([
+        [0.25, 0.46, 0.22],
+        [0.32, 0.5, 0.26],
+      ]),
+    );
+  }
+  // the river behind, with the city skyline across it
+  b.box(0, -0.04, 75, 400, 0.04, 60, [0.3, 0.42, 0.55]);
+  b.box(0, 0.4, 45.5, 400, 1.2, 2, [0.6, 0.58, 0.55]);
+  for (let i = 0; i < 6; i++)
+    b.box(
+      -60 + i * 24,
+      0.05,
+      75 + (i % 2) * 8,
+      3,
+      0.25,
+      0.8,
+      [0.95, 0.95, 0.95],
+    );
+  city(b, {
+    ground: 0,
+    clearX: 200,
+    clearZ: 108,
+    reach: 200,
+    minH: 20,
+    maxH: 95,
+    colors: [
+      [0.62, 0.66, 0.72],
+      [0.78, 0.76, 0.72],
+      [0.5, 0.56, 0.64],
+    ],
+    lit: [[0.9, 0.92, 0.95]],
+    count: 120,
+    skip: (_x, z) => z < 108,
+  });
+  for (let i = 0; i < 8; i++)
+    b.blob(
+      -130 + i * 36,
+      0,
+      -150 - rnd() * 20,
+      40,
+      16 + rnd() * 10,
+      26,
+      [0.4, 0.5, 0.32],
+      0,
+      5,
+      12,
+    );
+}
+
+function michigan(b: Builder) {
+  seed = 191;
+  const blue = [0.02, 0.15, 0.3],
+    maize = [1, 0.8, 0.05],
+    red = [0.6, 0.28, 0.2],
+    lime = [0.88, 0.85, 0.76];
+  quad(b, [0.34, 0.56, 0.26], [0.84, 0.8, 0.7]);
+  brick(b, -36, -64, 34, 12, 14, red, lime);
+  hall(b, 36, -66, 34, 15, 16, lime, [0.45, 0.46, 0.48]);
+  brick(b, -54, -6, 42, 12, 12, shade(red, 1.05), lime, -Math.PI / 2);
+  georgian(b, 54, -6, 40, 12, 12, red, Math.PI / 2, false);
+  // tall stone bell tower
+  clockTower(b, -4, -98, 9, 44, lime, [0.32, 0.46, 0.42]);
+  // the big bowl stadium in the distance
+  stadium(b, 110, 60, 34, 46, blue, maize);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1]) banner(b, sd * 13.8, z, blue, maize);
+  const fall = [
+    [0.85, 0.5, 0.12],
+    [0.78, 0.25, 0.1],
+    [0.92, 0.75, 0.2],
+    [0.35, 0.5, 0.24],
+  ];
+  for (let i = 0; i < 110; i++) {
+    const x = (rnd() * 2 - 1) * 80,
+      z = (rnd() * 2 - 1) * 80;
+    if (Math.abs(x) < 16 && Math.abs(z) < 20) continue;
+    if (z < -50 && Math.abs(x) < 60) continue;
+    if (Math.abs(Math.abs(x) - 54) < 10 && Math.abs(z + 6) < 24) continue;
+    tree(b, x, z, 1.1 + rnd() * 0.6, pick(fall));
+  }
+}
+
+function texas(b: Builder) {
+  seed = 211;
+  const lime = [0.9, 0.85, 0.72],
+    orange = [0.75, 0.34, 0.02],
+    tile = [0.7, 0.3, 0.18];
+  quad(b, [0.4, 0.56, 0.26], [0.88, 0.82, 0.7]);
+  // main building with the tall tower rising out of it
+  brick(b, 0, -78, 56, 14, 18, lime, lime);
+  const th = 66;
+  b.box(0, th / 2, -78, 11, th, 11, lime);
+  for (let y = 18; y < th - 10; y += 4) {
+    b.box(0, y, -78, 11.2, 2.2, 3, [0.24, 0.24, 0.28]);
+    b.box(0, y, -78, 3, 2.1, 11.2, [0.24, 0.24, 0.28]);
+  }
+  for (const [dx, dz] of [
+    [0, 1],
+    [0, -1],
+    [1, 0],
+    [-1, 0],
+  ])
+    b.blob(
+      dx * 5.65,
+      th - 6,
+      -78 + dz * 5.65,
+      dz ? 2.4 : 0.12,
+      2.4,
+      dx ? 2.4 : 0.12,
+      [0.95, 0.92, 0.82],
+      0,
+      4,
+      12,
+    );
+  b.box(0, th + 0.6, -78, 13, 1.2, 13, lime);
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [1, 0],
+  ])
+    b.box(sx * 5.4, th + 3.2, -78 + sz * 5.4, 0.9, 4, 0.9, lime);
+  b.box(0, th + 3, -78, 8, 4, 8, [0.3, 0.26, 0.22]);
+  b.box(0, th + 5.6, -78, 12, 1.2, 12, lime);
+  for (let i = 0; i < 5; i++)
+    b.box(0, th + 6.8 + i * 1.2, -78, 10 - i * 2, 1.2, 10 - i * 2, tile);
+  b.blob(0, th + 13, -78, 0.9, 1.4, 0.9, [0.95, 0.8, 0.3], 0, 5, 8);
+  // limestone halls with red tile roofs
+  brick(b, -50, -10, 40, 12, 14, lime, lime, -Math.PI / 2);
+  brick(b, 50, -10, 40, 12, 14, lime, lime, Math.PI / 2);
+  brick(b, 0, 64, 50, 11, 12, shade(lime, 0.97), lime, Math.PI);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1])
+      banner(b, sd * 13.8, z, orange, [0.96, 0.96, 0.94]);
+  for (let i = 0; i < 70; i++) {
+    const x = (rnd() * 2 - 1) * 90,
+      z = (rnd() * 2 - 1) * 90;
+    if (Math.abs(x) < 18 && Math.abs(z) < 22) continue;
+    if (z < -60 && Math.abs(x) < 40) continue;
+    if (Math.abs(Math.abs(x) - 50) < 11 && Math.abs(z + 10) < 24) continue;
+    if (Math.abs(z - 64) < 10 && Math.abs(x) < 30) continue;
+    oak(
+      b,
+      x,
+      z,
+      1 + rnd() * 0.5,
+      pick([
+        [0.28, 0.42, 0.2],
+        [0.34, 0.46, 0.22],
+      ]),
+    );
+  }
+  city(b, {
+    ground: 0,
+    clearX: 100,
+    clearZ: 110,
+    reach: 200,
+    minH: 25,
+    maxH: 90,
+    colors: [
+      [0.7, 0.72, 0.76],
+      [0.55, 0.62, 0.7],
+      [0.8, 0.76, 0.7],
+    ],
+    lit: [[0.95, 0.9, 0.75]],
+    count: 60,
+    skip: (_x, z) => z > -110,
+  });
+}
+
+function notredame(b: Builder) {
+  seed = 229;
+  const cream = [0.93, 0.86, 0.68],
+    gold = [1, 0.78, 0.25],
+    navy = [0.05, 0.12, 0.3];
+  quad(b, [0.34, 0.56, 0.26], [0.86, 0.82, 0.72]);
+  // the main building with its golden dome
+  b.box(0, 10, -80, 54, 20, 20, cream);
+  windows(b, 0, -80, 54, 20, 20, [0.9, 0.88, 0.82], [0.2, 0.22, 0.26]);
+  gable(b, 0, 20, -80, 54, 20, 0.42, [0.4, 0.42, 0.44]);
+  b.box(0, 12, -69, 14, 24, 4, cream);
+  b.glow?.(0.18);
+  dome(b, 0, 24, -80, 7, cream, gold);
+  b.glow?.(0);
+  // the basilica beside it: long nave, front tower, tall needle spire
+  b.box(-42, 8, -76, 14, 16, 34, cream);
+  gable(b, -42, 16, -76, 34, 14, 0.75, [0.36, 0.38, 0.4], Math.PI / 2);
+  b.box(-42, 14, -57, 8, 28, 8, cream);
+  b.box(-42, 28.6, -57, 8.6, 1.2, 8.6, shade(cream, 0.95));
+  b.blob(-42, 29.2, -57, 3.4, 26, 3.4, [0.36, 0.38, 0.4], 0, 2, 8);
+  b.blob(-42, 56.5, -57, 0.3, 0.3, 0.3, gold, 0, 3, 6);
+  brick(b, 46, -62, 30, 12, 14, cream, shade(cream, 1.05));
+  brick(b, -54, -2, 40, 12, 12, cream, shade(cream, 1.05), -Math.PI / 2);
+  for (let z = -10; z <= 10; z += 5)
+    for (const sd of [-1, 1]) banner(b, sd * 13.8, z, navy, gold);
+  // the lake off to one side, ringed with trees
+  b.box(80, 0.02, 0, 60, 0.06, 90, [0.3, 0.45, 0.55]);
+  for (let i = 0; i < 120; i++) {
+    const x = (rnd() * 2 - 1) * 90,
+      z = (rnd() * 2 - 1) * 90;
+    if (Math.abs(x) < 16 && Math.abs(z) < 20) continue;
+    if (x > 48 && Math.abs(z) < 47) continue;
+    if (z < -50 && x > -62 && x < 62) continue;
+    if (Math.abs(x + 54) < 10 && Math.abs(z + 2) < 24) continue;
+    tree(
+      b,
+      x,
+      z,
+      1.1 + rnd() * 0.7,
+      pick([
+        [0.24, 0.44, 0.2],
+        [0.32, 0.5, 0.26],
+        [0.4, 0.5, 0.24],
+      ]),
+    );
+  }
+}
+
+function iceland(b: Builder) {
+  seed = 241;
+  const basalt = [0.2, 0.21, 0.23],
+    moss = [0.33, 0.48, 0.24],
+    sand = [0.16, 0.16, 0.17];
+  plain(b, sand);
+  // the cliff with the falls in a recess at its centre
+  const face = -70,
+    top = 46;
+  for (const sd of [-1, 1])
+    for (let i = 0; i < 12; i++) {
+      // Cliff in uneven slabs: each juts out a little more or less, at its own height.
+      const w = 10 + (i % 3) * 0.7,
+        x = sd * (6 + i * 10 + w / 2 - 0.4),
+        h = top + ((i * 7) % 5) - 2 + (i ? 0 : 2),
+        jut = ((i * 5) % 4) * 0.9 + (i === 0 ? 0 : 0.4);
+      b.box(
+        x,
+        h / 2,
+        face - 25 + jut,
+        w,
+        h,
+        50,
+        shade(basalt, 0.92 + ((i * 3) % 4) * 0.05),
+      );
+      b.blob(
+        x,
+        h,
+        face - 2 + jut,
+        w * 0.62,
+        2.2,
+        3.5,
+        shade(moss, 0.9 + (i % 3) * 0.1),
+        0,
+        3,
+        8,
+      );
+      b.box(x, h + 0.4, face - 26.5 + jut, w + 0.2, 1, 45, moss);
+      if (i % 2)
+        b.blob(
+          x + sd * 2,
+          h * 0.45,
+          face + jut,
+          w * 0.4,
+          1.4,
+          1.6,
+          shade(moss, 0.85),
+          0,
+          3,
+          7,
+        );
+    }
+  b.box(0, 22, face - 29, 12.2, 44, 50, shade(basalt, 0.9));
+  b.box(0, 44.3, face - 29, 12, 0.4, 49.6, [0.55, 0.66, 0.72]);
+  b.box(0, 22, face - 3.8, 12, 44, 0.4, [0.82, 0.9, 0.95]);
+  // mossy slopes at the foot of the cliff, basalt columns, boulders
+  for (let i = 0; i < 26; i++) {
+    const sd = i % 2 ? 1 : -1,
+      x = sd * (22 + rnd() * 95);
+    b.blob(
+      x,
+      0,
+      face + 2 + rnd() * 6,
+      5 + rnd() * 7,
+      6 + rnd() * 10,
+      5,
+      pick([moss, shade(moss, 0.85), shade(moss, 1.1)]),
+      0,
+      4,
+      8,
+    );
+  }
+  for (let i = 0; i < 18; i++) {
+    const x = (i % 2 ? 1 : -1) * (14 + i * 1.1);
+    b.box(
+      x,
+      (3 + (i % 4)) / 2,
+      face + 4 + (i % 3),
+      1.3,
+      3 + (i % 4),
+      1.3,
+      shade(basalt, 1.1 + (i % 3) * 0.06),
+    );
+  }
+  // plunge pool and the river running off to the side
+  b.box(0, -0.02, face + 5.1, 24, 0.06, 17.8, [0.42, 0.56, 0.62]);
+  b.box(60, -0.04, face + 10, 100, 0.06, 6, [0.42, 0.56, 0.62]);
+  for (let i = 0; i < 14; i++)
+    b.blob(
+      (rnd() * 2 - 1) * 14,
+      0.1,
+      face + 1 + rnd() * 13,
+      0.6 + rnd(),
+      0.5 + rnd() * 0.5,
+      0.6 + rnd(),
+      shade(basalt, 1.2),
+      0,
+      3,
+      6,
+    );
+  // moss tufts on the black sand, a turf-roofed hut and a little red-roofed church
+  for (let i = 0; i < 70; i++) {
+    const x = (rnd() * 2 - 1) * 110,
+      z = -50 + rnd() * 160;
+    if (Math.abs(x) < 14 && Math.abs(z) < 22) continue;
+    const r = 1.2 + rnd() * 2.2;
+    b.blob(
+      x,
+      0,
+      z,
+      r,
+      r * (0.45 + rnd() * 0.3),
+      r * (0.8 + rnd() * 0.4),
+      pick([moss, shade(moss, 0.8), shade(moss, 1.12)]),
+      0,
+      4,
+      8,
+    );
+  }
+  b.box(42, 1.4, -28, 8, 2.8, 6, [0.55, 0.5, 0.42]);
+  gable(b, 42, 2.8, -28, 8, 6, 0.55, moss);
+  b.box(-44, 2.5, -22, 9, 5, 6, [0.95, 0.95, 0.93]);
+  gable(b, -44, 5, -22, 9, 6, 0.6, [0.72, 0.14, 0.12]);
+  b.box(-39, 4, -22, 2.2, 8, 2.2, [0.95, 0.95, 0.93]);
+  b.blob(-39, 8, -22, 1.2, 2.5, 1.2, [0.72, 0.14, 0.12], 0, 2, 4);
+  // glacier peaks behind the player
+  for (let i = 0; i < 7; i++)
+    peak(
+      b,
+      -150 + i * 50,
+      140 + rnd() * 40,
+      30 + rnd() * 15,
+      35 + rnd() * 25,
+      [0.3, 0.32, 0.36],
+      0.55,
+    );
+  for (const sd of [-1, 1])
+    peak(b, sd * 150, 20, 35, 40, [0.28, 0.3, 0.32], 0.4);
+}
+
+function alps(b: Builder) {
+  seed = 263;
+  const meadow = [0.38, 0.6, 0.26],
+    rock = [0.46, 0.46, 0.5];
+  plain(b, meadow);
+  // a ring of snowy peaks
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2 + rnd() * 0.2,
+      d = 140 + rnd() * 30;
+    peak(
+      b,
+      Math.cos(a) * d,
+      Math.sin(a) * d,
+      32 + rnd() * 20,
+      55 + rnd() * 40,
+      rock,
+      0.45 + rnd() * 0.15,
+    );
+  }
+  peak(b, 30, -160, 40, 100, shade(rock, 0.9), 0.5);
+  for (let i = 0; i < 10; i++)
+    b.blob(
+      -150 + i * 34,
+      0,
+      -90 - rnd() * 20,
+      30 + rnd() * 10,
+      12 + rnd() * 10,
+      18,
+      shade(meadow, 0.85 + rnd() * 0.2),
+      0,
+      5,
+      12,
+    );
+  // village of chalets and a pine forest
+  const homes = [
+    [-30, -34, 0.1],
+    [-46, -18, 0.6],
+    [32, -36, -0.2],
+    [48, -14, -0.7],
+    [-34, 34, 2.9],
+    [36, 38, 3.4],
+    [-60, 10, 1.5],
+    [62, 14, -1.4],
+  ];
+  for (const [x, z, r] of homes) chalet(b, x, z, 10, 8, r);
+  for (let i = 0; i < 140; i++) {
+    const x = (rnd() * 2 - 1) * 120,
+      z = (rnd() * 2 - 1) * 120;
+    if (Math.abs(x) < 20 && Math.abs(z) < 26) continue;
+    if (homes.some(([hx, hz]) => Math.hypot(x - hx, z - hz) < 9)) continue;
+    pine(
+      b,
+      x,
+      z,
+      1.4 + rnd() * 1.2,
+      pick([
+        [0.14, 0.32, 0.18],
+        [0.18, 0.36, 0.2],
+        [0.12, 0.28, 0.16],
+      ]),
+    );
+  }
+  // timber fence around the meadow court
+  for (const sd of [-1, 1]) {
+    b.box(sd * 11, 0.9, 0, 0.12, 0.12, 38, [0.5, 0.36, 0.22]);
+    b.box(0, 0.9, sd * 19, 22, 0.12, 0.12, [0.48, 0.34, 0.2]);
+    for (let z = -15; z <= 15; z += 3)
+      b.box(sd * 11, 0.55, z, 0.18, 1.1, 0.18, [0.42, 0.3, 0.18]);
+  }
+  // wildflowers
+  for (let i = 0; i < 160; i++) {
+    const x = (rnd() * 2 - 1) * 40,
+      z = (rnd() * 2 - 1) * 40;
+    if (Math.abs(x) < 12 && Math.abs(z) < 20) continue;
+    b.blob(
+      x,
+      0.08,
+      z,
+      0.18,
+      0.12,
+      0.18,
+      pick([
+        [0.95, 0.9, 0.3],
+        [0.9, 0.4, 0.6],
+        [0.6, 0.5, 0.95],
+        [0.9, 0.9, 0.92],
+      ]),
+      0,
+      2,
+      5,
+    );
+  }
+}
+
+function hawaii(b: Builder) {
+  seed = 281;
+  const sandC = [0.92, 0.84, 0.64];
+  b.box(0, -0.1, 80, 400, 0.1, 250, sandC);
+  ocean(b, -45, [0.05, 0.36, 0.55], [0.2, 0.68, 0.7]);
+  // a green volcano and a couple of islands offshore
+  peak(b, -120, 40, 60, 62, [0.24, 0.42, 0.22], 0.2, 0, [0.4, 0.33, 0.26]);
+  for (let i = 0; i < 3; i++)
+    peak(b, -120 + i * 110, -190, 30, 18 + i * 6, [0.24, 0.4, 0.24], 0, -0.4);
+  // palms along the beach, umbrellas, surfboards, tiki torches
+  for (let i = 0; i < 40; i++) {
+    const x = (rnd() * 2 - 1) * 100,
+      z = -30 + rnd() * 130;
+    if (Math.abs(x) < 18 && z < 24) continue;
+    palm(b, x, z, 1 + rnd() * 0.3);
+  }
+  const brights = [
+    [0.95, 0.3, 0.3],
+    [0.98, 0.8, 0.2],
+    [0.2, 0.6, 0.9],
+    [0.95, 0.5, 0.7],
+  ];
+  for (let i = 0; i < 12; i++) {
+    const x = (i % 2 ? 1 : -1) * (14 + (i >> 1) * 7);
+    umbrella(b, x, -24 - (i % 3) * 5, pick(brights));
+    b.box(x + 1.8, 0.02, -24 - (i % 3) * 5, 0.8, 0.06, 1.9, pick(brights));
+  }
+  for (let i = 0; i < 6; i++)
+    b.box(
+      -26 + i * 1.1,
+      1.1,
+      18,
+      0.5,
+      2.2,
+      0.08,
+      pick(brights),
+      0,
+      0.12 * (i % 2 ? 1 : -1),
+    );
+  for (const sd of [-1, 1])
+    for (let z = -12; z <= 12; z += 8) {
+      b.box(sd * 12, 1, z, 0.14, 2, 0.14, [0.45, 0.32, 0.18]);
+      b.glow?.(1);
+      b.blob(sd * 12, 2.15, z, 0.18, 0.28, 0.18, [1, 0.62, 0.2], 0, 3, 6);
+      b.glow?.(0);
+    }
+  // lifeguard stand
+  b.box(30, 1.6, -36, 3, 0.2, 3, [0.95, 0.95, 0.9]);
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    b.box(
+      30 + sx * 1.3,
+      0.8,
+      -36 + sz * 1.3,
+      0.16,
+      1.6,
+      0.16,
+      [0.95, 0.95, 0.9],
+    );
+  b.box(30, 2.8, -36, 3, 2.2, 3, [0.95, 0.3, 0.25]);
+  b.box(30, 4.1, -36, 3.6, 0.3, 3.6, [0.95, 0.95, 0.9]);
+}
+
+function sahara(b: Builder) {
+  seed = 307;
+  const sand = [0.88, 0.66, 0.4],
+    mud = [0.72, 0.48, 0.3];
+  plain(b, sand);
+  // rolling dunes
+  for (let i = 0; i < 46; i++) {
+    const a = rnd() * Math.PI * 2,
+      d = 60 + rnd() * 130;
+    const r = Math.min(14 + rnd() * 26, d - 45),
+      x = Math.cos(a) * d,
+      z = Math.sin(a) * d;
+    if (Math.abs(x) < 80 && z > -110 && z < -40) continue;
+    if (Math.abs(x - 42) < 30 && Math.abs(z + 32) < 25) continue;
+    b.blob(
+      x,
+      -r * 0.15,
+      z,
+      r,
+      4 + rnd() * 10,
+      r * (0.5 + rnd() * 0.4),
+      shade(sand, 0.9 + rnd() * 0.18),
+      0,
+      5,
+      10,
+    );
+  }
+  // a mud-brick fort ahead
+  kasbah(b, 0, -80, 40, 10, 14, mud);
+  for (const sd of [-1, 1]) {
+    b.box(sd * 22, 8, -80, 6, 16, 6, shade(mud, 0.95));
+    b.box(sd * 22, 16.4, -80, 7, 0.8, 7, shade(mud, 0.9));
+  }
+  kasbah(b, -60, -60, 18, 7, 12, shade(mud, 1.05));
+  kasbah(b, 58, -64, 22, 8, 12, shade(mud, 0.97));
+  // an oasis: pool, palms, tents
+  b.box(42, -0.02, -32, 22, 0.06, 14, [0.2, 0.5, 0.55]);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    palm(b, 42 + Math.cos(a) * 14, -32 + Math.sin(a) * 10, 0.9 + rnd() * 0.3);
+  }
+  for (const [x, z, c] of [
+    [-34, -26, [0.7, 0.2, 0.15]],
+    [-44, -18, [0.9, 0.85, 0.75]],
+    [-28, 30, [0.25, 0.3, 0.6]],
+  ] as [number, number, V][]) {
+    b.box(x, 1.1, z, 6, 2.2, 4.5, c);
+    gable(b, x, 2.2, z, 6, 4.5, 0.5, shade(c, 0.9));
+  }
+  camel(b, -24, -40, 0.4);
+  camel(b, -30, -46, 0.2);
+  camel(b, 26, 34, 2.4);
+}
+
+function paris(b: Builder) {
+  seed = 331;
+  const gravel = [0.8, 0.75, 0.64],
+    stone = [0.9, 0.85, 0.74],
+    slate = [0.38, 0.42, 0.48],
+    iron = [0.42, 0.34, 0.27];
+  b.box(0, -0.1, -41, 320, 0.1, 238, gravel);
+  b.box(0, -0.1, 136, 320, 0.1, 48, gravel);
+  // long lawns of the park leading to the iron tower
+  for (const sd of [-1, 1])
+    b.box(sd * 15, -0.045, -60, 9, 0.05, 110, [0.36, 0.56, 0.28]);
+  b.box(0, -0.045, -140, 30, 0.05, 38, [0.36, 0.56, 0.28]);
+  const tz = -150;
+  const lean = Math.atan(12 / 35);
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    b.box(
+      sx * 12,
+      17.5,
+      tz + sz * 12,
+      3.6,
+      39,
+      3.6,
+      iron,
+      -sz * lean,
+      sx * lean,
+    );
+  b.box(0, 20, tz, 26, 2.4, 26, iron);
+  b.box(0, 35, tz, 14, 1.8, 14, iron);
+  for (let i = 0; i < 7; i++)
+    b.box(
+      0,
+      39 + i * 6.6,
+      tz,
+      9 - i * 1.15,
+      6.6,
+      9 - i * 1.15,
+      shade(iron, 1 + (i % 2) * 0.05),
+    );
+  b.box(0, 82.5, tz, 3.4, 1.6, 3.4, iron);
+  b.box(0, 86, tz, 0.4, 7.5, 0.4, iron);
+  // apartment blocks: cream stone, rows of windows, grey mansard roofs
+  for (const sd of [-1, 1])
+    for (let z = -100; z <= 60; z += 26) {
+      const w = 18,
+        h = 18 + rnd() * 4,
+        d = 22,
+        x = sd * 44;
+      const ry = Math.PI / 2;
+      b.box(x, h / 2, z, w, h, d, stone);
+      b.box(x, 2, z, w + 0.1, 4, d + 0.1, shade(stone, 0.93));
+      windows(b, x, z, d, h, w, stone, [0.26, 0.28, 0.32], ry, 5.6, 3);
+      for (const y of [7.2, 16.2])
+        b.box(x, y, z, w + 0.7, 0.18, d + 0.4, [0.12, 0.12, 0.14]);
+      b.box(x, h + 1.4, z, w - 1.2, 3, d - 1.2, slate);
+      for (let k = -1; k <= 1; k++)
+        b.box(x + sd * 3, h + 3.4, z + k * 7, 1.2, 1.4, 1.2, [0.72, 0.5, 0.4]);
+    }
+  // clipped plane trees in rows and lamp posts
+  for (const sd of [-1, 1])
+    for (let z = -110; z <= 30; z += 6) {
+      if (Math.abs(z) < 20) continue;
+      b.box(sd * 23, 1.4, z, 0.3, 2.8, 0.3, [0.4, 0.32, 0.24]);
+      b.box(sd * 23, 4, z, 3.2, 2.6, 3.2, [0.28, 0.46, 0.24]);
+    }
+  for (const sd of [-1, 1])
+    for (let z = -16; z <= 16; z += 8) {
+      b.box(sd * 11, 1.6, z, 0.12, 3.2, 0.12, [0.15, 0.17, 0.18]);
+      b.blob(sd * 11, 3.35, z, 0.24, 0.26, 0.24, [0.98, 0.94, 0.8], 0, 3, 6);
+    }
+  // the river behind, with stone quays
+  b.box(0, -0.6, 95, 400, 0.2, 30, [0.32, 0.42, 0.46]);
+  for (const sd of [-1, 1])
+    b.box(0, -0.25, 95 + sd * 16, 400, 0.6, 2, shade(stone, 0.9));
+}
+
+function grandcanyon(b: Builder) {
+  seed = 353;
+  const dirt = [0.66, 0.5, 0.36],
+    bands = [
+      [0.72, 0.36, 0.22],
+      [0.82, 0.58, 0.38],
+      [0.62, 0.3, 0.2],
+      [0.9, 0.76, 0.56],
+      [0.68, 0.42, 0.28],
+      [0.55, 0.28, 0.2],
+    ];
+  // The rim sits close behind the court so the drop and the buttes show from player height.
+  const rim = -20,
+    floor = -100;
+  // the rim the court sits on
+  b.box(0, -5.05, (rim + 300) / 2, 420, 10, 300 - rim, dirt);
+  // the canyon wall dropping away in steps of coloured rock
+  for (let i = 1; i <= 10; i++) {
+    const front = rim - i * 5 - (i % 3) * 3;
+    b.box(
+      0,
+      -i * 10 + 5 - 0.3 - 0.02 * i,
+      (front + rim + 20) / 2,
+      419 - i * 0.3,
+      10,
+      rim + 20 - front,
+      bands[i % bands.length],
+    );
+  }
+  b.box(0, floor - 2, -120, 410, 4, 200, [0.5, 0.42, 0.3]);
+  b.box(14, floor + 0.1, -110, 400, 0.2, 6, [0.3, 0.5, 0.45]);
+  // buttes and mesas rising from the canyon floor, many standing taller than the rim
+  for (let i = 0; i < 24; i++) {
+    const x = (rnd() * 2 - 1) * 160,
+      z = -62 - rnd() * 55 + i * 0.011,
+      w = 16 + rnd() * 20,
+      d = 14 + rnd() * 16,
+      layers = 10 + Math.floor(rnd() * 4);
+    for (let k = 0; k < layers; k++) {
+      const sc = 1 - k * 0.05;
+      // Each butte sits a little lower than the last, so neighbours never share a ledge height.
+      b.box(
+        x,
+        floor - ((i * 0.137) % 3) + k * 10 + 5,
+        z,
+        w * sc,
+        10,
+        d * sc,
+        bands[(k + i) % bands.length],
+      );
+    }
+  }
+  // the far rim, stepping back as it rises
+  for (let k = 0; k < 14; k++) {
+    const front = -128 - k * 1.6;
+    b.box(
+      0,
+      floor + k * 10 + 5,
+      (front - 200) / 2,
+      420 - k * 0.2,
+      10,
+      front + 200,
+      bands[(k + 2) % bands.length],
+    );
+  }
+  // stone wall at the edge, a timber-and-stone lodge, junipers and pines
+  b.box(0, 0.45, rim + 0.5, 60, 0.9, 0.6, [0.56, 0.48, 0.4]);
+  b.box(0, 3.5, 48, 40, 7, 14, [0.54, 0.46, 0.38]);
+  windows(b, 0, 48, 40, 7, 14, [0.4, 0.28, 0.18], [0.2, 0.2, 0.22]);
+  gable(b, 0, 7, 48, 40, 14, 0.5, [0.38, 0.26, 0.18]);
+  for (let i = 0; i < 70; i++) {
+    const x = (rnd() * 2 - 1) * 120,
+      z = rim + 6 + rnd() * 120;
+    if (Math.abs(x) < 16 && z < 24) continue;
+    if (Math.abs(x) < 24 && Math.abs(z - 48) < 11) continue;
+    if (rnd() < 0.5) pine(b, x, z, 1.2 + rnd() * 0.8, [0.2, 0.34, 0.2]);
+    else
+      b.blob(
+        x,
+        0.6,
+        z,
+        1.4 + rnd(),
+        1 + rnd() * 0.6,
+        1.4 + rnd(),
+        [0.3, 0.38, 0.26],
+        0,
+        4,
+        7,
+      );
+  }
+}
+
 export function buildMap(b0: Builder, id: MapId) {
   const night = id === "tokyo" || id === "nyc";
   WIN = night ? 1.0 : id === "manila" ? 0.35 : 0.08;
@@ -1628,9 +3061,25 @@ export function buildMap(b0: Builder, id: MapId) {
   else if (id === "haas") haas(b);
   else if (id === "ucla") ucla(b);
   else if (id === "usc") usc(b);
+  else if (id === "stanford") stanford(b);
+  else if (id === "harvard") harvard(b);
+  else if (id === "mit") mit(b);
+  else if (id === "michigan") michigan(b);
+  else if (id === "texas") texas(b);
+  else if (id === "notredame") notredame(b);
+  else if (id === "iceland") iceland(b);
+  else if (id === "alps") alps(b);
+  else if (id === "hawaii") hawaii(b);
+  else if (id === "sahara") sahara(b);
+  else if (id === "paris") paris(b);
+  else if (id === "grandcanyon") grandcanyon(b);
 }
 
-const lin = (c: V): [number, number, number] => [c[0] ** 2.2, c[1] ** 2.2, c[2] ** 2.2];
+const lin = (c: V): [number, number, number] => [
+  c[0] ** 2.2,
+  c[1] ** 2.2,
+  c[2] ** 2.2,
+];
 const unit = (x: number, y: number, z: number): [number, number, number] => {
   const l = Math.hypot(x, y, z);
   return [x / l, y / l, z / l];
@@ -1686,7 +3135,11 @@ export function lightingFor(id: MapId): Lighting {
       ...base,
       sunDir: unit(-0.35, -1, -0.45),
       sunColor: id === "tokyo" ? [0.32, 0.28, 0.48] : [0.3, 0.32, 0.42],
-      skyAmb: lin(look.sky).map((v) => v * 1.4 + 0.06) as [number, number, number],
+      skyAmb: lin(look.sky).map((v) => v * 1.4 + 0.06) as [
+        number,
+        number,
+        number,
+      ],
       groundAmb: [0.05, 0.04, 0.07],
       spots: [
         flood(-7, 9.5, 8, -1.2, 2.5, c, 34),
@@ -1696,13 +3149,33 @@ export function lightingFor(id: MapId): Lighting {
       bloom: 0.08,
     };
   }
+  // Iceland: soft overcast light, no hard sun.
+  if (id === "iceland")
+    return {
+      ...base,
+      sunDir: unit(-0.3, -0.92, -0.25),
+      sunColor: [1.25, 1.28, 1.32],
+      skyAmb: lin(look.sky).map((v) => v * 0.95 + 0.08) as [
+        number,
+        number,
+        number,
+      ],
+      groundAmb: [0.05, 0.05, 0.06],
+      spots: [],
+      exposure: 1.05,
+      bloom: 0.04,
+    };
   // Daylight maps: sun, sky fill, ground bounce. Manila is a low warm sunset.
   const sunset = id === "manila" || id === "usc";
   return {
     ...base,
     sunDir: sunset ? unit(0.25, -0.62, 0.8) : unit(-0.45, -0.88, -0.32),
     sunColor: sunset ? [1.95, 1.35, 0.92] : [2.15, 2.0, 1.8],
-    skyAmb: lin(look.sky).map((v) => v * 0.75 + 0.05) as [number, number, number],
+    skyAmb: lin(look.sky).map((v) => v * 0.75 + 0.05) as [
+      number,
+      number,
+      number,
+    ],
     groundAmb: lin(look.ground ?? look.apron).map((v) => v * 0.6 + 0.03) as [
       number,
       number,

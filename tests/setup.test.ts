@@ -23,7 +23,10 @@ test("aim: the top edge of a flat phone points at the screen; an upright phone c
   near(f[1], 1, 1e-9);
   const g = aimFrom(90, 5, -4)!;
   assert.ok(g[0] < -0.99, "turned 90° left");
-  assert.equal(aimFrom(0, 88, 0), null);
+  // Held upright like a paddle instead: the screen direction is used (screen toward the TV).
+  const up = aimFrom(180, 90, 0)!;
+  near(up[0], 0, 1e-9);
+  near(up[1], 1, 1e-9);
 });
 
 test("paddle pose: forehand/backhand side and open/closed face, whatever the aim heading", () => {
