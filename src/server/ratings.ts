@@ -23,6 +23,7 @@ let dirty = false;
 export const rankId = (key: unknown) =>
   typeof key === "string" && /^[A-Za-z0-9_-]{20,64}$/.test(key)
     ? createHash("sha256")
+        // Kept from the old name (POVpickle) so existing players keep their rank.
         .update("povpickle:" + key)
         .digest("hex")
         .slice(0, 24)

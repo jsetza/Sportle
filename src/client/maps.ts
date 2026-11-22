@@ -608,7 +608,7 @@ function tokyo(b: Builder) {
       b.box(s * 7.6, 2.1, z, 0.12, 4.2, 0.12, [0.15, 0.15, 0.2]);
   }
   // pixel lettering on the plaza floor, the game's own name
-  b.text("POVPICKLE", -9.4, 0.004, 5.4, 0.32, 0, -1, [0.3, 0.22, 0.45]);
+  b.text("SPORTLE", -9.4, 0.004, 5.4, 0.32, 0, -1, [0.3, 0.22, 0.45]);
 }
 
 function manila(b: Builder) {

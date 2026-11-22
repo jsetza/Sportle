@@ -1022,7 +1022,7 @@ kbd {
   font-weight: 800;
   font-size: 18px;
 }
-/* POVpickle wordmark: POV in ball yellow; sized so nine heavy letters fit the panel */
+/* Sportle wordmark: SPORT in ball yellow */
 .wordmark span {
   font-size: clamp(40px, 4.9vw, 78px);
 }

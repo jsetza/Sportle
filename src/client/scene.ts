@@ -120,6 +120,8 @@ const GLYPHS: Record<string, string[]> = {
   U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
   A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
   L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
   ">": ["0000", "1100", "0110", "0011", "0110", "1100", "0000"],
 };
 type View = { eye: V; target: V; fov: number; shift: number };
@@ -765,7 +767,7 @@ export class Scene {
     this.material(0.1, 0, 0, 0);
     if (arena)
       // floor branding beside the court (subtle)
-      this.text("POVPICKLE", -9.6, 0.004, 5.4, 0.32, 0, -1, [0.32, 0.09, 0.15]);
+      this.text("SPORTLE", -9.6, 0.004, 5.4, 0.32, 0, -1, [0.32, 0.09, 0.15]);
     // net
     this.material(0.7);
     for (const x of [-COURT.post, COURT.post]) {
@@ -829,7 +831,7 @@ export class Scene {
     this.box(0, boardH + 0.01, -bz + 0.07, 12.5, 0.025, 0.02, [0.75, 0.55, 1]);
     // LED lettering (emissive, blooms)
     this.material(0.2, 0.75);
-    const slogan = "POVPICKLE >>|! ";
+    const slogan = "SPORTLE >>|! ";
     const sw = this.text(slogan, 0, 0, 0, 0.09, 1, 0, P.ink, false) + 0.4;
     for (let z = 9.6; z - sw > -bz + 0.4; z -= sw) {
       this.text(slogan, -bx + 0.08, 0.14, z, 0.09, 0, -1, P.ink);

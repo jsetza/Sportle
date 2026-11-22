@@ -4,7 +4,7 @@ Read README.md and docs/STATUS.md before editing. Preserve the working phone-to-
 
 ## Goal
 
-A browser-based 3D pickleball game named POVpickle (formerly “visual”; the GitHub repo is still jsetza/visual-pickleball), with phones as motion-controlled paddles, shared or remote household displays, solo bots, online singles, co-op doubles, and four-human doubles. The most important acceptance criterion is a real phone scanning a public HTTPS QR, enabling sensors, calibrating, moving a visible paddle, and hitting a practice ball differently with gentle and stronger swings.
+A browser-based 3D pickleball game named Sportle (formerly POVpickle and “visual”; the GitHub repo is still jsetza/visual-pickleball), with phones as motion-controlled paddles, shared or remote household displays, solo bots, online singles, co-op doubles, and four-human doubles. The most important acceptance criterion is a real phone scanning a public HTTPS QR, enabling sensors, calibrating, moving a visible paddle, and hitting a practice ball differently with gentle and stronger swings.
 
 ## Stack and commands
 

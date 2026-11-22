@@ -522,7 +522,7 @@ for (const sig of ["SIGTERM", "SIGINT"] as const)
   });
 server.listen(port, host, () =>
   console.log(
-    `POVpickle listening on http://localhost:${port} • host: ${platform} • phone origin: ${publicURL || "not configured (set PUBLIC_ORIGIN to HTTPS deployment)"}`,
+    `Sportle listening on http://localhost:${port} • host: ${platform} • phone origin: ${publicURL || "not configured (set PUBLIC_ORIGIN to HTTPS deployment)"}`,
   ),
 );
 function stop() {
