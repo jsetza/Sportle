@@ -1,5 +1,10 @@
 # Handoff status — 2026-11-22 (Claude session)
 
+## Start screen: welcome intro and game picker (2026-11-23, owner request)
+
+- `src/client/hub.ts`: a full-screen "Welcome to SPORTLE — Motion games with just your phone and a screen" intro (letters pop in, a phone swings at a TV), auto-advancing after ~4 s or on any key/tap, once per browser tab (`sportle-intro` in sessionStorage; `#test` skips it). Then **Pick a game**: a horizontal scroll-snap row of big animated cards (Pickleball, Bowling, a disabled "More soon"), the middle card raised and outlined; swipe, mouse wheel (one game per notch), ← → keys, ‹ › buttons or the dots move; Enter or clicking the middle card plays. The 3D arena keeps running behind it. Pickleball → the existing Offline/Online steps; "← All games" returns to the picker. Card art is original inline SVG. The intro text doesn't name any other console or brand.
+- Checked in headless Chrome (bowling smoke): intro shows, a key skips to the picker, Pickleball is first, → selects Bowling, Enter opens `/bowling`, coming back skips the intro; pickleball smoke: "← All games" returns to the picker. Not checked on a real TV remote or phone browser.
+
 ## Bowling feel: hold to bowl, steadier reading, predicted trail (2026-11-23)
 
 Owner report: "very inconsistent and hard to get a good bowl in". **Not yet tried on a real phone.**

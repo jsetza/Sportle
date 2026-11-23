@@ -53,6 +53,8 @@ An existing Chrome installation may be used with `CHROME_PATH=/absolute/path/to/
 
 ## Play
 
+The start screen opens with a short **Welcome to Sportle** intro (any key or tap skips it; it plays once per browser tab), then **Pick a game**: a side-scrolling row of game cards (swipe, scroll, ← → or the ‹ › buttons; Enter or a click on the middle card plays). Pickleball opens the steps below; Bowling opens `/bowling`. **← All games** in the side panel goes back to the picker.
+
 1. Create a **Motion lab** room on the display.
 2. Scan its QR code on a phone, or open `/controller` on the same public origin and enter its six-character room code.
 3. Choose nickname and hand, then the three setup steps: **01 Aim** — hold the phone flat like a TV remote, top edge at the screen; tap **TAP TO START** (allow motion if asked), then press and hold until the bar fills · **02 three forehands** (screen facing the TV, swing across your body) · **03 three backhands** (turn the phone over). Each step moves on by itself after the third swing. Your swings are then saved on that phone (it says so), so next time it's just tap, hold to aim, and you're in. **Skip: use standard swings** goes straight in without the swing steps.

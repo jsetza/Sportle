@@ -36,6 +36,10 @@ try {
   await display.goto("http://127.0.0.1:31492/#test");
   // Start screen: Play → Offline → (Motion lab is preselected) → Create game.
   await display.locator("#play").click();
+  // "← All games" goes back to the game picker; Pickleball again opens the steps.
+  await display.locator("#stepWhere [data-back]").click();
+  await display.locator("#hubPick").waitFor({ state: "visible" });
+  await display.locator("#play").click();
   await display.locator("#goOffline").click();
   await display.locator("label[for=map-tokyo]").click();
   await display.locator("#create").click();

@@ -2967,3 +2967,370 @@ body.myturn .bphone #igNum {
   transform: scale(0.98);
   box-shadow: 0 0 0 4px #fff, 0 8px 40px rgba(235, 245, 56, 0.6);
 }
+
+/* ——— Start screen: welcome intro + side-scrolling game picker (src/client/hub.ts) ——— */
+body.hub-open .panel {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.hub {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 52%, rgba(9, 9, 15, 0.35), rgba(9, 9, 15, 0.86) 75%),
+    linear-gradient(rgba(9, 9, 15, 0.55), rgba(9, 9, 15, 0.2) 40%, rgba(9, 9, 15, 0.75));
+}
+.hub.hidden {
+  display: none;
+}
+.hubintro,
+.hubpick {
+  grid-area: 1 / 1;
+  width: 100%;
+}
+.hubintro {
+  display: none;
+  text-align: center;
+  padding: 0 16px;
+  cursor: pointer;
+  user-select: none;
+}
+.hub.intro .hubintro {
+  display: block;
+}
+.hub.intro .hubpick {
+  display: none;
+}
+.hi-welcome {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(18px, 2.4vw, 30px);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--muted);
+  animation: hubUp 0.7s 0.15s both cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hi-word {
+  margin: 0.08em 0 0.12em;
+  font-family: var(--display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(64px, 15vw, 200px);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  transform: skewX(-9deg);
+}
+.hi-word b,
+.hi-word span {
+  display: inline-block;
+  color: #fff;
+  font-weight: 900;
+  animation: hubPop 0.6s calc(0.45s + var(--i) * 0.07s) both cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.hi-word span {
+  color: var(--ball);
+}
+.hi-sub {
+  margin: 0 auto;
+  max-width: 40ch;
+  font-size: clamp(18px, 2.2vw, 28px);
+  color: var(--muted);
+  animation: hubUp 0.7s 1.15s both cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hi-sub b {
+  color: #fff;
+}
+.hi-devices {
+  width: min(320px, 70vw);
+  margin: clamp(14px, 3vh, 32px) auto 0;
+  animation: hubUp 0.7s 1.5s both cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hi-devices svg {
+  width: 100%;
+  display: block;
+}
+.hi-phone {
+  transform-origin: 48px 98px;
+  animation: hubSwing 1.4s 2s infinite ease-in-out;
+}
+.hi-waves {
+  opacity: 0;
+  animation: hubWave 1.4s 2s infinite;
+}
+.hi-tvball {
+  animation: hubTvBall 1.4s 2s infinite ease-in-out;
+}
+.hi-press {
+  margin: clamp(14px, 3vh, 30px) 0 0;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ball);
+  animation:
+    hubUp 0.5s 2.2s both,
+    hubBlink 1.6s 2.7s infinite;
+}
+@keyframes hubUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+@keyframes hubPop {
+  0% {
+    opacity: 0;
+    transform: translateY(0.5em) scale(0.4);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes hubSwing {
+  0%,
+  100% {
+    transform: rotate(-14deg);
+  }
+  45% {
+    transform: rotate(22deg);
+  }
+}
+@keyframes hubWave {
+  35% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes hubTvBall {
+  0%,
+  40% {
+    transform: translate(0, 0);
+  }
+  70% {
+    transform: translate(10px, 20px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+@keyframes hubBlink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Picker */
+.hubpick {
+  padding: 64px 0 28px;
+  animation: hubIn 0.6s both cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes hubIn {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+.hubhead {
+  text-align: center;
+  padding: 0 16px;
+}
+.hubhead h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(32px, 4.6vw, 64px);
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.hubhead p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.hubstage {
+  position: relative;
+  margin-top: clamp(14px, 3vh, 32px);
+}
+.hubrail {
+  --cw: clamp(260px, 30vw, 400px);
+  display: flex;
+  gap: clamp(14px, 2.4vw, 36px);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 24px calc(50% - var(--cw) / 2) 34px;
+  overscroll-behavior-x: contain;
+}
+.hubrail::-webkit-scrollbar {
+  display: none;
+}
+.hubcard {
+  flex: 0 0 var(--cw);
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  border-radius: 28px;
+  overflow: hidden;
+  background: rgba(22, 22, 36, 0.92);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+  text-decoration: none;
+  text-align: left;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  transform: scale(0.84);
+  filter: brightness(0.45) saturate(0.6);
+  transition:
+    transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.3s,
+    filter 0.3s,
+    border-color 0.3s,
+    box-shadow 0.4s;
+  animation: hubCard 0.6s calc(0.1s + var(--k) * 0.09s) both cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes hubCard {
+  from {
+    opacity: 0;
+    translate: 0 40px;
+  }
+}
+.hubcard.active {
+  transform: scale(1);
+  filter: none;
+  border-color: var(--ball);
+  box-shadow:
+    0 0 0 6px rgba(235, 245, 56, 0.14),
+    0 24px 60px rgba(0, 0, 0, 0.55);
+}
+.hubcard.soon {
+  cursor: default;
+}
+.hubcard.soon.active {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+.hubcard:focus-visible {
+  outline: none;
+}
+.hc-art svg {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+}
+.hc-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 22px 8px;
+}
+.hc-text strong {
+  font-family: var(--display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(26px, 2.6vw, 36px);
+  color: #fff;
+}
+.hc-text small {
+  font-size: 16px;
+  color: var(--ink);
+}
+.hc-text em {
+  font-style: normal;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hc-go {
+  align-self: flex-start;
+  margin: 10px 22px 20px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: var(--ball);
+  color: #111;
+  font-weight: 800;
+  font-size: 15px;
+  opacity: 0;
+  translate: 0 6px;
+  transition:
+    opacity 0.3s,
+    translate 0.3s;
+}
+.hubcard.soon .hc-text {
+  padding-bottom: 22px;
+}
+.hubcard.active .hc-go {
+  opacity: 1;
+  translate: 0 0;
+}
+.hubarrow {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0 0 5px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: rgba(10, 10, 20, 0.7);
+  color: #fff;
+  font-size: 34px;
+  line-height: 1;
+  cursor: pointer;
+}
+.hubarrow:hover {
+  border-color: var(--ball);
+  color: var(--ball);
+}
+.hubnav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 22px;
+}
+.hubdots {
+  display: flex;
+  gap: 10px;
+}
+.hubdots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition:
+    width 0.3s,
+    background 0.3s;
+}
+.hubdots i.on {
+  width: 28px;
+  border-radius: 5px;
+  background: var(--ball);
+}
+@media (max-width: 640px) {
+  .hubrail {
+    --cw: 76vw;
+  }
+  .hubpick {
+    padding-top: 72px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hub *,
+  .hub {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}

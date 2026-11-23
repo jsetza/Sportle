@@ -26,6 +26,8 @@ import { KeyboardPaddle } from "./keyboard.ts";
 import type { QualityPref } from "./renderer.ts";
 import type { ViewMode } from "./scene.ts";
 import { drawQR } from "./qr.ts";
+import { mountHub } from "./hub.ts";
+import type { Hub } from "./hub.ts";
 import { Music, MUSIC_STYLES } from "./music.ts";
 import type { MusicStyle } from "./music.ts";
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -87,14 +89,9 @@ function display() {
   <p class="tagline">Motion games. <b>Your phone is the controller.</b></p>
   <div id="setup">
     <div class="step" id="stepIntro">
-      <div class="gametiles" role="list" aria-label="Sportle games">
-        <button class="play gametile" id="play" role="listitem"><span class="playicon" aria-hidden="true"></span><span>Pickleball<small>Your phone is the paddle</small></span></button>
-        <a class="play gametile bowltile" id="playBowling" href="/bowling" role="listitem"><span class="playicon" aria-hidden="true"></span><span>Bowling<small>Your phone is the ball</small></span></a>
-      </div>
-      <p class="fine">Pick a game, scan the QR code with your phone, swing.</p>
     </div>
     <div class="step hidden" id="stepWhere">
-      <button class="link back" data-back="stepIntro">← Back</button>
+      <button class="link back" data-back="stepIntro">← All games</button>
       <h2 class="stephead">How are you playing?</h2>
       <button class="choice" id="goOffline"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span><b>Offline</b><small>Everyone on this screen · phones as paddles</small></span><i>→</i></button>
       <button class="choice" id="goOnline"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span><b>Online</b><small>Play people in other homes · share a code</small></span><i>→</i></button>
@@ -192,7 +189,12 @@ function display() {
     .forEach((r) => r.addEventListener("change", syncMode));
   syncMode();
   // Start screen steps (owner request): Play → Offline / Online → mode, map, difficulty.
+  // Start screen (owner request): welcome intro, then the side-scrolling game picker. The
+  // side panel's first step is the picker itself.
+  let hub: Hub | null = null;
   const step = (id: string) => {
+    if (id === "stepIntro") hub?.show();
+    else hub?.hide();
     for (const el of Array.from(document.querySelectorAll(".step")))
       el.classList.toggle("hidden", el.id !== id);
     sessionStorage.setItem("pov-step", id);
@@ -220,7 +222,15 @@ function display() {
     sessionStorage.setItem("pov-group", group);
     step("stepModes");
   };
-  $("play").onclick = () => step("stepWhere");
+  {
+    const st = sessionStorage.getItem("pov-step");
+    hub = mountHub(document.body, {
+      intro: !sessionStorage.getItem("sportle-intro") && !hash.has("test"),
+      startOpen: !sessionStorage.getItem("visual-host") && st !== "stepModes",
+      onPickleball: () => step("stepWhere"),
+    });
+    if (st !== "stepModes" && !sessionStorage.getItem("visual-host")) step("stepIntro");
+  }
   $("goOffline").onclick = () => where("here");
   $("goOnline").onclick = () => where("online");
   for (const b of Array.from(
@@ -387,6 +397,7 @@ function display() {
     }
   }
   function entered() {
+    hub?.hide();
     $("setup").classList.add("hidden");
     $("lobby").classList.remove("hidden");
     document.body.classList.add("in-room");

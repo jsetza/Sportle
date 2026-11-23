@@ -42,9 +42,30 @@ try {
   for (const p of [tv, a, b]) p.on("pageerror", (e) => errors.push(e.message));
   // Start screen: the hub shows both games; Bowling opens the bowling page.
   await tv.goto(`http://127.0.0.1:${PORT}/`);
-  await tv.locator("#play").waitFor();
+  // Welcome intro first, then the side-scrolling picker: any key skips the intro, → moves to
+  // Bowling, Enter plays it.
+  await tv.locator("#hubIntro").waitFor({ state: "visible" });
+  assert.match(await tv.locator("#hubIntro").textContent(), /Welcome to/);
+  if (SHOTS) {
+    await tv.waitForTimeout(2400);
+    await tv.screenshot({ path: SHOTS + "/hub-intro.png" });
+  }
+  await tv.keyboard.press("x"); // any key (a letter does nothing once the picker is up)
+  await tv.locator("#hubPick").waitFor({ state: "visible" });
+  assert.ok(await tv.locator("#play.active").isVisible(), "Pickleball is picked first");
   assert.equal(await tv.locator("#playBowling").getAttribute("href"), "/bowling");
-  if (SHOTS) await tv.screenshot({ path: SHOTS + "/hub.png" });
+  await tv.keyboard.press("ArrowRight");
+  await tv.locator("#playBowling.active").waitFor();
+  if (SHOTS) {
+    await tv.waitForTimeout(700);
+    await tv.screenshot({ path: SHOTS + "/hub.png" });
+  }
+  await tv.keyboard.press("Enter");
+  await tv.waitForURL(/\/bowling$/);
+  // Coming back from Bowling skips the intro and goes straight to the picker.
+  await tv.goto(`http://127.0.0.1:${PORT}/`);
+  await tv.locator("#hubPick").waitFor({ state: "visible" });
+  assert.equal(await tv.locator("#hubIntro").isVisible(), false);
   await tv.goto(`http://127.0.0.1:${PORT}/bowling#test`);
   await tv.locator("#goMulti").click();
   await tv.locator("label[for=bl-neon]").click();
