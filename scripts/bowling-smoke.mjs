@@ -129,6 +129,19 @@ try {
     assert.match(txt, /Score|Up now|Backswing/);
   }
   if (SHOTS) {
+    // First person: aiming, the ball rolling away, and the result.
+    await tv.evaluate(() => (window.__bowlScene.viewMode2 = "first"));
+    await tv.waitForTimeout(500);
+    await tv.screenshot({ path: SHOTS + "/first-aim.png" });
+    const st = await state();
+    if (st.phase === "aim") {
+      await bowl(phones[st.players[st.turn].name]);
+      await tv.waitForTimeout(700);
+      await tv.screenshot({ path: SHOTS + "/first-rolling.png" });
+      await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "result", null, { timeout: 12000 });
+      await tv.waitForTimeout(300);
+      await tv.screenshot({ path: SHOTS + "/first-result.png" });
+    }
     for (const v of ["behind", "broadcast"]) {
       await tv.evaluate((v) => (window.__bowlScene.viewMode2 = v), v);
       await tv.waitForTimeout(400);

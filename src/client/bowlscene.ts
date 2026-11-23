@@ -17,8 +17,9 @@ type V = number[];
 const FOUL = 9;
 const Z = (d: number) => FOUL - d;
 const HEAD = Z(LANE.length);
-export type BowlView = "behind" | "follow" | "broadcast";
+export type BowlView = "behind" | "follow" | "first" | "broadcast";
 export const BOWL_VIEW_LABELS: Record<BowlView, string> = {
+  first: "First person",
   behind: "Behind the bowler",
   follow: "Ball cam",
   broadcast: "Broadcast",
@@ -573,6 +574,16 @@ export class BowlScene extends Scene {
     if (!up || b.phase === "lobby" || b.phase === "over") return;
     // The bowler who is up: waits at the approach, then the slide to the foul line.
     const hand = up.hand === "left" ? -1 : 1;
+    if (this.viewMode2 === "first") {
+      // First person: no body (the camera is the bowler's eyes); the ball sits in the
+      // bowling hand, low and in front, swaying a little, until it's bowled.
+      if (b.phase === "aim") {
+        const fp = this.firstPerson(up, b, now, age);
+        const sway = Math.sin(now / 600) * 0.015;
+        this.ballAt(fp.eye[0] + hand * 0.4, 1.2 + sway, fp.eye[2] - 1.25, 0, ballColor(up));
+      }
+      return;
+    }
     const x = up.board * 0.4 - hand * 0.3;
     let z = Z(-2.6),
       arm = 0.25,
@@ -598,6 +609,19 @@ export class BowlScene extends Scene {
     );
     this.tags.push({ id: up.id, name: up.name, team: 0, x, y: 2.15, z });
   }
+  /** Eye position for the first-person view: at the approach, then the slide to the line. */
+  firstPerson(up: Bowler | undefined, b: Bowl, now: number, age: number) {
+    const hand = up?.hand === "left" ? -1 : 1;
+    const x = (up ? up.board * 0.4 : 0) - hand * 0.12;
+    if (b.phase === "aim") {
+      // Standing on the approach; a slight breathing bob.
+      return { eye: [x, 1.55 + Math.sin(now / 1400) * 0.01, Z(-2.6)], fov: 56 };
+    }
+    // Release: four steps and a slide to the foul line, dropping into the bowling crouch.
+    const t = b.phase === "rolling" ? clamp(age / 0.5, 0, 1) : 1;
+    const e = t * t * (3 - 2 * t);
+    return { eye: [x, 1.55 - e * 0.35, Z(-2.6 + e * 2.2)], fov: 56 };
+  }
   cameraFor(
     b: Bowl | null,
     ball: Vec | null,
@@ -617,6 +641,19 @@ export class BowlScene extends Scene {
     const hand = up?.hand === "left" ? -1 : 1;
     const ux = up ? up.board * 0.4 : 0;
     const d = ball ? FOUL - ball.z : 0;
+    if (mode === "first") {
+      const fp = this.firstPerson(up, b, now, (now - this.phaseSeen.at) / 1000);
+      // Look down the lane at the pins; as the ball travels, the view tightens on it and the
+      // rack (like watching your own ball), and holds on the pins for the result.
+      const k = b.phase === "rolling" && ball ? clamp(d / LANE.length, 0, 1) : b.phase === "aim" ? 0 : 1;
+      const tx = ball && b.phase === "rolling" ? ball.x * 0.5 : 0;
+      return {
+        eye: fp.eye,
+        target: [tx, 0.15 * k, Z(LANE.length * (0.55 + 0.45 * k))],
+        fov: fp.fov - 26 * k * k,
+        shift: 0,
+      };
+    }
     if (mode === "broadcast") {
       // High TV angle from behind and to the side; it pans down the lane with the ball.
       const look = b.phase === "rolling" && ball ? Math.min(LANE.length, d + 5) : b.phase === "aim" ? 9 : LANE.length;

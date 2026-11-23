@@ -172,7 +172,7 @@ function tv() {
     scene.panelOpen = !document.body.classList.contains("playing") || document.body.classList.contains("panel-open");
   };
   // ——— Camera ———
-  const VIEWS: BowlView[] = ["follow", "behind", "broadcast"];
+  const VIEWS: BowlView[] = ["follow", "first", "behind", "broadcast"];
   const setView = (v: BowlView) => {
     scene.viewMode2 = v;
     $("view").textContent = "View: " + BOWL_VIEW_LABELS[v];
