@@ -180,6 +180,13 @@ export type Bowl = {
   seed: number;
   /** Total balls thrown in this game (for one-off client effects). */
   bowls: number;
+  /**
+   * Predicted path for the bowler who is up (flat x,d pairs, metres): where a normal-speed
+   * ball from their spot with their current curve would roll. Frozen at release.
+   */
+  aim: number[];
+  /** Where the ball actually rolled this ball (flat x,d pairs), kept until the sweep. */
+  trail: number[];
 };
 /** Seconds the TV shows the result before the sweep, and how long the sweep takes. */
 export const RESULT_TIME = 2.2;
@@ -351,6 +358,52 @@ export const curveLabel = (c: number) =>
 
 // ——— Phone: reading a bowl ———
 
+/** Swing-path left/right below this reads as a straight bowl (normal swings wobble a bit). */
+export const LINE_DEAD = 0.25;
+/** Swing path's left/right part → line -1..1, with a dead zone so a straight bowl is straight. */
+export function lineFrom(side: number) {
+  const a = Math.abs(side);
+  return a < LINE_DEAD ? 0 : clamp((a - LINE_DEAD) / 0.5, 0, 1) * Math.sign(side);
+}
+/** Hold-to-bowl: a let-go with less arm speed than this (rad/s) doesn't bowl. */
+export const HELD_MIN = 2;
+/** The arm keeps swinging after the thumb lets go: read this long after the let-go too (ms),
+ * so letting go a touch early still counts the swing's full speed. */
+export const HELD_AFTER = 110;
+export type HeldSample = { t: number; rad: number; up: number; side: number };
+/**
+ * Hold-to-bowl: the player holds the button through the backswing and lets go on the way
+ * forward. The let-go is the release moment, so nothing has to guess it from the motion.
+ * Speed = the fastest forward motion from ~0.45 s before the let-go to HELD_AFTER after it, line = median left/right over the
+ * fast part of it, hook = the tilt locked when the button was pressed (the phone is still at
+ * that moment, so the reading is steady). Intent estimates, not measured positions.
+ */
+export function readHeld(
+  samples: HeldSample[],
+  releaseT: number,
+  profile: BowlProfile,
+  tilt: number,
+): Release | null {
+  const win = samples.filter((q) => q.t > releaseT - 450 && q.t <= releaseT + HELD_AFTER);
+  if (!win.length) return null;
+  let fwd = win.filter((q) => q.up * profile.upSign > 0.2);
+  if (!fwd.some((q) => q.rad >= HELD_MIN)) fwd = win;
+  const rad = Math.max(...fwd.map((q) => q.rad));
+  if (rad < HELD_MIN) return null;
+  const sides = fwd
+    .filter((q) => q.rad >= rad * 0.6)
+    .map((q) => q.side)
+    .sort((a, b) => a - b);
+  const side = sides[sides.length >> 1] ?? 0;
+  return {
+    speed: bowlSpeed(rad, profile.typical),
+    line: lineFrom(side * profile.sideSign),
+    hook: curveFrom(tilt),
+    tilt,
+    rad,
+  };
+}
+
 /** Forward-swing speed (rad/s) below which nothing counts as a bowl. */
 export const BOWL_FLOOR = 2.5;
 /** Forward swing speed needed to release (gentle waves and walking stay below it). */
@@ -432,8 +485,8 @@ export class BowlReader {
     const tilt = (tilts[tilts.length >> 1] ?? shot.roll) - this.zero;
     return {
       speed: bowlSpeed(shot.rad, this.profile.typical),
-      line: clamp(shot.path.side * this.profile.sideSign * 1.6, -1, 1),
-      hook: clamp(curveFrom(tilt) + clamp(this.twist / 900, -0.25, 0.25), -1, 1),
+      line: lineFrom(shot.path.side * this.profile.sideSign),
+      hook: clamp(curveFrom(tilt) + clamp(this.twist / 1800, -0.12, 0.12), -1, 1),
       tilt,
       rad: shot.rad,
     };

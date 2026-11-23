@@ -1,5 +1,15 @@
 # Handoff status — 2026-11-22 (Claude session)
 
+## Bowling feel: hold to bowl, steadier reading, predicted trail (2026-11-23)
+
+Owner report: "very inconsistent and hard to get a good bowl in". **Not yet tried on a real phone.**
+
+- **Why it was inconsistent:** the swing's left/right reading set the ball's angle at up to 0.06 rad, which is ±1.1 m at the pins on a lane only 1.05 m wide, so normal sideways wobble in an underhand swing often meant a gutter. The release moment was guessed from the motion (a backswing, then a forward swing over a trigger speed), and wrist twist added up to a quarter of a full hook.
+- **Hold to bowl (now the default):** the phone shows **HOLD TO BOWL** on your turn. Press and hold, swing back, let go going forward; the let-go is the release. The curve is locked when the button is pressed (the phone is still then, so the tilt reading is steady). Speed = peak arm speed from 0.45 s before the let-go to 0.11 s after it (`readHeld`, `HELD_AFTER` in `src/shared/bowling.ts`), so letting go 60 ms early or 120 ms late gives nearly the same ball. A let-go with no real swing doesn't bowl ("Swing your arm forward, then let go"). The swing-only release is still in Settings.
+- **Steadier line and speed:** sideways readings under 0.25 count as straight (`lineFrom`), and the full sideways swing now moves the ball at most ~0.4 m at the pins (angle ±0.022 rad). From the edge of the approach a sideways swing can still gutter. Game speed range is 5–10 m/s (was 4.5–10.5). Wrist twist adds at most 0.12 of a hook (was 0.25), swing-only mode only.
+- **Predicted trail:** the server traces a normal-speed ball from the bowler's spot with their current curve (`trace` in `bowlphysics.ts`) and sends it as `aim`. The TV draws it as glowing dashes on the lane; the phone draws it on a mini lane next to the curve indicator. While the ball rolls, the real path (`trail`) is drawn as a line in the ball's colour, kept until the sweep, so the two can be compared. The curve badge keeps the released hook while the ball rolls.
+- **Tests:** new `tests/bowling-feel.test.ts` (6 tests: same swing at 60/120 Hz, early/late let-go, no-swing let-go, locked curve, sideways wobble stays on the lane, the trail ends where the ball really crosses). The bowling browser smoke test now bowls with the real button (pointer down → synthetic swing → pointer up) and checks the button is only on the phone that is up, that the predicted path is sent and bends with a tilt, and that the real path is kept. **122 unit tests pass.** All of this uses synthetic sensor data; the 0.25 dead zone, the 0.45 s/0.11 s window and the speed range are estimates to check with real bowls (docs/DEVICE_TESTS.md).
+
 ## Sportle Bowling (2026-11-22, second game in the hub)
 
 Built from `docs/prompts/SPORTLE_BOWLING.md`. **Nothing here has been tried on a real phone yet.**

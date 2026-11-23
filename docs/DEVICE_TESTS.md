@@ -91,4 +91,5 @@ Use `npm run tunnel`, pick **Bowling** on the TV, then Multiplayer and a lane.
 8. Drag the strip to stand left/right; the bowler and the ball's starting point should move.
 9. Lock one phone during its turn: the TV says "Waiting for <name>'s phone…"; after 30 s the host gets **Skip turn** / **Let a bot bowl**. Unlock: the turn resumes. Reload a phone: it rejoins the same seat and score after aim (tap, hold).
 10. Play a full 10-frame game with two phones: check the scoresheet (strikes/spares/10th frame) and the winner card.
-11. Record: does underhand bowling feel right with the phone screen-forward? Is the hook amount controllable? Any accidental releases during the backswing?
+11. **Hold to bowl:** on your turn, press and hold the orange button, swing back, let go swinging forward. Bowl 10 normal straight balls from the centre: how many reach the pins without a gutter? ____ / 10. Do the ball's speed and line feel the same ball to ball? Does the dotted predicted path match where the ball goes (the solid line after)? Does the thumb slip off the button during a hard swing (pointer cancel)?
+12. Record: does underhand bowling feel right with the phone screen-forward? Is the hook amount controllable? Any accidental releases during the backswing?

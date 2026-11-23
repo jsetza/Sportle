@@ -32,6 +32,7 @@ import {
   freshPins,
   launch,
   pathAt,
+  trace,
   rng,
   settled,
   stepLane,
@@ -69,6 +70,8 @@ export function newBowl(
     winners: [],
     seed: randomBytes(4).readUInt32LE(0) | 0,
     bowls: 0,
+    aim: [],
+    trail: [],
   };
 }
 export function bowler(id: string, name: string, hand: "left" | "right" = "right"): Bowler {
@@ -216,6 +219,11 @@ export function startBowl(b: Bowl, now = Date.now()) {
   say(b, b.mode === "practice" ? "Practice: free bowls" : `Frame 1 · ${b.players[0].name} is up`);
 }
 function setPhase(b: Bowl, phase: Bowl["phase"]) {
+  if (phase === "aim") {
+    b.trail = [];
+    aimKey.delete(b);
+  }
+  if (phase === "sweep" || phase === "over" || phase === "lobby") b.aim = [];
   b.phase = phase;
   b.phaseAt = b.time;
   b.event++;
@@ -256,10 +264,24 @@ export const current = (b: Bowl): Bowler | undefined =>
     ? b.players[b.turn]
     : undefined;
 
+const aimKey = new WeakMap<Bowl, string>();
+/** Predicted path for a human bowler's next ball: their spot and curve at a normal speed. */
+function updateAim(b: Bowl, p: Bowler) {
+  if (p.bot || p.botFor) {
+    b.aim = [];
+    return;
+  }
+  const key = p.board.toFixed(2) + "," + p.curve.toFixed(2);
+  if (aimKey.get(b) === key) return;
+  aimKey.set(b, key);
+  b.aim = trace(phoneLaunch(p, { strength: 0.6, side: 0, hook: p.curve } as Input));
+}
 /** Turn a phone release (or a bot's choice) into a ball on the lane. */
 export function release(b: Bowl, p: Bowler, l: Launch, foul = false) {
   if (b.phase !== "aim" || b.players[b.turn] !== p || b.paused) return false;
+  p.curve = clamp(l.hook, -1, 1);
   b.ball = launch(l);
+  b.trail = [Math.round(b.ball.x * 100) / 100, 0];
   b.bowls++;
   p.bowls++;
   const v = Math.hypot(b.ball.vx, b.ball.vd);
@@ -288,11 +310,13 @@ export function release(b: Bowl, p: Bowler, l: Launch, foul = false) {
 }
 /** A phone's release, as sent in an input packet (strength = effort, side = line, hook). */
 export function phoneLaunch(p: Bowler, a: Input): Launch {
-  const speed = 4.5 + 6 * clamp(a.strength, 0, 1);
+  // Speed range kept narrow (5–10 m/s) so an off swing still gives a playable ball; the
+  // swing's left/right only nudges the line (±0.4 m at the pins at most).
+  const speed = 5 + 5 * clamp(a.strength, 0, 1);
   return {
     x: clamp(p.board, -1, 1) * 0.4,
     speed,
-    angle: clamp(a.side ?? 0, -1, 1) * 0.06,
+    angle: clamp(a.side ?? 0, -1, 1) * 0.022,
     hook: clamp(a.hook ?? 0, -1, 1),
   };
 }
@@ -325,6 +349,7 @@ export function stepBowl(b: Bowl, dt = 1 / 120, now = Date.now()) {
   const p = b.players[b.turn];
   if (!p) return;
   if (b.phase === "aim") {
+    updateAim(b, p);
     if (p.bot || p.botFor) {
       if (age > 1.8) {
         const l = botLaunch(b, p, p.bot || "medium");
@@ -352,6 +377,12 @@ export function stepBowl(b: Bowl, dt = 1 / 120, now = Date.now()) {
     const shot = b.shot!,
       ball = b.ball;
     if (ball?.phase === "gutter") shot.gutter = true;
+    // The ball's real path, every ~0.5 m (shown next to the predicted one).
+    if (ball && ball.d <= LANE.length + LANE.deck) {
+      const lastD = b.trail[b.trail.length - 1] ?? 0;
+      if (ball.d - lastD >= 0.5)
+        b.trail.push(Math.round(ball.x * 100) / 100, Math.round(ball.d * 100) / 100);
+    }
     // Hook readout: how far the ball has moved off the straight line it was released on.
     if (ball && ball.d < LANE.length && ball.phase !== "gutter")
       shot.boards = Math.round((ball.x - (shot.x0 + shot.slope * ball.d)) / LANE.board);
@@ -464,7 +495,9 @@ export function bowlInput(b: Bowl, p: Bowler, a: Input, fresh: boolean, now = Da
   p.connected = true;
   p.sensors = a.sensors;
   p.calibrated = a.calibrated;
-  p.curve = clamp(a.hook ?? 0, -1, 1);
+  // The curve badge keeps the released hook while that ball rolls (the wrist relaxes after).
+  const rolling = b.phase !== "aim" && b.players[b.turn] === p;
+  if (!rolling) p.curve = clamp(a.hook ?? 0, -1, 1);
   // Moving before bowling: only while it's your turn and you haven't let go yet.
   if (a.mx !== undefined && !(b.phase === "rolling" && b.players[b.turn] === p))
     p.board = clamp(a.mx, -1, 1);

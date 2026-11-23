@@ -119,7 +119,7 @@ test("turns: 1 to 6 bowlers alternate frame by frame; only the bowler who is up 
       for (let i = 0; i < n; i++) if (i !== up) bowlFrom(r, creds[i]);
       assert.equal(b.phase, "aim", "a phone that isn't up must not release");
       // The bowler who is up bowls a gutter (so frames stay two balls).
-      bowlFrom(r, creds[up], { strength: 0.3, side: 1 });
+      bowlFrom(r, creds[up], { strength: 0.3, side: 1, mx: 1 });
       assert.equal(b.phase, "rolling");
       order.push(b.players[up].name);
       runToAim(r);
@@ -180,8 +180,8 @@ test("turns: a full game ends after frame 10 with a winner; late joiner starts a
   let guard = 0;
   while (b.phase !== "over" && guard++ < 200) {
     const up = b.turn;
-    // P1 bowls into the pocket, P2 into the gutter.
-    bowlFrom(r, creds[up], up === 0 ? { strength: 0.6, side: 0, hook: 0 } : { strength: 0.4, side: 1 });
+    // P1 bowls into the pocket, P2 (standing at the right edge, swinging right) into the gutter.
+    bowlFrom(r, creds[up], up === 0 ? { strength: 0.6, side: 0, hook: 0 } : { strength: 0.4, side: 1, mx: 1 });
     runToAim(r);
     if (guard === 3) {
       const late = joinBowler(r, "Late", "left", undefined, "", "classic", { ...DEFAULT_GEAR });

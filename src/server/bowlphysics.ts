@@ -326,6 +326,23 @@ export function simulate(
   const down = pins.filter((p) => p.down).length;
   return { ball: b, pins, down, atPins, gutter, time: t };
 }
+/** Points along a ball's path without pins (flat x,d pairs, rounded to cm), for the trail
+ * preview: every ~0.9 m down the lane, ending at the pins or where it drops into a gutter. */
+export function trace(l: Launch, step = 0.9) {
+  const b = launch(l);
+  const out = [r2(b.x), 0];
+  let next = step;
+  for (let i = 0; i < 2400 && b.d < LANE.length && b.phase !== "gutter"; i++) {
+    moveBall(b, 1 / 240);
+    if (b.d >= next || (b.phase as string) === "gutter") {
+      out.push(r2(clamp(b.x, -LANE.half, LANE.half)), r2(b.d));
+      next += step;
+    }
+  }
+  if (b.phase !== "gutter") out.push(r2(b.x), r2(b.d));
+  return out;
+}
+const r2 = (v: number) => Math.round(v * 100) / 100;
 /** Where a ball crosses the head pin's row, without pins (for aiming). */
 export function pathAt(l: Launch, d = LANE.length) {
   const b = launch(l);

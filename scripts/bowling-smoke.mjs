@@ -87,7 +87,16 @@ try {
       await phones.Ana.evaluate((p) => (window.testPose = p), tilted(-30));
       await tv.waitForFunction(() => /HOOK/.test(document.getElementById("turn").textContent), null, { timeout: 3000 });
       if (SHOTS) await tv.screenshot({ path: SHOTS + "/aim-hook.png" });
+      if (SHOTS) await phones.Ana.screenshot({ path: SHOTS + "/phone-turn.png" });
     }
+    // Hold-to-bowl: only the phone that is up shows the button; the TV shows a predicted path,
+    // and for the hooking ball that path bends left.
+    assert.ok(await phones[upName].locator("#bowlBtn").isVisible(), "hold-to-bowl button on the phone that is up");
+    assert.equal(await phones[other].locator("#bowlBtn").isVisible(), false);
+    const aim = (await state()).aim;
+    assert.ok(aim.length >= 20, "predicted path shown");
+    if (hookBall) assert.ok(aim[aim.length - 2] < -0.1, "predicted path bends left for a left tilt: " + aim[aim.length - 2]);
+    assert.ok(await phones[upName].locator("#pLane polyline.paim").count(), "phone shows the predicted path");
     await bowl(phones[upName]);
     if (hookBall) await phones.Ana.evaluate((p) => (window.testPose = p), UPRIGHT);
     await tv.waitForFunction((n) => window.__bowlScene.bowl.bowls === n, before + 1, { timeout: 4000 });
@@ -98,6 +107,7 @@ try {
     }
     await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "result", null, { timeout: 12000 });
     if (SHOTS && k === 0) await tv.screenshot({ path: SHOTS + "/result.png" });
+    assert.ok((await state()).trail.length >= 20, "the ball's real path is kept for the result");
     if (hookBall) {
       const shot = (await state()).shot;
       assert.ok(shot.boards <= -3, "a tilted-left release hooks left: " + shot.boards + " boards");

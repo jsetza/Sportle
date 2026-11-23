@@ -24,10 +24,25 @@ export async function sensors(page, pose = UPRIGHT) {
     }, 16);
   }, pose);
 }
-/** One underhand bowl: backswing (+beta), then a faster forward swing (−beta), at 60 Hz. */
+/**
+ * One underhand bowl: backswing (+beta), then a faster forward swing (−beta), at 60 Hz.
+ * When the phone shows the hold-to-bowl button (its turn, button mode), the button is held
+ * from the backswing and let go just after the forward swing peaks, like a player would.
+ */
 export async function bowl(page, { peak = 560, back = 230, yaw = 0 } = {}) {
+  const btn = page.locator("#bowlBtn");
+  const useBtn = (await btn.count()) > 0 && (await btn.isVisible());
+  if (!useBtn) return swingPart(page, { peak, back, yaw, part: "all" });
+  const box = await btn.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await swingPart(page, { peak, back, yaw, part: "start" });
+  await page.mouse.up();
+  await swingPart(page, { peak, back, yaw, part: "end" });
+}
+async function swingPart(page, { peak, back, yaw, part }) {
   await page.evaluate(
-    async ({ peak, back, yaw }) => {
+    async ({ peak, back, yaw, part }) => {
       window.bowlBusy = true;
       const send = (beta, alpha = 0) =>
         window.dispatchEvent(
@@ -37,25 +52,32 @@ export async function bowl(page, { peak = 560, back = 230, yaw = 0 } = {}) {
           }),
         );
       const wait = () => new Promise((ok) => setTimeout(ok, 16));
-      for (let i = 0; i < 18; i++) {
-        send(back * Math.sin((Math.PI * (i + 1)) / 19));
-        await wait();
+      const first = part !== "end",
+        last = part !== "start";
+      if (first) {
+        for (let i = 0; i < 18; i++) {
+          send(back * Math.sin((Math.PI * (i + 1)) / 19));
+          await wait();
+        }
+        for (let i = 0; i < 3; i++) {
+          send(0);
+          await wait();
+        }
       }
-      for (let i = 0; i < 3; i++) {
-        send(0);
-        await wait();
-      }
-      for (let i = 0; i < 14; i++) {
+      // Forward swing: the button is let go after sample 8 (just past the peak).
+      for (let i = first ? 0 : 8; i < (last ? 14 : 8); i++) {
         send(-peak * Math.sin((Math.PI * (i + 1)) / 15), yaw);
         await wait();
       }
-      for (let i = 0; i < 25; i++) {
-        send(0);
-        await wait();
+      if (last) {
+        for (let i = 0; i < 25; i++) {
+          send(0);
+          await wait();
+        }
+        window.bowlBusy = false;
       }
-      window.bowlBusy = false;
     },
-    { peak, back, yaw },
+    { peak, back, yaw, part },
   );
 }
 /** Join a bowling room from the phone page and finish the setup. */

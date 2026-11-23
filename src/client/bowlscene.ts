@@ -387,6 +387,33 @@ export class BowlScene extends Scene {
       }
     }
   }
+  /**
+   * Predicted path (glowing dashes in ball yellow, gently pulsing) and the ball's real path
+   * (a thin line in the ball's colour), both lying on the lane just above the arrows.
+   */
+  paths(aim: number[] = [], trail: number[] = [], col: V, now: number) {
+    const seg = (a: number[], i: number, w: number, h: number, y: number, c: V, frac = 1) => {
+      const x1 = a[i],
+        z1 = Z(a[i + 1]),
+        x2 = a[i + 2],
+        z2 = Z(a[i + 3]);
+      const dx = x2 - x1,
+        dz = z2 - z1,
+        len = Math.hypot(dx, dz) * frac;
+      if (len < 0.01) return;
+      const k = frac / 2;
+      this.box(x1 + dx * k, y, z1 + dz * k, w, h, len, c, 0, 0, Math.atan2(dx, dz));
+    };
+    if (aim.length >= 4) {
+      this.material(0.3, 1.4 + 0.5 * Math.sin(now / 260));
+      for (let i = 0; i + 3 < aim.length; i += 2) seg(aim, i, 0.035, 0.004, 0.008, [1, 0.92, 0.25], 0.45);
+    }
+    if (trail.length >= 4) {
+      this.material(0.3, 0.9);
+      for (let i = 0; i + 3 < trail.length; i += 2) seg(trail, i, 0.025, 0.004, 0.012, col);
+    }
+    this.material(0.15);
+  }
   /** Bowling ball with three finger holes, rolling with the distance travelled. */
   ballAt(x: number, y: number, z: number, roll: number, col: V) {
     const r = LANE.ballR;
@@ -481,6 +508,7 @@ export class BowlScene extends Scene {
     // ——— Ball ———
     const up = b ? b.players[b.turn] : undefined;
     const ballCol = up ? ballColor(up) : [0.85, 0.2, 0.3];
+    if (b && !replayFrame) this.paths(b.aim, b.trail, ballCol, now);
     let ballPos: Vec | null = null;
     if (ball && ball.phase !== "pit") {
       ballPos = { x: ball.x, y: ball.y, z: Z(ball.d) };

@@ -17,8 +17,12 @@ import {
   curveLabel,
   framePos,
   learnBowls,
+  readHeld,
+  HELD_AFTER,
   scoreSheet,
+  LANE,
 } from "../shared/bowling.ts";
+import type { HeldSample } from "../shared/bowling.ts";
 import type { Bowl, BowlProfile, Bowler, LaneId, Release } from "../shared/bowling.ts";
 import { OUTFITS, PADDLES, cleanGear } from "../shared/types.ts";
 import type { Input } from "../shared/types.ts";
@@ -49,6 +53,27 @@ function error(e: unknown) {
   if (el) el.textContent = e instanceof Error ? e.message : String(e);
 }
 const ordinal = (n: number) => n + (["th", "st", "nd", "rd"][((n % 100) - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+/**
+ * Phone lane preview: the predicted path (dotted, from the server) and, once bowled, where the
+ * ball really went (solid). Flat x,d pairs in metres; the lane is drawn foul line at the bottom.
+ */
+export function laneSvg(aim: number[] = [], trail: number[] = [], board = 0) {
+  const W = 60,
+    H = 200,
+    top = 16,
+    bot = 192;
+  const X = (x: number) => (W / 2 + (x / LANE.half) * 20).toFixed(1);
+  const Y = (d: number) => (bot - (Math.min(d, LANE.length + 0.6) / (LANE.length + 0.6)) * (bot - top)).toFixed(1);
+  const pts = (a: number[]) => {
+    const out: string[] = [];
+    for (let i = 0; i + 1 < a.length; i += 2) out.push(X(a[i]) + "," + Y(a[i + 1]));
+    return out.join(" ");
+  };
+  let pins = "";
+  for (let k = 0; k < 4; k++)
+    for (let j = 0; j <= k; j++) pins += `<circle cx="${(W / 2 + (j - k / 2) * 5).toFixed(1)}" cy="${(top + 9 - k * 4).toFixed(1)}" r="1.6" class="ppin"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="lanesvg" aria-hidden="true"><rect x="6" y="4" width="${W - 12}" height="${H - 8}" rx="3" class="pgutter"/><rect x="10" y="4" width="${W - 20}" height="${H - 8}" class="plane2"/>${pins}${aim.length > 3 ? `<polyline points="${pts(aim)}" class="paim"/>` : ""}${trail.length > 3 ? `<polyline points="${pts(trail)}" class="ptrail"/>` : ""}<circle cx="${X((trail.length ? trail[0] : board * 0.4))}" cy="${Y(0)}" r="3.4" class="pball"/></svg>`;
+}
 /** Small arc that bends with the curve (-1..1): a lane line from the bottom to the pins. */
 export function curveSvg(c: number) {
   const bend = c * 34;
@@ -105,7 +130,7 @@ function tv() {
 <div class="tcall bcall hidden" id="callout" aria-live="assertive"></div>
 <div class="message" id="message" aria-live="polite">Pick single player or multiplayer to start.</div>
 <div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small>FINAL</small><h2 id="goTitle">Winner</h2><div class="goscore" id="goScore"></div><p id="goNames"></p><button class="cta" id="again">Bowl again <span>↻</span></button><a class="link" href="/bowling">Change game</a></div>
-<dialog id="howto"><h2>How to bowl</h2><ol><li><b>Create a game</b> and scan the QR with each phone. Everyone scans the same code (up to six). Pick a name, your bowling hand and an outfit.</li><li><b>Set up the phone</b>: hold it in your bowling hand, screen facing the TV, upright. Tap, then press and hold to aim. Then two practice bowls: one normal, one a little toward the left. Saved on the phone for next time.</li><li><b>Bowl</b> when your phone says YOUR TURN: a backswing, then an underhand swing forward, like a real bowl. Harder = faster ball. Swing across your body to send it across the lane.</li><li><b>Hook</b>: keep the phone upright for a straight ball. Tilt (roll) your wrist one way and the ball hooks that way, late, on the dry back of the lane. The curve indicator on your phone and on the TV shows STRAIGHT / SLIGHT HOOK / BIG HOOK before you bowl.</li><li><b>Move</b>: drag the strip on your phone left or right to choose where you stand.</li></ol><p class="fine">Ball speed shown in km/h and mph is the game's speed, not a measurement of your arm. Phone sensors estimate swing intent; they don't track your hand's exact position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
+<dialog id="howto"><h2>How to bowl</h2><ol><li><b>Create a game</b> and scan the QR with each phone. Everyone scans the same code (up to six). Pick a name, your bowling hand and an outfit.</li><li><b>Set up the phone</b>: hold it in your bowling hand, screen facing the TV, upright. Tap, then press and hold to aim. Then two practice bowls: one normal, one a little toward the left. Saved on the phone for next time.</li><li><b>Bowl</b> when your phone says YOUR TURN: press and hold the big button, swing back, and let go as you swing forward underhand. Harder = faster ball. The dotted line on the lane shows where the ball will go; after the bowl, a solid line shows where it went.</li><li><b>Hook</b>: keep the phone upright for a straight ball. Tilt (roll) your wrist one way and the ball hooks that way, late, on the dry back of the lane. The curve indicator on your phone and on the TV shows STRAIGHT / SLIGHT HOOK / BIG HOOK before you bowl.</li><li><b>Move</b>: drag the strip on your phone left or right to choose where you stand.</li></ol><p class="fine">Ball speed shown in km/h and mph is the game's speed, not a measurement of your arm. Phone sensors estimate swing intent; they don't track your hand's exact position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   let scene: BowlScene;
   try {
     scene = new BowlScene($<HTMLCanvasElement>("court"));
@@ -449,7 +474,7 @@ function phone() {
 <div class="gauge hidden" id="gauge"><div class="gtop"><span>SWING SPEED</span><b id="gValue">0.0</b><small>rad/s</small></div><div class="gstatus"><span class="gdashes" id="gDashes"><i></i><i></i></span><span id="gText">WAITING FOR A BOWL</span></div><div class="gsegs" id="gSegs"></div><p class="ghint">A backswing, then swing forward underhand. Gentle waves don't count.</p></div>
 <button class="hold" id="hold" aria-label="Hold to set the screen direction"><span class="htop"><b id="holdLabel">TAP, THEN HOLD</b><small id="holdHint">TURNS ON MOTION</small></span><span class="segs" id="holdSegs"></span></button>
 <button class="linkbig hidden" id="skipBowls">Skip: use a standard bowl</button><div class="savedcard hidden" id="savedCard"><span class="savedtick">✓</span><b>Saved on this phone</b><small>Next time: tap, hold to aim, and you're in.</small></div></section>
-<div id="ingame" class="card hidden"><div class="number" id="igNum">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="igStatus">The TV starts the game.</p><div class="bcurve phonecurve" id="pCurve"></div><div class="bstrip" id="strip" aria-label="Drag to choose where you stand"><span>◀ LEFT</span><i id="stripKnob"></i><span>RIGHT ▶</span></div><p class="fine" id="stripHint">Drag to choose where you stand. Double-tap for the centre.</p><p class="savednote">✓ Your bowl is saved on this phone</p><button class="full secondary" id="phonePause">Pause</button><details class="more"><summary>Settings</summary><button class="link" id="reaim">Aim at the screen again</button><button class="link" id="redo">Set up my practice bowls again</button></details></div></div><div id="error" role="alert"></div></div>`;
+<div id="ingame" class="card hidden"><div class="number" id="igNum">YOU’RE IN</div><h2 id="igTitle">Ready ✓</h2><p class="status" id="igStatus">The TV starts the game.</p><div class="bpreview"><div class="bcurve phonecurve" id="pCurve"></div><div class="plane" id="pLane" aria-label="Where the ball will go"></div></div><button class="bowlbtn hidden" id="bowlBtn"><b id="bowlBtnLabel">HOLD TO BOWL</b><small id="bowlBtnHint">Hold · swing back · let go on the way forward</small></button><div class="bstrip" id="strip" aria-label="Drag to choose where you stand"><span>◀ LEFT</span><i id="stripKnob"></i><span>RIGHT ▶</span></div><p class="fine" id="stripHint">Drag to choose where you stand. Double-tap for the centre.</p><p class="savednote">✓ Your bowl is saved on this phone</p><button class="full secondary" id="phonePause">Pause</button><details class="more"><summary>Settings</summary><button class="link" id="reaim">Aim at the screen again</button><button class="link" id="redo">Set up my practice bowls again</button><button class="link" id="modeToggle">Bowl without the button</button></details></div></div><div id="error" role="alert"></div></div>`;
   document.body.classList.add("controller");
   const PROFILE = "sportle-bowl";
   const savedProfile = (): BowlProfile | null => {
@@ -490,6 +515,14 @@ function phone() {
     wake: any = null;
   let rel: Release | null = null;
   let state: Bowl | null = null;
+  // Hold-to-bowl (default): the ball leaves when the button is let go. "swing" = the older
+  // motion-only release, read from the swing itself.
+  let bowlMode: "button" | "swing" = localStorage.getItem("bowl-mode") === "swing" ? "swing" : "button";
+  /** Last ~1.5 s of motion, for reading a hold-to-bowl release. */
+  let recent: HeldSample[] = [];
+  /** Button held since (performance.now ms), and the tilt locked when it was pressed. */
+  let heldAt = 0,
+    heldTilt = 0;
   type Step = "aim" | "bowls" | "done";
   let stepNow: Step = "aim";
   const practice: { up: number; side: number; rad: number }[][] = [];
@@ -572,10 +605,18 @@ function phone() {
       return;
     }
     if (stepNow !== "done" || !ready) return;
+    recent.push({ t: motionAt, rad, up: filter.path.up, side: filter.path.side });
+    if (recent.length > 8 && motionAt - recent[0].t > 1500) recent = recent.filter((q) => motionAt - q.t < 1500);
+    if (bowlMode === "button") return;
     const out = reader.feed({ ...sampleOf(filter, motionAt), twist: r.gamma });
-    if (!out) return;
+    if (out) bowlNow(out);
+  }
+  const myTurn = () => {
     const up = state?.players[state.turn];
-    if (state && up?.id === playerId && state.phase === "aim") {
+    return !!state && up?.id === playerId && state.phase === "aim" && !up.botFor && !state.paused;
+  };
+  function bowlNow(out: Release) {
+    if (myTurn()) {
       rel = out;
       swingId++;
       repeats = 3;
@@ -585,6 +626,58 @@ function phone() {
       flash("Not your turn yet");
     }
   }
+  const liveTilt = () => (filter.fwd ? wrap(filter.angle.roll - reader.zero) : 0);
+  // ——— Hold to bowl ———
+  const btn = $("bowlBtn");
+  const btnText = (label: string, hint: string) => {
+    $("bowlBtnLabel").textContent = label;
+    $("bowlBtnHint").textContent = hint;
+  };
+  const letGo = (cancelled: boolean) => {
+    if (!heldAt) return;
+    const t = performance.now();
+    heldAt = 0;
+    btn.classList.remove("held");
+    btnText("HOLD TO BOWL", "Hold · swing back · let go on the way forward");
+    const tilt = heldTilt;
+    // Read a moment later: the arm is still swinging just after the thumb lets go.
+    setTimeout(() => {
+      const out = readHeld(recent, t, reader.profile, tilt);
+      // A cancelled touch (the browser took it over) only bowls if there was a real swing.
+      if (!out || (cancelled && out.rad < BOWL_TRIGGER)) {
+        if (!cancelled) flash("Swing your arm forward, then let go");
+        return;
+      }
+      bowlNow(out);
+    }, HELD_AFTER);
+  };
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    if (!myTurn()) return flash("Not your turn yet");
+    if (!sensorLive()) return flash("Waiting for motion sensors…");
+    try {
+      btn.setPointerCapture(e.pointerId);
+    } catch {}
+    heldAt = performance.now();
+    heldTilt = liveTilt();
+    btn.classList.add("held");
+    navigator.vibrate?.(20);
+    btnText("SWING… LET GO!", "Curve locked: " + curveLabel(curveFrom(heldTilt)).toLowerCase());
+  });
+  btn.addEventListener("pointerup", () => letGo(false));
+  btn.addEventListener("pointercancel", () => letGo(true));
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());
+  const showMode = () => {
+    $("modeToggle").textContent = bowlMode === "button" ? "Bowl without the button (swing only)" : "Use the hold-to-bowl button";
+  };
+  showMode();
+  $("modeToggle").onclick = () => {
+    bowlMode = bowlMode === "button" ? "swing" : "button";
+    localStorage.setItem("bowl-mode", bowlMode);
+    reader.cancel();
+    showMode();
+    if (state) phoneState(state);
+  };
   const practiceBowl = (one: { up: number; side: number; rad: number }[]) => {
     const peak = Math.max(...one.map((q) => q.rad));
     if (peak < BOWL_TRIGGER || !one.some((q) => q.rad > BOWL_BACK)) return;
@@ -778,6 +871,12 @@ function phone() {
     if (mine && !wasUp) navigator.vibrate?.([60, 40, 60]);
     wasUp = mine;
     document.body.classList.toggle("myturn", mine);
+    $("bowlBtn").classList.toggle("hidden", !(mine && bowlMode === "button"));
+    if (!mine && heldAt) {
+      heldAt = 0;
+      btn.classList.remove("held");
+    }
+    put("pLane", mine || up?.id === playerId ? laneSvg(b.aim, b.trail, me.board) : "");
     const score = `${b.mode === "game" ? "Score " + scoreOf(me) : `${me.bowls} bowls · ${me.strikes} strikes`}`;
     let num = "YOU’RE IN",
       title = "Ready ✓",
@@ -792,7 +891,9 @@ function phone() {
     } else if (mine) {
       num = "YOUR TURN";
       title = b.mode === "game" ? `Frame ${b.frame + 1} · Ball ${b.ballNo + 1}` : `Ball ${b.ballNo + 1}`;
-      status = `Backswing, then bowl underhand. ${score}`;
+      status = bowlMode === "button"
+        ? `Hold the button, swing back, let go as you swing forward. ${score}`
+        : `Backswing, then bowl underhand. ${score}`;
     } else if (up?.id === playerId) {
       num = "YOUR BALL";
       title = b.phase === "rolling" ? "Rolling…" : b.shot ? `${b.shot.pins} pin${b.shot.pins === 1 ? "" : "s"}` : "…";
@@ -815,8 +916,8 @@ function phone() {
   };
   // Live curve indicator (tilt) on the phone.
   setInterval(() => {
-    const tilt = filter.fwd ? filter.angle.roll - reader.zero : 0;
-    put("pCurve", curveHtml(curveFrom(wrap(tilt))));
+    // While the button is held, the curve stays what it was when pressed.
+    put("pCurve", curveHtml(curveFrom(heldAt ? heldTilt : liveTilt())));
     if (stepNow === "bowls") put("gValue", gaugeRad.toFixed(1));
     if (enabled && !sensorLive() && performance.now() - enabledAt > 5000)
       error("No live sensor data. Check the browser's motion permission, or use another phone.");
@@ -828,7 +929,7 @@ function phone() {
     const live = sensorLive();
     const swing = repeats > 0 && !!rel;
     if (swing) repeats--;
-    const tilt = filter.fwd ? wrap(filter.angle.roll - reader.zero) : 0;
+    const tilt = heldAt ? heldTilt : liveTilt();
     const input: Input = {
       seq: seq++,
       t: Date.now() + net.offset,
@@ -859,6 +960,8 @@ function phone() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       reader.cancel();
+      heldAt = 0;
+      btn.classList.remove("held");
       net.api("background", {}).catch(() => {});
       wake?.release?.();
       wake = null;
