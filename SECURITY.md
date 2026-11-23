@@ -1,6 +1,6 @@
 # Security
 
-POVpickle has no accounts, passwords or stored personal data. Rooms, players and nicknames
+Sportle has no accounts, passwords or stored personal data. Rooms, players and nicknames
 live only in the server's memory and disappear when a room closes or the server restarts.
 
 - Room, host and controller credentials are random tokens created at runtime; none are in this repository.

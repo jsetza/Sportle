@@ -1,4 +1,4 @@
-Continue the project at https://github.com/jsetza/visual-pickleball.
+Continue the project at https://github.com/jsetza/Sportle.
 
 First read README.md, CLAUDE.md, docs/STATUS.md, docs/RULES.md, and docs/DEVICE_TESTS.md. Inspect the existing implementation before changing it. Do not rebuild from scratch.
 

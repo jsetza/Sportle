@@ -1,6 +1,6 @@
 # Sportle — motion-controlled pickleball and bowling
 
-_(Formerly “visual”. The GitHub repository is still named `visual-pickleball`.)_
+_(Formerly “visual”.)_
 
 An experimental browser-based hub of 3D motion games. A computer renders the court or lane; phones provide orientation and swing intent. No phone app and no runtime packages are required. The start screen offers **Pickleball** (your phone is the paddle) and **Bowling** (your phone is the ball); see [Sportle Bowling](#sportle-bowling) below.
 
@@ -20,7 +20,7 @@ Open `http://localhost:3000` for a **desktop preview only**. The UI deliberately
 
 ### Put it online for everyone (Render)
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jsetza/visual-pickleball)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jsetza/Sportle)
 
 1. Sign in at render.com with GitHub and allow access to this repository.
 2. Click the button above (or Dashboard → **New → Blueprint** → this repo). `render.yaml` creates one web service, `povpickle`, with a health check at `/healthz`.
