@@ -7,7 +7,7 @@
  * Optional: SHOTS=<dir> saves screenshots along the way.
  */
 import { chromium } from "playwright";
-import { patientBrowser } from "./patient.mjs";
+import { patientBrowser, slow } from "./patient.mjs";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -107,7 +107,7 @@ try {
     const hookBall = upName === "Ana" && k === 0;
     if (hookBall) {
       await phones.Ana.evaluate((p) => (window.testPose = p), tilted(-30));
-      await tv.waitForFunction(() => /HOOK/.test(document.getElementById("turn").textContent), null, { timeout: 3000 });
+      await tv.waitForFunction(() => /HOOK/.test(document.getElementById("turn").textContent), null, { timeout: slow(3000) });
       if (SHOTS) await tv.screenshot({ path: SHOTS + "/aim-hook.png" });
       if (SHOTS) await phones.Ana.screenshot({ path: SHOTS + "/phone-turn.png" });
     }
@@ -121,20 +121,20 @@ try {
     assert.ok(await phones[upName].locator("#pLane polyline.paim").count(), "phone shows the predicted path");
     await bowl(phones[upName]);
     if (hookBall) await phones.Ana.evaluate((p) => (window.testPose = p), UPRIGHT);
-    await tv.waitForFunction((n) => window.__bowlScene.bowl.bowls === n, before + 1, { timeout: 4000 });
+    await tv.waitForFunction((n) => window.__bowlScene.bowl.bowls === n, before + 1, { timeout: slow(4000) });
     seen.push(upName);
     if (SHOTS && k === 0) {
       await tv.waitForTimeout(1300);
       await tv.screenshot({ path: SHOTS + "/rolling.png" });
     }
-    await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "result", null, { timeout: 12000 });
+    await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "result", null, { timeout: slow(12000) });
     if (SHOTS && k === 0) await tv.screenshot({ path: SHOTS + "/result.png" });
     assert.ok((await state()).trail.length >= 20, "the ball's real path is kept for the result");
     if (hookBall) {
       const shot = (await state()).shot;
       assert.ok(shot.boards <= -3, "a tilted-left release hooks left: " + shot.boards + " boards");
     }
-    await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "aim" || window.__bowlScene.bowl.phase === "over", null, { timeout: 8000 });
+    await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "aim" || window.__bowlScene.bowl.phase === "over", null, { timeout: slow(8000) });
   }
   const s = await state();
   // Turns alternate frame by frame: Ana's frame 1, then Ben's frame 1.
@@ -160,7 +160,7 @@ try {
       await bowl(phones[st.players[st.turn].name]);
       await tv.waitForTimeout(700);
       await tv.screenshot({ path: SHOTS + "/first-rolling.png" });
-      await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "result", null, { timeout: 12000 });
+      await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "result", null, { timeout: slow(12000) });
       await tv.waitForTimeout(300);
       await tv.screenshot({ path: SHOTS + "/first-result.png" });
     }

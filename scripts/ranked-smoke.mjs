@@ -4,7 +4,7 @@
  * matched, both screens and phones move to the match room, and the match starts by itself.
  */
 import { chromium } from "playwright";
-import { patientBrowser } from "./patient.mjs";
+import { patientBrowser, slow } from "./patient.mjs";
 import { setUpPhone } from "./phone-setup.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
@@ -90,7 +90,7 @@ try {
           document.querySelector("#courtLabel").textContent,
         ),
       null,
-      { timeout: 15000 },
+      { timeout: slow(15000) },
     );
   const rooms = await Promise.all(
     [a, b].map((h) =>

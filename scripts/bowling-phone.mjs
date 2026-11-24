@@ -3,6 +3,7 @@
  * physical phone): join → 01 tap + hold to aim (upright, screen toward the TV) → 02 two
  * practice bowls → in game. Shared by the bowling smoke test and the screenshot script.
  */
+import { slow } from "./patient.mjs";
 import assert from "node:assert/strict";
 export const UPRIGHT = { alpha: 180, beta: 90, gamma: 0 }; // screen toward the TV, top edge up
 /** Upright, screen toward the TV, wrist rolled so the top edge leans right (+deg) or left. */
@@ -101,7 +102,7 @@ export async function joinPhone(page, base, room, name) {
   await bowl(page);
   await page.waitForTimeout(400);
   await bowl(page, { yaw: 80 });
-  await page.locator("#ingame").waitFor({ state: "visible", timeout: 5000 });
+  await page.locator("#ingame").waitFor({ state: "visible", timeout: slow(5000) });
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("sportle-bowl") || "null"));
   assert.ok(saved && saved.upSign === 1, "setup learned the forward swing direction");
 }

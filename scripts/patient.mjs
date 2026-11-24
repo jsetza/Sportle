@@ -22,3 +22,6 @@ export function patientBrowser(browser) {
   };
   return browser;
 }
+
+/** A fixed wait in a test, stretched 4× on CI for the same reason. */
+export const slow = (ms) => (process.env.CI ? ms * 4 : ms);

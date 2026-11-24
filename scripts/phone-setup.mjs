@@ -6,6 +6,7 @@
  * Poses for a screen straight ahead: flat = {0, 0, 0}; forehand grip (screen toward the TV,
  * top edge up) = {180, 90, 0}; backhand grip (back toward the TV) = {0, 90, 0}.
  */
+import { slow } from "./patient.mjs";
 export const FLAT = { alpha: 0, beta: 0, gamma: 0 };
 export const FOREHAND = { alpha: 180, beta: 90, gamma: 0 };
 export const BACKHAND = { alpha: 0, beta: 90, gamma: 0 };
@@ -80,14 +81,14 @@ export async function setUpPhone(phone, { reversed = false } = {}) {
   const fore = await phone.locator("#gDashes i.done").count();
   if (fore !== 3) throw Error("Setup counted " + fore + " of 3 forehands");
   // Moves on to backhands by itself.
-  await phone.locator("#stepTag", { hasText: "BACKHANDS" }).waitFor({ timeout: 3000 });
+  await phone.locator("#stepTag", { hasText: "BACKHANDS" }).waitFor({ timeout: slow(3000) });
   await setPose(phone, BACKHAND);
   await phone.waitForTimeout(200);
   for (let i = 0; i < 3; i++) await swing(phone, { alpha: 0, beta: 0, gamma: -560 * k }, i < 2 ? 800 : 550);
   const back = await phone.locator("#gDashes i.done").count();
   if (back !== 3) throw Error("Setup counted " + back + " of 3 backhands");
   // Finishes by itself.
-  await phone.locator("#ingame").waitFor({ state: "visible", timeout: 4000 });
+  await phone.locator("#ingame").waitFor({ state: "visible", timeout: slow(4000) });
   await setPose(phone, FOREHAND);
   const saved = await phone.evaluate(() => JSON.parse(localStorage.getItem("pov-paddle") || "null"));
   if (!saved || (saved.sideSign !== 1 && saved.sideSign !== -1))

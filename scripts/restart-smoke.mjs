@@ -1,7 +1,7 @@
 /** Real browser + server: a redeploy/restart loses rooms. The big screen and a joined phone
  * must stop retrying and say what happened (not loop on "Reconnecting…"). Synthetic phone. */
 import { chromium } from "playwright";
-import { patientBrowser } from "./patient.mjs";
+import { patientBrowser, slow } from "./patient.mjs";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 const PORT = 31501;
@@ -42,10 +42,10 @@ try {
   child.kill();
   await new Promise((r) => child.once("exit", r));
   child = await boot();
-  await d.locator("#error").filter({ hasText: "has ended" }).waitFor({ timeout: 10000 });
+  await d.locator("#error").filter({ hasText: "has ended" }).waitFor({ timeout: slow(10000) });
   assert.ok(!(await d.locator("#lobby").isVisible()), "big screen left the dead lobby");
   assert.ok(await d.locator("#create").isVisible(), "big screen is back at the menu");
-  await phone.locator("#error").filter({ hasText: "has ended" }).waitFor({ timeout: 10000 });
+  await phone.locator("#error").filter({ hasText: "has ended" }).waitFor({ timeout: slow(10000) });
   // And it stays quiet: no more requests to the dead room.
   let calls = 0;
   for (const p of [d, phone]) p.on("request", (r) => r.url().includes("room=" + room) && calls++);
