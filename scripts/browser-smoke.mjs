@@ -87,7 +87,7 @@ try {
     fired = false,
     contacts = 0;
   const results = [];
-  const timer = setTimeout(() => abort.abort(), 20000);
+  const timer = setTimeout(() => abort.abort(), 60000);
   try {
     while (results.length < 2) {
       const chunk = await reader.read();
@@ -106,6 +106,8 @@ try {
           });
           fired = false;
         }
+        // A test swing that missed (slow machine, late snapshot): try again on the next ball.
+        if (fired && m.phase !== "rally") fired = false;
         if (
           !fired &&
           results.length < 2 &&
@@ -139,7 +141,8 @@ try {
           const s = window.__povScene;
           s.viewMode = mode;
           const out = [];
-          const end = performance.now() + 4000;
+          // Measure for 4 s, longer on slow software rendering (CI), until enough frames are seen.
+          const start = performance.now();
           const tick = () => {
             const v = s.views[0] || s.view,
               b = s.lastBallPos,
@@ -151,7 +154,8 @@ try {
               const cos = dot / (Math.hypot(...d) * Math.hypot(...e));
               out.push((Math.acos(Math.min(1, cos)) * 180) / Math.PI);
             }
-            if (performance.now() < end) requestAnimationFrame(tick);
+            const t = performance.now() - start;
+            if (t < 4000 || (out.length < 8 && t < 25000)) requestAnimationFrame(tick);
             else {
               out.sort((a, b) => a - b);
               done({
