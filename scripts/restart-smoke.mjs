@@ -1,6 +1,7 @@
 /** Real browser + server: a redeploy/restart loses rooms. The big screen and a joined phone
  * must stop retrying and say what happened (not loop on "Reconnecting…"). Synthetic phone. */
 import { chromium } from "playwright";
+import { patientBrowser } from "./patient.mjs";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 const PORT = 31501;
@@ -19,11 +20,11 @@ const boot = async () => {
 let child = await boot(),
   browser;
 try {
-  browser = await chromium.launch({
+  browser = patientBrowser(await chromium.launch({
     headless: true,
     ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
     args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-  });
+  }));
   const d = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const phone = await (await browser.newContext()).newPage({ viewport: { width: 390, height: 844 } });
   await d.goto(`http://127.0.0.1:${PORT}/#test`);

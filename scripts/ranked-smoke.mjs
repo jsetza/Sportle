@@ -4,6 +4,7 @@
  * matched, both screens and phones move to the match room, and the match starts by itself.
  */
 import { chromium } from "playwright";
+import { patientBrowser } from "./patient.mjs";
 import { setUpPhone } from "./phone-setup.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
@@ -27,7 +28,7 @@ try {
     child.once("exit", (c) => no(Error("Server exited " + c)));
     setTimeout(() => no(Error("Server startup timeout")), 5000).unref();
   });
-  browser = await chromium.launch({
+  browser = patientBrowser(await chromium.launch({
     headless: true,
     ...(process.env.CHROME_PATH
       ? { executablePath: process.env.CHROME_PATH }
@@ -37,7 +38,7 @@ try {
       "--use-angle=swiftshader",
       "--enable-unsafe-swiftshader",
     ],
-  });
+  }));
   const errors = [];
   const household = async (name) => {
     // Separate browser contexts = separate homes (own storage, own phone).

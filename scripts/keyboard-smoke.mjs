@@ -1,5 +1,6 @@
 /** Real browser + server: "Use the keyboard instead" claims a seat, gets ready, serves with Space. */
 import { chromium } from "playwright";
+import { patientBrowser } from "./patient.mjs";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 const PORT = 31498;
@@ -14,11 +15,11 @@ try {
     child.once("exit", (c) => no(Error("Server exited " + c)));
     setTimeout(() => no(Error("Server startup timeout")), 5000).unref();
   });
-  browser = await chromium.launch({
+  browser = patientBrowser(await chromium.launch({
     headless: true,
     ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
     args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-  });
+  }));
   const d = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
   d.on("pageerror", (e) => errors.push(e.message));

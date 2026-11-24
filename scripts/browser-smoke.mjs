@@ -1,5 +1,6 @@
 /** Real browser and HTTP, synthetic sensor events. NOT a physical phone test. */
 import { chromium } from "playwright";
+import { patientBrowser } from "./patient.mjs";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { setUpPhone, sensors, holdToAim, FOREHAND, setPose } from "./phone-setup.mjs";
@@ -15,7 +16,7 @@ try {
     child.once("exit", (c) => no(Error("Server exited " + c)));
     setTimeout(() => no(Error("Server startup timeout")), 5000).unref();
   });
-  browser = await chromium.launch({
+  browser = patientBrowser(await chromium.launch({
     headless: true,
     ...(process.env.CHROME_PATH
       ? { executablePath: process.env.CHROME_PATH }
@@ -25,7 +26,7 @@ try {
       "--use-angle=swiftshader",
       "--enable-unsafe-swiftshader",
     ],
-  });
+  }));
   const display = await browser.newPage({
       viewport: { width: 1440, height: 1000 },
     }),
