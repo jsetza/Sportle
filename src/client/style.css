@@ -3132,160 +3132,251 @@ body.hub-open .panel {
 }
 
 /* Picker */
+/* Picker: the chosen game's scene fills the screen; a strip of games runs along the bottom
+   (at most a sixth of the screen's height). */
+.hub.pick {
+  display: block;
+  background: none;
+}
 .hubpick {
-  padding: 64px 0 28px;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
   animation: hubIn 0.6s both cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes hubIn {
   from {
     opacity: 0;
-    transform: scale(1.04);
   }
 }
-.hubhead {
-  text-align: center;
-  padding: 0 16px;
+.hubstage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
 }
-.hubhead h2 {
+.hubscene {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.45s;
+  background: #09090f;
+}
+.hubscene.on {
+  opacity: 1;
+}
+.hubscene canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.hubscene .nametags {
+  display: none;
+}
+/* Darken the left (for the title) and the bottom (for the strip) so text stays readable. */
+.hubpick::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(9, 9, 15, 0.82), rgba(9, 9, 15, 0.35) 42%, rgba(9, 9, 15, 0) 70%),
+    linear-gradient(rgba(9, 9, 15, 0.5), rgba(9, 9, 15, 0) 18%, rgba(9, 9, 15, 0) 62%, rgba(9, 9, 15, 0.92));
+}
+.hubfeature {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 72px clamp(20px, 6vw, 96px) clamp(14px, 3vh, 36px);
+  max-width: 760px;
+}
+.hubfeature.hf-in > * {
+  animation: hubSwap 0.45s both cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hubfeature.hf-in > :nth-child(2) {
+  animation-delay: 0.04s;
+}
+.hubfeature.hf-in > :nth-child(n + 3) {
+  animation-delay: 0.08s;
+}
+@keyframes hubSwap {
+  from {
+    opacity: 0;
+    translate: -18px 0;
+  }
+}
+.hf-kicker {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ball);
+}
+.hf-name {
   margin: 0;
   font-family: var(--display);
   font-weight: 900;
   font-style: italic;
-  font-size: clamp(32px, 4.6vw, 64px);
-  letter-spacing: -0.02em;
+  font-size: clamp(44px, 8vw, 120px);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: #fff;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5);
+}
+.hf-line {
+  margin: 4px 0 0;
+  font-size: clamp(17px, 1.8vw, 24px);
   color: #fff;
 }
-.hubhead p {
-  margin: 6px 0 0;
+.hf-who {
+  margin: 0;
+  font-size: 14px;
   color: var(--muted);
-  font-size: 15px;
 }
-.hubstage {
+.hf-go {
+  margin-top: 14px;
+  padding: 12px 28px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ball);
+  color: #111;
+  font: inherit;
+  font-weight: 900;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 0 0 6px rgba(235, 245, 56, 0.16);
+}
+.hf-go:hover {
+  filter: brightness(1.08);
+}
+.hf-go span {
+  font-size: 0.8em;
+}
+.hf-hint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hubstrip {
+  --sh: min(16.6vh, 170px);
+  --ch: calc(var(--sh) - 22px);
+  --cw: calc(var(--ch) * 1.6);
   position: relative;
-  margin-top: clamp(14px, 3vh, 32px);
+  z-index: 2;
+  height: var(--sh);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 clamp(8px, 2vw, 24px);
 }
 .hubrail {
-  --cw: clamp(260px, 30vw, 400px);
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   display: flex;
-  gap: clamp(14px, 2.4vw, 36px);
+  align-items: center;
+  gap: clamp(8px, 1.4vw, 18px);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
-  padding: 24px calc(50% - var(--cw) / 2) 34px;
+  padding: 0 calc(50% - var(--cw) / 2);
   overscroll-behavior-x: contain;
 }
 .hubrail::-webkit-scrollbar {
   display: none;
 }
 .hubcard {
+  position: relative;
   flex: 0 0 var(--cw);
+  height: var(--ch);
   scroll-snap-align: center;
-  display: flex;
-  flex-direction: column;
-  border-radius: 28px;
+  display: block;
+  border-radius: 14px;
   overflow: hidden;
-  background: rgba(22, 22, 36, 0.92);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: #161624;
+  border: 2px solid rgba(255, 255, 255, 0.14);
   color: var(--ink);
   text-decoration: none;
-  text-align: left;
   font: inherit;
   padding: 0;
   cursor: pointer;
-  transform: scale(0.84);
-  filter: brightness(0.45) saturate(0.6);
+  transform: scale(0.86);
+  filter: brightness(0.55) saturate(0.7);
   transition:
-    transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 0.3s,
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
     filter 0.3s,
     border-color 0.3s,
-    box-shadow 0.4s;
-  animation: hubCard 0.6s calc(0.1s + var(--k) * 0.09s) both cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow 0.35s;
+  animation: hubCard 0.5s calc(0.1s + var(--k) * 0.07s) both cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes hubCard {
   from {
     opacity: 0;
-    translate: 0 40px;
+    translate: 0 30px;
   }
+}
+.hubcard:hover {
+  filter: brightness(0.8);
 }
 .hubcard.active {
   transform: scale(1);
   filter: none;
   border-color: var(--ball);
   box-shadow:
-    0 0 0 6px rgba(235, 245, 56, 0.14),
-    0 24px 60px rgba(0, 0, 0, 0.55);
+    0 0 0 4px rgba(235, 245, 56, 0.16),
+    0 12px 30px rgba(0, 0, 0, 0.5);
 }
 .hubcard.soon {
   cursor: default;
 }
 .hubcard.soon.active {
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  border-color: rgba(255, 255, 255, 0.35);
 }
 .hubcard:focus-visible {
   outline: none;
 }
 .hc-art svg {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 10;
+  height: 100%;
 }
-.hc-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 18px 22px 8px;
-}
-.hc-text strong {
+.hc-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 10px 6px;
+  background: linear-gradient(transparent, rgba(9, 9, 15, 0.85));
   font-family: var(--display);
   font-weight: 900;
   font-style: italic;
-  font-size: clamp(26px, 2.6vw, 36px);
+  font-size: clamp(13px, calc(var(--ch) * 0.16), 20px);
   color: #fff;
-}
-.hc-text small {
-  font-size: 16px;
-  color: var(--ink);
-}
-.hc-text em {
-  font-style: normal;
-  font-size: 13px;
-  color: var(--muted);
-}
-.hc-go {
-  align-self: flex-start;
-  margin: 10px 22px 20px;
-  padding: 9px 18px;
-  border-radius: 999px;
-  background: var(--ball);
-  color: #111;
-  font-weight: 800;
-  font-size: 15px;
-  opacity: 0;
-  translate: 0 6px;
-  transition:
-    opacity 0.3s,
-    translate 0.3s;
-}
-.hubcard.soon .hc-text {
-  padding-bottom: 22px;
-}
-.hubcard.active .hc-go {
-  opacity: 1;
-  translate: 0 0;
+  text-align: left;
 }
 .hubarrow {
-  width: 48px;
-  height: 48px;
+  flex: none;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
-  padding: 0 0 5px;
+  padding: 0 0 4px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.25);
   background: rgba(10, 10, 20, 0.7);
   color: #fff;
-  font-size: 34px;
+  font-size: 28px;
   line-height: 1;
   cursor: pointer;
 }
@@ -3293,37 +3384,15 @@ body.hub-open .panel {
   border-color: var(--ball);
   color: var(--ball);
 }
-.hubnav {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 22px;
-}
-.hubdots {
-  display: flex;
-  gap: 10px;
-}
-.hubdots i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
-  cursor: pointer;
-  transition:
-    width 0.3s,
-    background 0.3s;
-}
-.hubdots i.on {
-  width: 28px;
-  border-radius: 5px;
-  background: var(--ball);
-}
 @media (max-width: 640px) {
-  .hubrail {
-    --cw: 76vw;
+  .hubstrip {
+    --sh: min(16.6vh, 130px);
   }
-  .hubpick {
-    padding-top: 72px;
+  .hubarrow {
+    display: none;
+  }
+  .hubfeature {
+    padding-top: 64px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

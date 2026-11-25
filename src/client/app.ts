@@ -83,7 +83,7 @@ function display() {
   ) =>
     `<input type="radio" name="mode" id="m-${group}-${mode}" value="${mode}" data-group="${group}" ${checked ? "checked" : ""}><label class="item" for="m-${group}-${mode}"><span class="ball"></span><b>${name}</b><small>${hint}</small></label>`;
   app.innerHTML = `<canvas id="court" aria-label="3D pickleball arena"></canvas><div class="beams" aria-hidden="true"></div>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="quality" title="Graphics quality (Auto lowers it if frames run slow)">Graphics: Auto</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span></span><nav><button class="link" id="music" title="Change music style">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Third person</button><button class="link" id="quality" title="Graphics quality (Auto lowers it if frames run slow)">Graphics: Auto</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="howtoOpen">How to play</button><button class="link" id="sound">Sound off</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="Sportle"><span><b>SPORT</b>LE</span><i></i></div>
   <p class="tagline">Motion games. <b>Your phone is the controller.</b></p>
@@ -222,9 +222,18 @@ function display() {
     sessionStorage.setItem("pov-group", group);
     step("stepModes");
   };
+  // The arena behind the start screen pauses while another game's preview covers it.
+  let arena: Scene | null = null;
+  let arenaShown = true;
   {
     const st = sessionStorage.getItem("pov-step");
     hub = mountHub(document.body, {
+      backdrop: (main) => {
+        arenaShown = main;
+        if (!arena) return;
+        cancelAnimationFrame(arena.raf);
+        if (main) arena.render();
+      },
       intro: !sessionStorage.getItem("sportle-intro") && !hash.has("test"),
       startOpen: !sessionStorage.getItem("visual-host") && st !== "stepModes",
       onPickleball: () => step("stepWhere"),
@@ -287,14 +296,6 @@ function display() {
     )
       $("create").click();
   });
-  fetch("/api/config")
-    .then((r) => r.json())
-    .then((c) => {
-      $("joinAt").textContent = c.publicOrigin
-        ? "Phones join at " + new URL(c.publicOrigin).host
-        : "Desktop preview · phones need the public HTTPS link";
-    })
-    .catch(() => {});
   const howto = $<HTMLDialogElement>("howto");
   $("howtoOpen").onclick = () => howto.showModal();
   $("howtoClose").onclick = () => howto.close();
@@ -312,6 +313,8 @@ function display() {
   let scene: Scene;
   try {
     scene = new Scene($<HTMLCanvasElement>("court"));
+    arena = scene;
+    if (!arenaShown) cancelAnimationFrame(scene.raf);
   } catch (e) {
     error(e);
     return;

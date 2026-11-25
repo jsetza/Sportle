@@ -29,7 +29,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 function turnFor(s) {
   const a = Math.min(1, Math.abs(s));
   if (a < 0.005) return 0;
-  const u = (-0.35 + Math.sqrt(0.35 * 0.35 + 4 * 0.65 * a)) / (2 * 0.65);
+  const u = (-0.3 + Math.sqrt(0.3 * 0.3 + 4 * 0.7 * a)) / (2 * 0.7);
   const x = 0.06 + u * (1 - 0.06);
   return -Math.sign(s) * x * 38 * 0.85;
 }
@@ -69,7 +69,7 @@ try {
     await tv.screenshot({ path: SHOTS + "/hub-kart.png" });
   }
   await tv.keyboard.press("Enter");
-  await tv.waitForURL(/\/kart$/);
+  await tv.waitForURL(/\/kart$/, { waitUntil: "commit" });
   // A one-lap multiplayer race on Court Circuit (laps=1 keeps the test short; races are 3 laps).
   await tv.goto(BASE + "/kart?laps=1#test");
   await tv.locator("#goMulti").click();
@@ -113,6 +113,8 @@ try {
   const t = track("court");
   const grips = { Ana: 1, Ben: -1 };
   let auto = true;
+  // While Ana holds DRIFT, steer firmly into the bend (as a player does to start a drift).
+  let kick = 0;
   const steerOf = (r, k) => {
     // Aim at an item cube that is still there in the next row ahead (others may take them).
     let aim = 0;
@@ -121,7 +123,8 @@ try {
     const look = pointAt(t, r.s + 9 + Math.max(0, r.v) * 0.35, aim);
     const want = Math.atan2(look.z - r.z, look.x - r.x);
     const err = Math.atan2(Math.sin(want - r.h), Math.cos(want - r.h));
-    return Math.max(-1, Math.min(1, err * 2.4 - (r.d - aim) * 0.04));
+    const into = r.name === "Ana" && kick ? Math.sign(t.k[pointAt(t, r.s + 10).i]) * kick : 0;
+    return Math.max(-1, Math.min(1, err * 2.4 - (r.d - aim) * 0.04 + into));
   };
   const pilot = async () => {
     while (auto) {
@@ -154,6 +157,7 @@ try {
     }
     const boostsBefore = (await me(a, "Ana")).boosts;
     await a.mouse.move(dx, dy);
+    kick = 0.6;
     await a.mouse.down();
     charged = 0;
     for (let i = 0; i < 30; i++) {
@@ -164,6 +168,7 @@ try {
       if (r.charge >= 1.2 || (!r.drift && i > 8)) break;
     }
     await a.mouse.up();
+    kick = 0;
     await a.waitForTimeout(slow(300));
     drifted = charged >= 1 && (await me(a, "Ana")).boosts > boostsBefore;
     if (!drifted) await a.waitForTimeout(1500);

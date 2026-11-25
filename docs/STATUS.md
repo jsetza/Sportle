@@ -1,6 +1,68 @@
 # Handoff status — 2026-11-22 (Claude session)
 
 
+
+## Kart: track bug sweep and easier, more consistent driving (2026-11-25, owner request)
+
+Checked headless only: bot races, a synthetic "player" that steers like a phone (150 ms reaction delay, small noise), unit tests and headless-Chrome screenshots. **Not yet driven by a person on a real phone**, so the new handling numbers are estimates to confirm with docs/DEVICE_TESTS.md.
+
+**How the tracks were audited.** Every track was raced by 8 bots (with items) and by the synthetic player, logging:
+- wall contacts and where;
+- stalls (under 2 m/s for over 1.5 s);
+- falls and where they happened;
+- respawn spots;
+- karts outside the barriers;
+- checkpoints passed out of order;
+- unfinished races.
+
+Static checks covered road width, bend radius, pads, cubes, ramps, seams, LED boards and cameras. A fall hunt of 48 full races with items (6 per track, Rookie/Club/Pro), plus 25 more on Skyline, ended with no falls, no karts outside the barriers, no stalls and every race finished.
+
+**Bugs found and fixed:**
+- **Walls stopped karts dead (all tracks):** every tick of wall contact cut 10–30 % of the speed, so a kart touching a barrier ground to a halt. This showed as repeated wall hits on Frost Pass's hairpins and Skyline's spiral entry. Walls are now soft:
+  - the push into the wall becomes a small bounce;
+  - the kart turns to slide along the wall;
+  - speed is lost once per contact (12 %, or 28 % head-on), and at least ~45 % is kept.
+- **Frost Pass hairpins were 9–10 m radius:** karts hit the wall there every lap. Both switchbacks are now round, 14–16 m radius on the centre line.
+- **Jungle Trail S-bend was 6–11 m radius:** reshaped to about 12 m.
+- **Roads as narrow as 10.9 m (Beach boardwalk, Skyline, Frost, Jungle, Canyon):** every road is now at least 13 m (`MIN_WIDTH`). Bends tighter than 30 m radius get up to 4 m extra, eased along the track.
+- **Falls at jumps (Beach pier, Jungle river, Skyline rooftops):**
+  - A kart that reached a gap's lip slowly (after a hit or a bump) fell in. The launch check looked at the lip, not the gap the kart was already over. Any kart leaving the road over or just before a gap now gets at least 19 m/s and some lift.
+  - A kart hit by an item mid-jump lost its speed in the air and fell short. Hits in the air now keep the kart's speed, and spinning only slows a kart on the ground.
+- **Jumps on bends (Court Circuit's net jumps at 17–20 m radius, Jungle river at 24 m, Skyline at 43 m) landed wide:** in the air, the kart's direction now follows the road's curve.
+- **LED boards cut off or crooked ("1 F" on Canyon Run, crooked or overflowing text on Stadium Eight):**
+  - The text was snapped to a world axis, so on a slightly angled board it sank into the board or ran off it diagonally. It is now laid along the board at any angle.
+  - The text is sized to fit the board width (`ledSize`).
+- **Chase camera clipping into scenery (hairpins, walls, rock under Frost's switchbacks, buildings):** the chase camera is pulled in so it always stays over the road, inside the barriers (`cameraReach`). The TV-broadcast camera stays above any other part of the track near its post.
+- **A dropped phone's kart could take 6+ s to stop:** it now brakes gently to a stop while waiting.
+- **Not reproduced:** one fall on solid road on Skyline's garage spiral in an early audit run. It didn't happen again in 73 later races, so it isn't explained; watch for it.
+- **Checked and found no problems:** checkpoint and lap counting, respawn positions, item cubes and boost pads (all on the road and over solid ground), karts outside the barriers, and flicker (`find-zfighting.ts`: 0 on all eight tracks).
+
+**Driving changes (same handling on every track):**
+- **Grip:** 9 → 13.
+- **Steering:**
+  - One turn rate at any speed above walking pace (2.0 rad/s at full lock); the old drop-off at high speed is removed.
+  - A gentler steering curve (0.3u + 0.7u²).
+  - Server smoothing of 70 ms (was 50).
+- **Steering assist:** on by default, with a phone setting in Menu → Steering assist, saved per phone. Near the road edges it adds a light pull back toward the middle, at most 0.35 of full lock, fading out away from the edge. Bots don't use it.
+- **Off-road:** 72 % of top speed (was 50 %, with 45–60 % on some tracks). The same on every track.
+- **Surfaces:** ice is still slightly slippery (grip 0.82, was 0.6); dirt is 0.95 (was 0.88).
+- **Bots:** unchanged levels; they gain the same grip and soft walls. In the synthetic-player runs, a non-drifting player finishes among the Club bots.
+
+**Regression checks:**
+- **New `tests/kart-tracks.test.ts` (8 tests):**
+  - Road width, bend radius, no steps in the road surface except ramp lips, no accidental holes, pads and cubes on solid road.
+  - LED text fits every board, and no other road passes through a board.
+  - The chase camera stays inside the barriers and above the road at every 4th sample, also when the kart is turned ±40°.
+  - Soft walls: 35° and near-head-on hits keep speed; steering into a wall slides along it.
+  - The same yaw rate at 8, 15 and 23 m/s.
+  - The assist pulls in from the edge, and switched off it doesn't.
+  - A 7 m/s kart, and a kart hit mid-air, both clear every gap; a kart in a gap respawns on road just past it.
+  - A full bot race with items on every track: no falls, no stalls over 1.5 s, checkpoints in order, at most 8 wall hits.
+- `tests/kart.test.ts`: frost grip check updated; dropped-phone kart stops in time.
+- `scripts/kart-smoke.mjs`: the test autopilot uses the new steering curve and steers into the bend while holding DRIFT. One earlier run had failed to start a drift; after this change it passed 3 of 3 runs.
+- `npm run check` passes (145 tests) and kart-smoke passes. Screenshots of all eight tracks regenerated in `docs/screenshots/kart/`.
+- bowling-smoke currently fails in its start-screen (hub) section, which is being changed separately in `hub.ts`; that isn't Kart code.
+
 ## Kart: eight tracks, each with its own road; music in Bowling and Kart (2026-11-25, owner request)
 
 **Not yet tried on a real phone or a real TV.** Checked with unit tests, headless 8-bot race simulations and headless-Chrome screenshots (synthetic phones).

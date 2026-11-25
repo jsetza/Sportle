@@ -53,12 +53,13 @@ export const PHYS = {
   accel: 13,
   brake: 24,
   reverse: 6,
-  turn: 2.15,
-  grip: 9,
+  // Easier, consistent handling: one turn rate at any speed above walking pace, strong grip.
+  turn: 2.0,
+  grip: 13,
   driftGrip: 3.2,
   gravity: 18,
   boost: 1.3,
-  offroad: 0.5,
+  offroad: 0.72,
   radius: 1.0,
 };
 const LEVEL = {
@@ -86,6 +87,12 @@ type Phys = {
   batted: { kind: ItemKind | "mball"; owner: string; until: number } | null;
   trick: boolean;
   wrongFor: number;
+  /** Steering assist near the road edges (phone setting, on by default). */
+  assist: boolean;
+  /** Seconds left of the current wall contact (one speed loss per contact). */
+  wallT: number;
+  /** Wall contacts so far (tests and tuning). */
+  walls: number;
   /** Countdown start boost: gas pressed early (burnout) or in the window. */
   early: boolean;
   good: boolean;
@@ -237,6 +244,9 @@ function freshPhys(): Phys {
     batted: null,
     trick: false,
     wrongFor: 0,
+    assist: true,
+    wallT: 0,
+    walls: 0,
     early: false,
     good: false,
     stall: 0,
@@ -449,7 +459,7 @@ export function toLobby(k: Kart) {
 export function kartFieldsOk(a: Record<string, unknown>) {
   for (const k of ["hopId", "itemId", "flickId", "shakeId"])
     if (a[k] !== undefined && (!Number.isSafeInteger(a[k]) || (a[k] as number) < 0)) return false;
-  for (const k of ["drift", "back"]) if (a[k] !== undefined && typeof a[k] !== "boolean") return false;
+  for (const k of ["drift", "back", "assist"]) if (a[k] !== undefined && typeof a[k] !== "boolean") return false;
   for (const k of ["mx", "mz"]) if (a[k] === undefined) return false;
   return true;
 }
@@ -463,6 +473,7 @@ export function kartInput(k: Kart, r: Racer, a: Input & Record<string, any>, now
   p.steerIn = clamp(a.mx ?? 0, -1, 1);
   p.throttle = clamp(a.mz ?? 0, -1, 1);
   p.driftHeld = !!a.drift;
+  if (typeof a.assist === "boolean") p.assist = a.assist;
   const racing = k.phase === "race" && !k.paused && !r.finished;
   const fresh = (key: "hop" | "item" | "flick" | "shake", v: unknown) => {
     if (typeof v !== "number" || v <= p.ids[key]) return false;
@@ -625,7 +636,7 @@ export function useItem(k: Kart, r: Racer, back: boolean, aim: number) {
   return true;
 }
 /** A kart is hit by an item. Returns false if it was shielded. */
-function hitKart(k: Kart, r: Racer, kind: ItemKind | "mball", owner: string) {
+export function hitKart(k: Kart, r: Racer, kind: ItemKind | "mball", owner: string) {
   if (r.lift || r.cannon || r.finished) return false;
   if (r.sweet > 0) return false;
   const p = P(r);
@@ -637,6 +648,11 @@ function hitKart(k: Kart, r: Racer, kind: ItemKind | "mball", owner: string) {
     return false;
   }
   r.hits++;
+  // Hit in the air (over a jump): the effect shows, but the kart keeps its speed so it still
+  // reaches the other side of a gap.
+  const keepSpeed = r.air;
+  const v0 = r.v,
+    vy0 = p.vy;
   r.drift = 0;
   r.charge = 0;
   if (kind === "net") {
@@ -661,6 +677,10 @@ function hitKart(k: Kart, r: Racer, kind: ItemKind | "mball", owner: string) {
   } else {
     r.spin = kind === "serve" ? HIT.serve : kind === "mball" ? HIT.machine : HIT.spin;
     r.v *= 0.6;
+  }
+  if (keepSpeed) {
+    r.v = v0;
+    p.vy = Math.max(vy0, p.vy === 5 ? vy0 : p.vy);
   }
   return true;
 }
@@ -842,8 +862,9 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
   const human = !r.bot && !r.botFor && !r.finished;
   if (!human) botDrive(k, t, r);
   else if (!live(r, now)) {
+    // Phone away: brake gently to a stop and wait (never reverses).
     p.steerIn = 0;
-    p.throttle = 0;
+    p.throttle = r.v > 0.3 ? -0.5 : 0;
     p.driftHeld = false;
   }
   if (r.finished && !human) {
@@ -897,7 +918,7 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
     return;
   }
   // Steering: the latest phone value, smoothed a little here too.
-  p.steer += (1 - Math.exp(-DT / 0.05)) * (p.steerIn - p.steer);
+  p.steer += (1 - Math.exp(-DT / 0.07)) * (p.steerIn - p.steer);
   let steer = p.steer;
   let throttle = k.phase === "race" ? p.throttle : 0;
   if (p.stall > 0) {
@@ -909,6 +930,19 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
     steer = 0;
     throttle = 0;
   }
+  // Steering assist (on by default; a phone setting): near the road edges a light pull back
+  // toward the middle. It is small and fades out away from the edge, so a driver steering away
+  // from the edge always wins.
+  if (!r.bot && !r.botFor && p.assist && !spinning && !r.drift && !r.air && r.v > 4 && !p.onCut) {
+    const i = p.hint,
+      half = t.w[i] / 2;
+    const edge = clamp((Math.abs(r.d) - (half - 2.2)) / 2.2, 0, 1);
+    if (edge > 0) {
+      const want = Math.atan2(t.tz[i], t.tx[i]) - Math.sign(r.d) * 0.22;
+      steer = clamp(steer + clamp(angle(want - r.h) * 1.5, -0.35, 0.35) * edge, -1, 1);
+    }
+  }
+  p.wallT = Math.max(0, p.wallT - DT);
   if (r.wobble > 0) steer *= 0.5;
   // Top speed: body, bot level, boosts, surfaces.
   let vmax = PHYS.vmax * body.speed;
@@ -940,7 +974,8 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
     } else r.v -= Math.sign(r.v) * Math.min(Math.abs(r.v), (4 + Math.abs(r.v) * 0.12) * DT);
     if (r.v > vmax) r.v = Math.max(vmax, r.v - 10 * DT);
   }
-  if (spinning) r.v *= Math.exp(-2.2 * DT);
+  // A spin-out slows the kart on the ground only (mid-jump it keeps flying, so it can't fall short).
+  if (spinning && !r.air) r.v *= Math.exp(-2.2 * DT);
   r.v = clamp(r.v, -PHYS.reverse, PHYS.vmax * 1.6);
   // Drift: hold the button while steering; charge builds while you lean into it.
   if (r.drift) {
@@ -962,18 +997,24 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
     r.charge = 0;
   }
   // Turning.
-  const speedK = clamp(Math.abs(r.v) / 7, 0, 1) * (r.v < 0 ? -1 : 1);
+  const speedK = clamp(Math.abs(r.v) / 5, 0, 1) * (r.v < 0 ? -1 : 1);
   let yawRate: number;
   // Drifting: always turning into the drift; steering into it tightens the arc, counter-steering
   // widens it to a gentle arc (about 80 m radius at full speed).
   if (r.drift) yawRate = r.drift * (0.12 + 0.75 * ((steer * r.drift + 1) / 2)) * PHYS.turn * body.handling;
-  else yawRate = steer * PHYS.turn * body.handling * speedK * (r.air ? 0.4 : 1) * (1 - Math.min(0.35, Math.abs(r.v) / 120));
+  else yawRate = steer * PHYS.turn * body.handling * speedK * (r.air ? 0.4 : 1);
   if (!spinning) r.h = angle(r.h + yawRate * DT);
   // Travel direction follows the nose; drifting slides more.
   // Ice and dirt grip less: the kart slides wider and drifts more.
   const tg = t.def.grip ?? 1;
   const grip = r.drift ? PHYS.driftGrip * (0.6 + 0.4 * tg) : r.air ? 0.8 : PHYS.grip * tg;
   p.m = angle(p.m + angle(r.h - p.m) * (1 - Math.exp(-grip * DT)));
+  // In the air, the kart follows the road's curve (jumps on a bend land on the road).
+  if (r.air && !p.onCut && t.ground[p.hint]) {
+    const turn = t.k[p.hint] * Math.abs(r.v) * DT;
+    p.m = angle(p.m + turn);
+    r.h = angle(r.h + turn);
+  }
   r.x += Math.cos(p.m) * r.v * DT;
   r.z += Math.sin(p.m) * r.v * DT;
   // Visual yaw: drift slip and spin-outs.
@@ -1091,14 +1132,28 @@ function handleWalls(t: Track, r: Racer, p: Phys, at: ReturnType<typeof locateOn
     vz = Math.sin(p.m) * r.v;
   const vn = vx * nx * side + vz * nz * side;
   if (vn > 0) {
-    vx -= 1.5 * vn * nx * side;
-    vz -= 1.5 * vn * nz * side;
-    const sp = Math.hypot(vx, vz);
-    p.m = Math.atan2(vz, vx);
-    r.v = Math.sign(r.v || 1) * sp * (vn > 6 ? 0.7 : 0.9);
-    if (r.v > 0 && Math.cos(r.h - p.m) < 0.2) r.h = angle(r.h + angle(p.m - r.h) * 0.5);
-    r.drift = 0;
-    r.charge = 0;
+    // Soft barrier: the push into the wall becomes a small bounce, the speed along the wall is
+    // kept, and the kart turns to slide along it. Speed is lost once per contact (not every
+    // tick), and never more than ~40 %, so a kart can't stop dead or grind to a halt on a wall.
+    const fresh = p.wallT <= 0;
+    p.wallT = 0.3;
+    if (fresh) p.walls++;
+    const speed = Math.abs(r.v);
+    vx -= 1.15 * vn * nx * side;
+    vz -= 1.15 * vn * nz * side;
+    const along = Math.hypot(vx, vz);
+    // Slide direction: along the wall, the way the kart was already going.
+    const tx = -nz * side,
+      tz = nx * side;
+    const dir = vx * tx + vz * tz >= 0 ? 1 : -1;
+    p.m = along > 0.5 ? Math.atan2(vz, vx) : Math.atan2(tz * dir, tx * dir);
+    const keep = fresh ? (vn > 8 ? 0.72 : 0.88) : 1;
+    r.v = Math.sign(r.v || 1) * Math.max(along, speed * 0.6) * keep;
+    if (r.v > 0) r.h = angle(r.h + angle(p.m - r.h) * 0.6);
+    if (vn > 8) {
+      r.drift = 0;
+      r.charge = 0;
+    }
   }
   r.d = side * limit;
 }
@@ -1115,6 +1170,17 @@ function ground(k: Kart, t: Track, r: Racer, p: Phys, at: ReturnType<typeof loca
       r.air = true;
       p.airFor = 0;
       r.y = ny;
+      // Leaving a ramp lip with a gap ahead (river, canyon, pier, rooftops): a slowed kart
+      // still gets enough speed and lift to clear it, so a hit before a jump isn't a fall.
+      // (Also a kart creeping off the lip: it is already over the gap when it leaves the road.)
+      if (!p.onCut) {
+        let gapAhead = !t.ground[at.i];
+        for (let q = 1; q < 16 && !gapAhead; q++) gapAhead = !t.ground[(at.i + q) % t.n];
+        if (gapAhead && r.v >= 0) {
+          r.v = Math.max(r.v, 19);
+          p.vy = Math.max(p.vy, 4.5);
+        }
+      }
     }
   } else {
     p.airFor += DT;

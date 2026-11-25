@@ -57,12 +57,18 @@ try {
   assert.equal(await tv.locator("#playBowling").getAttribute("href"), "/bowling");
   await tv.keyboard.press("ArrowRight");
   await tv.locator("#playBowling.active").waitFor();
+  // The picked game's own scene fills the screen above the strip, with its name and Play.
+  assert.equal((await tv.locator("#hubName").textContent()).trim(), "Bowling");
+  await tv.locator("#hubStage .hubscene.on").waitFor({ state: "visible" });
+  const [stripH, screenH] = await tv.evaluate(() => [document.querySelector(".hubstrip").getBoundingClientRect().height, innerHeight]);
+  assert.ok(stripH <= screenH / 6 + 1, `game strip takes at most a sixth of the screen: ${stripH} of ${screenH}`);
+  assert.equal(await tv.locator("#joinAt").count(), 0, "no 'Phones join at' label");
   if (SHOTS) {
     await tv.waitForTimeout(700);
     await tv.screenshot({ path: SHOTS + "/hub.png" });
   }
   await tv.keyboard.press("Enter");
-  await tv.waitForURL(/\/bowling$/);
+  await tv.waitForURL(/\/bowling$/, { waitUntil: "commit" });
   // Coming back from Bowling skips the intro and goes straight to the picker.
   await tv.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "domcontentloaded" });
   await tv.locator("#hubPick").waitFor({ state: "visible" });

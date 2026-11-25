@@ -1,6 +1,12 @@
 // Sportle start screen (owner request): a short "Welcome to Sportle" intro, then a big
-// side-scrolling game picker (swipe, scroll, arrow keys or the ‹ › buttons; Enter plays).
-// Purely front-end; the 3D arena keeps running behind it.
+// game picker: a strip of games along the bottom (swipe, scroll, arrow keys or ‹ ›; Enter plays),
+// with the chosen game's own 3D scene filling the screen above it.
+
+import type { Scene } from "./scene.ts";
+import { BowlScene } from "./bowlscene.ts";
+import { KartScene } from "./kartscene.ts";
+import { LANES } from "../shared/bowling.ts";
+import { TRACKS } from "../shared/kart.ts";
 
 const PICKLE_ART = `<svg viewBox="0 0 320 200" aria-hidden="true">
   <defs><linearGradient id="hpFloor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a0d18"/><stop offset="1" stop-color="#b3213b"/></linearGradient></defs>
@@ -100,7 +106,13 @@ export interface Hub {
  * Builds the start screen into `root`. `intro` plays the welcome animation first (skipped
  * after the first time in a browser tab). `onPickleball` runs when Pickleball is chosen.
  */
-export function mountHub(root: HTMLElement, opts: { intro: boolean; startOpen: boolean; onPickleball: () => void }): Hub {
+export function mountHub(root: HTMLElement, opts: {
+    intro: boolean;
+    startOpen: boolean;
+    onPickleball: () => void;
+    /** true: the arena behind the start screen is on show (keep it rendering); false: another game's scene covers it (pause it). */
+    backdrop?: (main: boolean) => void;
+  }): Hub {
   const word = ["S", "P", "O", "R", "T"].map((c, i) => `<b style="--i:${i}">${c}</b>`).join("") +
     ["L", "E"].map((c, i) => `<span style="--i:${i + 5}">${c}</span>`).join("");
   const el = document.createElement("div");
@@ -114,42 +126,130 @@ export function mountHub(root: HTMLElement, opts: { intro: boolean; startOpen: b
     <p class="hi-press">Press any key or tap to start</p>
   </div>
   <div class="hubpick" id="hubPick">
-    <div class="hubhead"><h2>Pick a game</h2><p>Swipe or scroll · ← → to browse · Enter to play</p></div>
-    <div class="hubstage">
+    <div class="hubstage" id="hubStage" aria-hidden="true"></div>
+    <div class="hubfeature" id="hubFeature" aria-live="polite">
+      <p class="hf-kicker">Sportle</p>
+      <h2 class="hf-name" id="hubName"></h2>
+      <p class="hf-line" id="hubLine"></p>
+      <p class="hf-who" id="hubWho"></p>
+      <button class="hf-go" id="hubGo">Play <span>▶</span></button>
+      <p class="hf-hint">← → to browse · Enter to play</p>
+    </div>
+    <div class="hubstrip">
+      <button class="hubarrow prev" id="hubPrev" aria-label="Previous game">‹</button>
       <div class="hubrail" id="hubRail" role="list" aria-label="Sportle games">
         ${CARDS.map(
           (c, i) =>
-            `<${c.tag} class="hubcard ${c.cls}" id="${c.id}" role="listitem" style="--k:${i}"${c.href ? ` href="${c.href}"` : ""}${c.tag === "div" ? ' aria-disabled="true"' : ""}>
+            `<${c.tag} class="hubcard ${c.cls}" id="${c.id}" role="listitem" style="--k:${i}" aria-label="${c.name}"${c.href ? ` href="${c.href}"` : ""}${c.tag === "div" ? ' aria-disabled="true"' : ""}>
               <span class="hc-art">${c.art}</span>
-              <span class="hc-text"><strong>${c.name}</strong><small>${c.line}</small><em>${c.who}</em></span>
-              ${c.tag === "div" ? "" : '<span class="hc-go">Play ▶</span>'}
+              <strong class="hc-name">${c.name}</strong>
             </${c.tag}>`,
         ).join("")}
       </div>
+      <button class="hubarrow next" id="hubNext" aria-label="Next game">›</button>
     </div>
-    <div class="hubnav"><button class="hubarrow prev" id="hubPrev" aria-label="Previous game">‹</button><div class="hubdots" id="hubDots">${CARDS.map((_, i) => `<i data-k="${i}"></i>`).join("")}</div><button class="hubarrow next" id="hubNext" aria-label="Next game">›</button></div>
   </div>`;
   root.appendChild(el);
   const rail = el.querySelector<HTMLElement>("#hubRail")!;
   const cards = Array.from(rail.querySelectorAll<HTMLElement>(".hubcard"));
-  const dots = Array.from(el.querySelectorAll<HTMLElement>("#hubDots i"));
+  const stage = el.querySelector<HTMLElement>("#hubStage")!;
   let active = 0;
   let isOpen = false;
   let introTimer = 0;
 
+  // ——— Backdrop: the chosen game's own 3D scene fills the screen behind the picker ———
+  // Pickleball (and "More soon") show the arena that already runs behind the start screen.
+  // Bowling and Kart scenes are built the first time they are picked, on their own canvas;
+  // only the one on screen keeps rendering. Each pick of Kart shows the next track.
+  type Preview = { wrap: HTMLElement; scene: Scene; next?: () => void };
+  const previews: Partial<Record<"bowl" | "kart", Preview | null>> = {};
+  let shown: "bowl" | "kart" | null = null;
+  let kartTrack = -1;
+  let laneNo = -1;
+  const pause = (p: Preview) => cancelAnimationFrame(p.scene.raf);
+  const preview = (game: "bowl" | "kart"): Preview | null => {
+    if (previews[game] !== undefined) return previews[game]!;
+    const wrap = document.createElement("div");
+    wrap.className = "hubscene";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    stage.appendChild(wrap);
+    try {
+      if (game === "bowl") {
+        const scene = new BowlScene(canvas);
+        previews.bowl = { wrap, scene, next: () => scene.setLane(LANES[(laneNo = (laneNo + 1) % LANES.length)].id) };
+      } else {
+        const scene = new KartScene(canvas);
+        previews.kart = { wrap, scene, next: () => scene.setTrack(TRACKS[(kartTrack = (kartTrack + 1) % TRACKS.length)].id) };
+      }
+    } catch {
+      // No WebGL for a second scene (old TV browser): keep the card art instead.
+      wrap.remove();
+      previews[game] = null;
+    }
+    return previews[game]!;
+  };
+  const backdrop = (k: number) => {
+    const cls = CARDS[k].cls;
+    const want = isOpen && (cls === "bowl" || cls === "kart") ? cls : null;
+    if (want === shown && want) return;
+    for (const g of ["bowl", "kart"] as const) {
+      const p = previews[g];
+      if (p && g !== want) {
+        pause(p);
+        p.wrap.classList.remove("on");
+      }
+    }
+    shown = want;
+    el.dataset.game = cls;
+    opts.backdrop?.(!want);
+    if (!want) return;
+    const p = preview(want);
+    if (!p) {
+      el.dataset.game = cls + " noscene";
+      return;
+    }
+    p.next?.();
+    pause(p);
+    p.scene.render();
+    p.wrap.classList.add("on");
+  };
+
   const setActive = (k: number) => {
+    const changed = k !== active || !el.dataset.game;
     active = k;
     cards.forEach((c, i) => c.classList.toggle("active", i === k));
-    dots.forEach((d, i) => d.classList.toggle("on", i === k));
+    const c = CARDS[k];
+    el.querySelector("#hubName")!.textContent = c.name;
+    el.querySelector("#hubLine")!.textContent = c.line;
+    el.querySelector("#hubWho")!.textContent = c.who;
+    el.querySelector<HTMLButtonElement>("#hubGo")!.hidden = c.tag === "div";
+    if (changed) {
+      const f = el.querySelector<HTMLElement>("#hubFeature")!;
+      f.classList.remove("hf-in");
+      void f.offsetWidth;
+      f.classList.add("hf-in");
+    }
+    if (changed && el.classList.contains("pick")) backdrop(k);
   };
   const goTo = (k: number, smooth = true) => {
     k = Math.max(0, Math.min(cards.length - 1, k));
     const c = cards[k];
+    // While the strip glides to the chosen card, the scroll position must not re-pick the cards
+    // it passes on the way (that would flash the previous game's scene): the pick holds until
+    // the strip arrives, or the player grabs the strip.
+    target = k;
+    targetUntil = performance.now() + 3000;
     rail.scrollTo({ left: c.offsetLeft + c.offsetWidth / 2 - rail.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
     setActive(k);
   };
-  // The card nearest the middle of the rail is the chosen one.
+  // After a swipe or scroll by hand, the card nearest the middle of the strip is the chosen one.
   let raf = 0;
+  let target: number | null = null;
+  let targetUntil = 0;
+  const byHand = () => (target = null);
+  rail.addEventListener("pointerdown", byHand);
+  rail.addEventListener("touchstart", byHand, { passive: true });
   rail.addEventListener("scroll", () => {
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(() => {
@@ -158,6 +258,10 @@ export function mountHub(root: HTMLElement, opts: { intro: boolean; startOpen: b
       cards.forEach((c, i) => {
         if (Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid) < Math.abs(cards[best].offsetLeft + cards[best].offsetWidth / 2 - mid)) best = i;
       });
+      if (target !== null) {
+        if (best === target || performance.now() > targetUntil) target = null;
+        return;
+      }
       if (best !== active) setActive(best);
     });
   });
@@ -194,7 +298,7 @@ export function mountHub(root: HTMLElement, opts: { intro: boolean; startOpen: b
   );
   el.querySelector<HTMLElement>("#hubPrev")!.onclick = () => goTo(active - 1);
   el.querySelector<HTMLElement>("#hubNext")!.onclick = () => goTo(active + 1);
-  dots.forEach((d, i) => (d.onclick = () => goTo(i)));
+  el.querySelector<HTMLElement>("#hubGo")!.onclick = () => launch(active);
 
   const toPicker = () => {
     clearTimeout(introTimer);
@@ -205,6 +309,7 @@ export function mountHub(root: HTMLElement, opts: { intro: boolean; startOpen: b
       sessionStorage.setItem("sportle-intro", "1");
     } catch {}
     requestAnimationFrame(() => goTo(active, false));
+    backdrop(active);
     (cards[active] as HTMLElement).focus({ preventScroll: true });
   };
   el.querySelector<HTMLElement>("#hubIntro")!.addEventListener("pointerdown", toPicker);
@@ -237,11 +342,13 @@ export function mountHub(root: HTMLElement, opts: { intro: boolean; startOpen: b
       if (!el.classList.contains("intro")) {
         el.classList.add("pick");
         requestAnimationFrame(() => goTo(active, false));
+        backdrop(active);
       }
     },
     hide() {
       isOpen = false;
       clearTimeout(introTimer);
+      backdrop(active);
       document.body.classList.remove("hub-open");
       el.classList.add("hidden");
       el.classList.remove("intro");

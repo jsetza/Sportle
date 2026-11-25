@@ -616,7 +616,7 @@ test("tracks: eight tracks, each with its own road, a racing line, cubes, pads, 
   assert.ok(track("neon").def.pins, "neon has moving pins");
   assert.ok(track("jungle").ground.some((g) => !g), "jungle has the river jump");
   assert.ok(track("canyon").ground.some((g) => !g), "canyon has the canyon jump");
-  assert.ok((track("frost").def.grip ?? 1) < 0.8, "frost is icy");
+  assert.ok((track("frost").def.grip ?? 1) < 0.9 && (track("frost").def.grip ?? 1) > 0.75, "frost ice: slightly slippery, still easy");
   // Stadium Eight crosses itself: two parts of the lap at the same spot, one on the bridge above.
   const st = track("stadium");
   let crossing = false;

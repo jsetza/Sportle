@@ -108,7 +108,7 @@ const BALL_HOLES: number[][] = Array.from({ length: 40 }, (_, i) => {
 });
 export const teamColor = (team: number) => (team ? palette.red : palette.blue);
 /** 5×7 pixel letters for the arena boards (original lettering, drawn with boxes). */
-const GLYPHS: Record<string, string[]> = {
+export const GLYPHS: Record<string, string[]> = {
   V: ["10001", "10001", "10001", "10001", "01010", "01010", "00100"],
   P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
   O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],

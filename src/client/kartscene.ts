@@ -5,11 +5,11 @@
  * and adds effects (sparks, glow, replays). Split screen: one view per local driver (2 = side
  * by side, 3–4 = quadrants) or one shared view following the leader.
  */
-import { Scene, camera, palette } from "./scene.ts";
+import { GLYPHS, Scene, camera, palette } from "./scene.ts";
 import { lightingFor } from "./maps.ts";
 import type { Lighting } from "./renderer.ts";
 import type { ViewDraw } from "./renderer.ts";
-import { DRIFT_LEVELS, driftLevel, pointAt, track } from "../shared/kart.ts";
+import { DRIFT_LEVELS, boardWidth, cameraReach, driftLevel, ledSize, pointAt, roadTop, track } from "../shared/kart.ts";
 import type { Kart, Racer, Shot, Track, TrackId } from "../shared/kart.ts";
 import { PADDLES, clamp } from "../shared/types.ts";
 
@@ -1013,7 +1013,9 @@ export class KartScene extends Scene {
       const at = Math.round(r.s / step) * step;
       const side = Math.floor(at / step) % 2 ? 1 : -1;
       const post = pointAt(t, at + 18, side * (pointAt(t, at, 0).w / 2 + t.def.verge + 10));
-      goal = { eye: [post.x, post.y + 8, post.z], target: [pos.x, pos.y + 0.8, pos.z], fov: 38 };
+      // Above any other level of the track or terrain near the post.
+      const top = Math.max(post.y, roadTop(t, post.x, post.z));
+      goal = { eye: [post.x, top + 8, post.z], target: [pos.x, pos.y + 0.8, pos.z], fov: 38 };
     } else {
       const far = key === "shared" ? 1.5 : 1;
       const boost = r.boost > 0 ? 0.6 : 0;
@@ -1035,6 +1037,12 @@ export class KartScene extends Scene {
       const e = 1 - Math.exp(-dt * 6);
       const jump = Math.hypot(prev.eye[0] - goal.eye[0], prev.eye[2] - goal.eye[2]) > 30;
       if (!jump) goal = { eye: goal.eye, target: prev.target.map((v, i) => lerp(v, goal.target[i], e)), fov: goal.fov };
+    }
+    // Chase cameras never leave the road corridor (no clipping into walls, rock or buildings).
+    if (mode === "chase" && !r.lift) {
+      const from = [pos.x, pos.y + 1.2, pos.z];
+      const f = cameraReach(t, r.s, from, goal.eye);
+      if (f < 1) goal = { ...goal, eye: goal.eye.map((v, i) => from[i] + (v - from[i]) * f) };
     }
     this.cams.set(key, goal);
     return goal;
@@ -1127,16 +1135,9 @@ export class KartScene extends Scene {
       const msg = k.phase === "countdown" ? "GET READY" : top.map((r) => `${r.place} ${r.name.toUpperCase().slice(0, 6)}`).join("  ");
       for (const g of t.def.gantries) {
         const pt = pointAt(t, g * t.L, 0);
-        // Face the oncoming karts: text runs across the road on the near side of the board.
-        const nx = -t.tz[pt.i],
-          nz = t.tx[pt.i];
-        const size = 0.16;
-        const width = this.text(msg, 0, 0, 0, size, 1, 0, palette.gold, false);
-        const sx = pt.x - nx * (width / 2) - t.tx[pt.i] * 0.27,
-          sz = pt.z - nz * (width / 2) - t.tz[pt.i] * 0.27;
+        // On the face toward the oncoming karts, along the board whatever its angle, sized to fit.
         this.material(0.1, 2);
-        if (Math.abs(nx) > Math.abs(nz)) this.text(msg, sx, pt.y + 6.05, sz, size, Math.sign(nx), 0, palette.gold);
-        else this.text(msg, sx, pt.y + 6.05, sz, size, 0, Math.sign(nz), palette.gold);
+        this.ledText(msg, pt.x - t.tx[pt.i] * 0.27, pt.y + 6.6, pt.z - t.tz[pt.i] * 0.27, -t.tz[pt.i], t.tx[pt.i], ledSize(msg, boardWidth(t, g)), palette.gold);
         this.material(0.15);
       }
       // Time trial ghost: the best lap, glowing.
@@ -1237,6 +1238,32 @@ export class KartScene extends Scene {
       el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%) scale(${scale.toFixed(2)})`;
       el.style.display = "";
       seen.add(key);
+    }
+  }
+  /** Pixel text centred at (x, y, z), reading along (dx, dz) (any angle), facing along the road. */
+  ledText(msg: string, x: number, y: number, z: number, dx: number, dz: number, size: number, col: number[]) {
+    let units = 0;
+    for (const ch of msg) units += ch === " " ? 3 : (GLYPHS[ch]?.[0].length ?? 5) + 1;
+    let cursor = -units / 2;
+    const ry = Math.atan2(dz, -dx); // the box's local x runs along the reading direction
+    for (const ch of msg) {
+      if (ch === " ") {
+        cursor += 3;
+        continue;
+      }
+      const g = GLYPHS[ch];
+      if (!g) {
+        cursor += 6;
+        continue;
+      }
+      g.forEach((row, r) =>
+        [...row].forEach((bit, c) => {
+          if (bit !== "1") return;
+          const u = (cursor + c + 0.5 + (6 - r) * 0.22) * size;
+          this.box(x + dx * u, y + (3 - r) * size, z + dz * u, size * 0.92, size * 0.92, 0.03, col, 0, 0, ry);
+        }),
+      );
+      cursor += g[0].length + 1;
     }
   }
   /** Start the slow-motion finish replay for a driver. */

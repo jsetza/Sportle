@@ -225,8 +225,8 @@ export const TRACKS: TrackDef[] = [
     verge: 3,
     ground: "snow",
     road: { surface: "ice", kerb: "iceblocks", barrier: "snowbank" },
-    grip: 0.6,
-    offroad: 0.45,
+    // Slightly slippery, still easy.
+    grip: 0.82,
     pts: [
       [-70, -52, 0, 13],
       [-20, -56, 0, 13],
@@ -234,12 +234,22 @@ export const TRACKS: TrackDef[] = [
       [62, -38, 2.5, 12],
       [78, -16, 4, 11],
       [62, 0, 5.5, 11],
+      // First switchback: a round hairpin (about 16 m radius) between the two legs.
       [24, 4, 7, 11],
-      [2, 16, 8.5, 11],
-      [18, 32, 10, 11],
-      [52, 36, 12, 11],
-      [74, 54, 14, 12],
-      [44, 72, 15, 12],
+      [8, 5, 7.4, 11],
+      [-3, 10, 7.8, 11],
+      [-6, 18, 8.4, 11],
+      [-3, 26, 9, 11],
+      [8, 31, 9.5, 11],
+      [24, 33, 10, 11],
+      // Second switchback up to the summit, also round.
+      [50, 36, 12, 11],
+      [64, 41, 12.8, 12],
+      [75, 48, 13.4, 12],
+      [79, 58, 14, 12],
+      [74, 68, 14.6, 12],
+      [62, 74, 15, 12],
+      [44, 75, 15, 12],
       [2, 66, 13, 12],
       [-40, 58, 9, 12],
       [-76, 34, 5, 13],
@@ -265,8 +275,7 @@ export const TRACKS: TrackDef[] = [
     verge: 3.5,
     ground: "jungle",
     road: { surface: "dirt", kerb: "rocks", barrier: "logs" },
-    grip: 0.88,
-    offroad: 0.6,
+    grip: 0.95,
     water: true,
     pts: [
       [-80, -42, 0, 12],
@@ -275,9 +284,12 @@ export const TRACKS: TrackDef[] = [
       [40, -56, 0, 11],
       [76, -42, 0, 12],
       [86, -6, 0, 11],
-      [60, 14, 0, 11],
-      [72, 44, 0, 11],
-      [40, 62, 0, 12],
+      [74, 8, 0, 11],
+      [64, 20, 0, 11],
+      [67, 33, 0, 11],
+      [70, 45, 0, 11],
+      [62, 57, 0, 11],
+      [44, 63, 0, 12],
       [4, 50, 0.5, 12],
       [-30, 64, 0, 11],
       [-62, 52, 0, 11],
@@ -340,7 +352,6 @@ export const TRACKS: TrackDef[] = [
     verge: 5,
     ground: "desert",
     road: { surface: "sandstone", kerb: "rocks", barrier: "boulders" },
-    offroad: 0.55,
     pts: [
       [-92, -44, 0, 13],
       [-40, -48, 0, 13],
@@ -407,6 +418,8 @@ export interface Track {
   /** Distance of the start/finish line. */
   S0: number;
 }
+/** Narrowest road anywhere (metres). */
+export const MIN_WIDTH = 13;
 /** Control points are drawn on a small grid, then scaled up to race size. */
 export const TRACK_SCALE = 1.25;
 const cr = (p0: number, p1: number, p2: number, p3: number, t: number) =>
@@ -457,6 +470,15 @@ export function buildTrack(def: TrackDef, step = 1.5): Track {
       b = (i + 3) % n;
     const turn = Math.atan2(tx[a] * tz[b] - tz[a] * tx[b], tx[a] * tx[b] + tz[a] * tz[b]);
     k[i] = turn / (6 * step);
+  }
+  // Roads are at least MIN_WIDTH wide, and wider through tight bends (up to +4 m on a hairpin),
+  // eased along the track so the edges stay smooth.
+  const extra = new Float64Array(n);
+  for (let i = 0; i < n; i++) extra[i] = clamp((Math.abs(k[i]) * 30 - 1) * 4, 0, 4);
+  for (let i = 0; i < n; i++) {
+    let e = 0;
+    for (let q = -10; q <= 10; q++) e = Math.max(e, extra[(i + q + n) % n] * (1 - Math.abs(q) / 11));
+    ws[i] = Math.max(MIN_WIDTH, ws[i]) + e;
   }
   const y = Float64Array.from(ys),
     ground = new Uint8Array(n).fill(1);
@@ -970,7 +992,8 @@ export class SteerReader {
     const ax = Math.abs(x);
     if (ax <= DEAD_ZONE) return 0;
     const u = (ax - DEAD_ZONE) / (1 - DEAD_ZONE);
-    x = Math.sign(x) * clamp(0.35 * u + 0.65 * u * u, 0, 1);
+    // Gentle curve: fine control around the centre, full lock at the end of the range.
+    x = Math.sign(x) * clamp(0.3 * u + 0.7 * u * u, 0, 1);
     return x;
   }
   /** Feed one orientation reading (world-up in device axes) at time `t` (ms). */
@@ -1035,6 +1058,41 @@ export class GestureReader {
     }
     return null;
   }
+}
+/** Width of a message on an LED board in pixel units (scene.ts pixel font). */
+export function ledUnits(msg: string) {
+  let u = 0;
+  for (const c of msg) u += c === " " ? 3 : c === "I" ? 4 : c === ">" ? 5 : c === "|" || c === "!" ? 1.6 : 6;
+  return u;
+}
+/** LED board width over the road at a gantry (metres). */
+export const boardWidth = (t: Track, at: number) => {
+  const p = pointAt(t, at * t.L, 0);
+  return (p.w / 2 + t.def.verge + 1.2) * 2 + 0.5;
+};
+/** Pixel size so a message fits on a board with a margin (never larger than 0.16 m). */
+export const ledSize = (msg: string, width: number) => Math.min(0.16, (width * 0.9) / Math.max(1, ledUnits(msg) + 1.5));
+/**
+ * Chase-camera safety: how far (0..1) along from the kart to the wanted eye position the camera
+ * can go and stay over this part of the road (inside the barriers, above the road), so it never
+ * ends up inside a wall, a rock face, a building or another level of the track.
+ */
+export function cameraReach(t: Track, s: number, from: number[], eye: number[]) {
+  const hint = pointAt(t, s).i;
+  for (let f = 1; f > 0.25; f -= 0.075) {
+    const x = from[0] + (eye[0] - from[0]) * f,
+      y = from[1] + (eye[1] - from[1]) * f,
+      z = from[2] + (eye[2] - from[2]) * f;
+    const w = locate(t, x, z, y, hint, 12);
+    if (Math.abs(w.d) <= t.w[w.i] / 2 + t.def.verge - 0.3 && y >= w.y + 0.8) return f;
+  }
+  return 0.25;
+}
+/** Highest road near a point (for trackside cameras: stay above other levels and terrain). */
+export function roadTop(t: Track, x: number, z: number, r = 24) {
+  let top = -Infinity;
+  for (let i = 0; i < t.n; i += 2) if ((t.x[i] - x) ** 2 + (t.z[i] - z) ** 2 < r * r) top = Math.max(top, t.y[i]);
+  return top;
 }
 /** Ordinal place text: 1st, 2nd, 3rd, 4th… */
 export const ordinal = (n: number) =>

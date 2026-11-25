@@ -89,7 +89,7 @@ else tv();
 // ——————————————————————————— TV ———————————————————————————
 function tv() {
   app.innerHTML = `<canvas id="court" aria-label="3D bowling lane"></canvas>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Ball cam</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to bowl</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span></span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Ball cam</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to bowl</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="Sportle"><span><b>SPORT</b>LE</span><i></i></div>
   <p class="tagline">Bowling. <b>Your phone is the ball.</b></p>
@@ -192,7 +192,6 @@ function tv() {
     .then((r) => r.json())
     .then((c) => {
       publicOrigin = c.publicOrigin;
-      $("joinAt").textContent = c.publicOrigin ? "Phones join at " + new URL(c.publicOrigin).host : "Desktop preview · phones need the public HTTPS link";
     })
     .catch(() => {});
   // ——— Room ———

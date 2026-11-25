@@ -120,7 +120,7 @@ else tv();
 // ——————————————————————————— TV ———————————————————————————
 function tv() {
   app.innerHTML = `<canvas id="court" aria-label="3D kart track"></canvas>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Chase</button><button class="link" id="layout" title="Split screen or one shared view">Screen: Split</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to drive</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span></span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Chase</button><button class="link" id="layout" title="Split screen or one shared view">Screen: Split</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to drive</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="Sportle"><span><b>SPORT</b>LE</span><i></i></div>
   <p class="tagline">Kart. <b>Your phone is the wheel.</b></p>
@@ -229,7 +229,6 @@ function tv() {
     .then((r) => r.json())
     .then((c) => {
       publicOrigin = c.publicOrigin;
-      $("joinAt").textContent = c.publicOrigin ? "Phones join at " + new URL(c.publicOrigin).host : "Desktop preview · phones need the public HTTPS link";
       if (net.room) pairing();
     })
     .catch(() => {});
@@ -538,7 +537,7 @@ function phone() {
   <button class="kbtn item" id="itemBtn"><span id="pItem"></span><b>ITEM</b><small id="pItemName">tap = forward</small></button>
   <div class="kcallp hidden" id="pCall"></div>
 </div>
-<dialog id="menu" class="kmenu"><h2>Menu</h2><button class="cta" id="pauseRace">Pause race</button><p class="fine" id="pauseNote"></p><div class="optrow"><span>Steering</span><div class="seg" id="sensSeg"><button data-v="gentle">Gentle</button><button data-v="normal">Normal</button><button data-v="sharp">Sharp</button></div></div><div class="optrow"><span>Gas</span><div class="seg" id="gasSeg"><button data-v="auto">Automatic</button><button data-v="tilt">Tilt to drive</button></div></div><p class="fine">Tilt to drive: top edge away from you = gas, toward you = brake/reverse.</p><button class="link" id="recenter">Set the centre again</button><button class="link" id="redo">Set up steering again</button><button class="ghost" id="menuClose">Back to the race</button></dialog>
+<dialog id="menu" class="kmenu"><h2>Menu</h2><button class="cta" id="pauseRace">Pause race</button><p class="fine" id="pauseNote"></p><div class="optrow"><span>Steering</span><div class="seg" id="sensSeg"><button data-v="gentle">Gentle</button><button data-v="normal">Normal</button><button data-v="sharp">Sharp</button></div></div><div class="optrow"><span>Steering assist</span><div class="seg" id="assistSeg"><button data-v="on">On</button><button data-v="off">Off</button></div></div><p class="fine">Assist: a light pull back toward the middle of the road near its edges.</p><div class="optrow"><span>Gas</span><div class="seg" id="gasSeg"><button data-v="auto">Automatic</button><button data-v="tilt">Tilt to drive</button></div></div><p class="fine">Tilt to drive: top edge away from you = gas, toward you = brake/reverse.</p><button class="link" id="recenter">Set the centre again</button><button class="link" id="redo">Set up steering again</button><button class="ghost" id="menuClose">Back to the race</button></dialog>
 </div><div id="error" role="alert"></div></div>`;
   document.body.classList.add("controller", "kartphone");
   const PROFILE = "sportle-kart";
@@ -570,6 +569,7 @@ function phone() {
   const gestures = new GestureReader();
   reader.sensitivity = (["gentle", "normal", "sharp"].includes(localStorage.getItem("kart-sens") || "") ? localStorage.getItem("kart-sens") : "normal") as Sensitivity;
   let gas: "auto" | "tilt" = localStorage.getItem("kart-gas") === "tilt" ? "tilt" : "auto";
+  let assist = localStorage.getItem("kart-assist") !== "off";
   let up: [number, number, number] = [0, 1, 0];
   let enabled = false,
     enabledAt = 0,
@@ -844,6 +844,7 @@ function phone() {
   const syncMenu = () => {
     document.querySelectorAll<HTMLButtonElement>("#sensSeg button").forEach((b) => b.classList.toggle("on", b.dataset.v === reader.sensitivity));
     document.querySelectorAll<HTMLButtonElement>("#gasSeg button").forEach((b) => b.classList.toggle("on", b.dataset.v === gas));
+    document.querySelectorAll<HTMLButtonElement>("#assistSeg button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "on") === assist));
     const solo = !!state && state.racers.filter((r) => !r.bot).length === 1;
     ($("pauseRace") as HTMLButtonElement).disabled = !solo;
     $("pauseRace").textContent = state?.paused ? "Resume race" : "Pause race";
@@ -868,6 +869,14 @@ function phone() {
       (b.onclick = () => {
         gas = b.dataset.v === "tilt" ? "tilt" : "auto";
         localStorage.setItem("kart-gas", gas);
+        syncMenu();
+      }),
+  );
+  document.querySelectorAll<HTMLButtonElement>("#assistSeg button").forEach(
+    (b) =>
+      (b.onclick = () => {
+        assist = b.dataset.v === "on";
+        localStorage.setItem("kart-assist", assist ? "on" : "off");
         syncMenu();
       }),
   );
@@ -1000,6 +1009,7 @@ function phone() {
       mx: ready ? reader.value : 0,
       mz: ready ? throttle : 0,
       drift: driftHeld && !countdown,
+      assist,
       hopId,
       itemId,
       back: backNext,
