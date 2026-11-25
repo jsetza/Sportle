@@ -29,8 +29,7 @@ import type { Input } from "../shared/types.ts";
 import { BowlScene, BOWL_VIEW_LABELS } from "./bowlscene.ts";
 import type { BowlView } from "./bowlscene.ts";
 import { drawQR } from "./qr.ts";
-import { Music, MUSIC_STYLES } from "./music.ts";
-import type { MusicStyle } from "./music.ts";
+import { mountSound } from "./soundpanel.ts";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -90,7 +89,7 @@ else tv();
 // ——————————————————————————— TV ———————————————————————————
 function tv() {
   app.innerHTML = `<canvas id="court" aria-label="3D bowling lane"></canvas>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Ball cam</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to bowl</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Ball cam</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to bowl</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="Sportle"><span><b>SPORT</b>LE</span><i></i></div>
   <p class="tagline">Bowling. <b>Your phone is the ball.</b></p>
@@ -187,45 +186,8 @@ function tv() {
   addEventListener("keydown", (e) => {
     if (e.code === "KeyV" && !(e.target instanceof HTMLInputElement)) setView(VIEWS[(VIEWS.indexOf(scene.viewMode2) + 1) % VIEWS.length]);
   });
-  // ——— Sound and music (same music styles and files as pickleball) ———
-  let soundOn = localStorage.getItem("visual-sound") !== "off";
-  scene.muted = !soundOn;
-  $("sound").textContent = soundOn ? "Sound on" : "Sound off";
-  $("sound").onclick = () => {
-    soundOn = scene.sound();
-    $("sound").textContent = soundOn ? "Sound on" : "Sound off";
-    localStorage.setItem("visual-sound", soundOn ? "on" : "off");
-  };
-  const music = new Music();
-  music.findFiles();
-  type Pick = MusicStyle | "off";
-  const order: Pick[] = [...MUSIC_STYLES.map((m) => m.id), "off"];
-  let choice: Pick = (order as string[]).includes(localStorage.getItem("visual-music") || "")
-    ? (localStorage.getItem("visual-music") as Pick)
-    : "house";
-  let acted = false;
-  const syncMusic = () => {
-    const name = MUSIC_STYLES.find((m) => m.id === choice)?.name;
-    $("music").textContent = name ? "Music: " + name : "Music off";
-    if (choice !== "off") music.setStyle(choice);
-    if (choice !== "off" && acted) music.start();
-    else music.stop();
-  };
-  syncMusic();
-  const first = () => {
-    if (acted) return;
-    acted = true;
-    syncMusic();
-    scene.wakeAudio();
-  };
-  addEventListener("pointerdown", first);
-  addEventListener("keydown", first);
-  $("music").onclick = () => {
-    choice = order[(order.indexOf(choice) + 1) % order.length];
-    localStorage.setItem("visual-music", choice);
-    acted = true;
-    syncMusic();
-  };
+  // ——— Music & sound: same button, dialog and saved choices as Pickleball ———
+  const music = mountSound({ scene, musicBtn: $("music"), soundBtn: $("sound"), openBtn: $("settingsOpen"), sfxNote: "pins, ball, crowd" });
   fetch("/api/config")
     .then((r) => r.json())
     .then((c) => {
@@ -382,6 +344,7 @@ function tv() {
     cur = b;
     scene.update(b);
     const playing = b.phase !== "lobby";
+    music.intensity = playing && b.phase !== "over" ? 1 : 0;
     document.body.classList.toggle("playing", playing);
     scene.panelOpen = !playing || document.body.classList.contains("panel-open");
     $("start").classList.toggle("hidden", !host || (b.phase !== "lobby"));

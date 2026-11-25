@@ -7,7 +7,9 @@ import { randomBytes } from "node:crypto";
 import {
   BOT_NAMES,
   COUNTDOWN,
+  CUPS,
   CUP,
+  cupOf,
   DRIFT_BOOST,
   GRID,
   HIT,
@@ -122,7 +124,8 @@ export function newKart(mode: KartMode = "race", trackId: TrackId = "court", bot
   return {
     game: "kart",
     mode,
-    track: mode === "cup" ? CUP[0] : trackId,
+    track: mode === "cup" ? CUPS[Math.max(0, cupOf(trackId))].tracks[0] : trackId,
+    cup: Math.max(0, cupOf(trackId)),
     bot,
     items: mode === "trial" ? false : items,
     phase: "lobby",
@@ -286,6 +289,10 @@ export function setOptions(k: Kart, a: Record<string, unknown>) {
   if (typeof a.items === "boolean" && k.mode !== "trial") k.items = a.items;
   if (typeof a.track === "string" && k.mode !== "cup" && CUP.includes(a.track as TrackId))
     k.track = a.track as TrackId;
+  if (k.mode === "cup" && (a.cup === 0 || a.cup === 1)) {
+    k.cup = a.cup;
+    k.track = CUPS[k.cup].tracks[0];
+  }
   k.event++;
 }
 /** Host: start the race (or the cup) once every phone that joined is set up. */
@@ -299,7 +306,7 @@ export function startKart(k: Kart, now = Date.now()) {
   if (k.phase === "podium" || k.phase === "lobby") {
     k.cupRace = 0;
     for (const r of h) r.points = 0;
-    if (k.mode === "cup") k.track = CUP[0];
+    if (k.mode === "cup") k.track = CUPS[k.cup].tracks[0];
   }
   // Bots fill the grid; their names and outfits stay the same through a cup.
   const bots = k.racers.filter((r) => r.bot);
@@ -417,12 +424,12 @@ function setPhase(k: Kart, phase: Kart["phase"]) {
 export function nextRace(k: Kart, now = Date.now()) {
   if (k.phase !== "results") throw Error("Finish the race first");
   if (k.mode === "cup") {
-    if (k.cupRace >= CUP.length - 1) {
+    if (k.cupRace >= CUPS[k.cup].tracks.length - 1) {
       setPhase(k, "podium");
       return;
     }
     k.cupRace++;
-    k.track = CUP[k.cupRace];
+    k.track = CUPS[k.cup].tracks[k.cupRace];
   }
   const h = humans(k);
   const missing = h.filter((r) => !live(r, now));
@@ -917,7 +924,7 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
   if (r.sweet > 0) vmax *= 1.08;
   const lap = locateOn(t, r, p);
   const surface = surfaceAt(t, r, lap.half, lap.d);
-  if (surface === "off" && r.boost <= 0 && r.sweet <= 0 && !r.air) vmax *= PHYS.offroad;
+  if (surface === "off" && r.boost <= 0 && r.sweet <= 0 && !r.air) vmax *= t.def.offroad ?? PHYS.offroad;
   if (r.boost > 0) vmax *= PHYS.boost;
   if (r.net > 0) vmax *= 0.45;
   if (r.wobble > 0) vmax *= 0.7;
@@ -963,7 +970,9 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
   else yawRate = steer * PHYS.turn * body.handling * speedK * (r.air ? 0.4 : 1) * (1 - Math.min(0.35, Math.abs(r.v) / 120));
   if (!spinning) r.h = angle(r.h + yawRate * DT);
   // Travel direction follows the nose; drifting slides more.
-  const grip = r.drift ? PHYS.driftGrip : r.air ? 0.8 : PHYS.grip;
+  // Ice and dirt grip less: the kart slides wider and drifts more.
+  const tg = t.def.grip ?? 1;
+  const grip = r.drift ? PHYS.driftGrip * (0.6 + 0.4 * tg) : r.air ? 0.8 : PHYS.grip * tg;
   p.m = angle(p.m + angle(r.h - p.m) * (1 - Math.exp(-grip * DT)));
   r.x += Math.cos(p.m) * r.v * DT;
   r.z += Math.sin(p.m) * r.v * DT;

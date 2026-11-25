@@ -8,7 +8,8 @@ import { Connection } from "./net.ts";
 import {
   BODIES,
   BOT_LEVELS,
-  CUP,
+  CUPS,
+  cupOf,
   DEFAULT_STEER,
   DRIFT_LEVELS,
   GestureReader,
@@ -34,8 +35,7 @@ import { wrap } from "../shared/motion.ts";
 import { KartScene, KART_VIEW_LABELS, paint } from "./kartscene.ts";
 import type { KartView } from "./kartscene.ts";
 import { drawQR } from "./qr.ts";
-import { Music, MUSIC_STYLES } from "./music.ts";
-import type { MusicStyle } from "./music.ts";
+import { mountSound } from "./soundpanel.ts";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -120,7 +120,7 @@ else tv();
 // ——————————————————————————— TV ———————————————————————————
 function tv() {
   app.innerHTML = `<canvas id="court" aria-label="3D kart track"></canvas>
-<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Chase</button><button class="link" id="layout" title="Split screen or one shared view">Screen: Split</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to drive</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
+<header class="topbar"><span id="joinAt">Phones join at this screen’s link</span><nav><a class="link" href="/" id="allGames">All games</a><button class="link" id="music">Music: House</button><button class="link" id="view" title="Change camera (V)">View: Chase</button><button class="link" id="layout" title="Split screen or one shared view">Screen: Split</button><button class="link" id="settingsOpen">Music &amp; sound</button><button class="link" id="sound">Sound on</button><button class="link" id="howtoOpen">How to drive</button><button class="link" id="fullscreen">Fullscreen</button></nav></header>
 <aside class="panel" id="panel">
   <div class="wordmark" aria-label="Sportle"><span><b>SPORT</b>LE</span><i></i></div>
   <p class="tagline">Kart. <b>Your phone is the wheel.</b></p>
@@ -136,7 +136,7 @@ function tv() {
       <h2 class="stephead" id="optHead">Single player</h2>
       <div class="difficulty" role="radiogroup" aria-label="Race"><span>Race</span><input type="radio" name="kmode" id="km-race" value="race" checked><label for="km-race">Single race</label><input type="radio" name="kmode" id="km-cup" value="cup"><label for="km-cup">Cup · 4 tracks</label><input type="radio" name="kmode" id="km-trial" value="trial"><label for="km-trial">Time trial</label></div>
       <div class="difficulty mappick" role="radiogroup" aria-label="Track"><span>Track</span>${TRACKS.map((t, i) => `<input type="radio" name="ktrack" id="kt-${t.id}" value="${t.id}" ${i === 0 ? "checked" : ""}><label for="kt-${t.id}">${t.name}</label>`).join("")}</div>
-      <p class="fine" id="trackHint"></p>
+      <div class="difficulty hidden" role="radiogroup" aria-label="Cup" id="cupRow"><span>Cup</span>${CUPS.map((c, i) => `<input type="radio" name="kcup" id="kc-${c.id}" value="${i}" ${i === 0 ? "checked" : ""}><label for="kc-${c.id}">${c.name}</label>`).join("")}</div><p class="fine" id="trackHint"></p>
       <div class="difficulty" role="radiogroup" aria-label="Bots"><span>Bots</span>${BOT_LEVELS.map((b) => `<input type="radio" name="kbot" id="kb-${b.id}" value="${b.id}" ${b.id === "club" ? "checked" : ""}><label for="kb-${b.id}">${b.name}</label>`).join("")}</div>
       <div class="difficulty" role="radiogroup" aria-label="Items"><span>Items</span><input type="radio" name="kitems" id="ki-on" value="on" checked><label for="ki-on">On</label><input type="radio" name="kitems" id="ki-off" value="off"><label for="ki-off">Off</label></div>
       <div class="difficulty" role="radiogroup" aria-label="Screen" id="screenRow"><span>Screen</span><input type="radio" name="kscreen" id="ks-split" value="split" checked><label for="ks-split">Split screen</label><input type="radio" name="kscreen" id="ks-shared" value="shared"><label for="ks-shared">One shared view</label></div>
@@ -192,10 +192,14 @@ function tv() {
   const pick = (name: string, fallback: string) => document.querySelector<HTMLInputElement>(`input[name=${name}]:checked`)?.value || fallback;
   const syncTrack = () => {
     const t = TRACKS.find((x) => x.id === pick("ktrack", "court"))!;
-    $("trackHint").textContent = pick("kmode", "race") === "cup" ? "Cup: " + CUP.map((id) => TRACKS.find((x) => x.id === id)!.name).join(" → ") : t.name + " · " + t.note;
-    if (!cur) scene.setTrack(t.id);
+    const cup = pick("kmode", "race") === "cup";
+    const c = CUPS[Number(pick("kcup", "0"))];
+    $("cupRow").classList.toggle("hidden", !cup);
+    document.querySelector<HTMLElement>(".mappick")!.classList.toggle("hidden", cup);
+    $("trackHint").textContent = cup ? c.name + ": " + c.tracks.map((id) => TRACKS.find((x) => x.id === id)!.name).join(" → ") : t.name + " · " + t.note;
+    if (!cur) scene.setTrack(cup ? c.tracks[0] : t.id);
   };
-  document.querySelectorAll("input[name=ktrack], input[name=kmode]").forEach((r) => r.addEventListener("change", syncTrack));
+  document.querySelectorAll("input[name=ktrack], input[name=kmode], input[name=kcup]").forEach((r) => r.addEventListener("change", syncTrack));
   syncTrack();
   $("howtoOpen").onclick = () => $<HTMLDialogElement>("howto").showModal();
   $("howtoClose").onclick = () => $<HTMLDialogElement>("howto").close();
@@ -219,43 +223,8 @@ function tv() {
     if (!cur) return;
     net.api("kart/layout", { shared: !cur.shared }).catch(error);
   };
-  // ——— Sound and music ———
-  let soundOn = localStorage.getItem("visual-sound") !== "off";
-  scene.muted = !soundOn;
-  $("sound").textContent = soundOn ? "Sound on" : "Sound off";
-  $("sound").onclick = () => {
-    soundOn = scene.sound();
-    $("sound").textContent = soundOn ? "Sound on" : "Sound off";
-    localStorage.setItem("visual-sound", soundOn ? "on" : "off");
-  };
-  const music = new Music();
-  music.findFiles();
-  type Pick = MusicStyle | "off";
-  const order: Pick[] = [...MUSIC_STYLES.map((m) => m.id), "off"];
-  let choice: Pick = (order as string[]).includes(localStorage.getItem("visual-music") || "") ? (localStorage.getItem("visual-music") as Pick) : "house";
-  let acted = false;
-  const syncMusic = () => {
-    const name = MUSIC_STYLES.find((m) => m.id === choice)?.name;
-    $("music").textContent = name ? "Music: " + name : "Music off";
-    if (choice !== "off") music.setStyle(choice);
-    if (choice !== "off" && acted) music.start();
-    else music.stop();
-  };
-  syncMusic();
-  const first = () => {
-    if (acted) return;
-    acted = true;
-    syncMusic();
-    scene.wakeAudio();
-  };
-  addEventListener("pointerdown", first);
-  addEventListener("keydown", first);
-  $("music").onclick = () => {
-    choice = order[(order.indexOf(choice) + 1) % order.length];
-    localStorage.setItem("visual-music", choice);
-    acted = true;
-    syncMusic();
-  };
+  // ——— Music & sound: same button, dialog and saved choices as Pickleball ———
+  const music = mountSound({ scene, musicBtn: $("music"), soundBtn: $("sound"), openBtn: $("settingsOpen"), sfxNote: "engine, items, crowd" });
   fetch("/api/config")
     .then((r) => r.json())
     .then((c) => {
@@ -301,7 +270,7 @@ function tv() {
     const r = await net.api("create", {
       game: "kart",
       mode: pick("kmode", "race"),
-      track: pick("ktrack", "court"),
+      track: pick("kmode", "race") === "cup" ? CUPS[Number(pick("kcup", "0"))].tracks[0] : pick("ktrack", "court"),
       bot: pick("kbot", "club"),
       items: pick("kitems", "on") === "on",
       shared: players === "multi" && pick("kscreen", "split") === "shared",
@@ -481,8 +450,9 @@ function tv() {
     document.body.classList.toggle("playing", playing && k.phase !== "results" && k.phase !== "podium");
     $("start").classList.toggle("hidden", !host || (k.phase !== "lobby" && k.phase !== "podium"));
     $("next").classList.toggle("hidden", !host || k.phase !== "results");
-    $("next").innerHTML = (k.mode === "cup" ? (k.cupRace >= CUP.length - 1 ? "Final standings" : "Next race") : "Race again") + " <span>→</span>";
+    $("next").innerHTML = (k.mode === "cup" ? (k.cupRace >= CUPS[k.cup].tracks.length - 1 ? "Final standings" : "Next race") : "Race again") + " <span>→</span>";
     const racing = k.phase === "race" || k.phase === "countdown";
+    music.intensity = racing ? 1 : 0;
     $("pause").classList.toggle("hidden", !host || !racing || k.paused);
     $("resume").classList.toggle("hidden", !host || !k.paused);
     $("toLobby").classList.toggle("hidden", !host || racing);
@@ -500,7 +470,7 @@ function tv() {
         })
         .join("") || `<li class="empty">Scan the QR with a phone to join · up to ${k.mode === "trial" ? 1 : 8}.</li>`,
     );
-    $("lobbyHint").textContent = k.mode === "cup" ? `Cup · race ${k.cupRace + 1} of 4` : k.mode === "trial" ? "Time trial" : "";
+    $("lobbyHint").textContent = k.mode === "cup" ? `${CUPS[k.cup].name} · race ${k.cupRace + 1} of 4` : k.mode === "trial" ? "Time trial" : "";
     put("message", esc(k.message));
     // Countdown lights: 3, 2, 1, GO.
     const cd = k.phase === "countdown" ? Math.ceil(-k.clock) : k.phase === "race" && k.clock < 0.8 ? 0 : -1;
@@ -532,7 +502,7 @@ function tv() {
       const podium = k.phase === "podium";
       const rows = [...k.racers].sort((a, b) => (podium ? b.points - a.points : a.place - b.place));
       const win = rows[0];
-      put("resSmall", podium ? "CUP FINAL STANDINGS" : k.mode === "cup" ? `RACE ${k.cupRace + 1} OF 4 · ${track(k.track).def.name.toUpperCase()}` : k.mode === "trial" ? "TIME TRIAL" : "RESULTS");
+      put("resSmall", podium ? "CUP FINAL STANDINGS" : k.mode === "cup" ? `${CUPS[k.cup].name.toUpperCase()} · RACE ${k.cupRace + 1} OF 4 · ${track(k.track).def.name.toUpperCase()}` : k.mode === "trial" ? "TIME TRIAL" : "RESULTS");
       put("resTitle", k.mode === "trial" ? `Best lap ${win.best ? time(win.best) : "—"}` : `${esc(win.name)} wins${podium ? " the cup" : ""}!`);
       put(
         "resTable",
@@ -542,7 +512,7 @@ function tv() {
       );
       $("again").classList.toggle("hidden", !host);
       $("resLobby").classList.toggle("hidden", !host);
-      $("again").innerHTML = (podium ? "New cup" : k.mode === "cup" ? (k.cupRace >= CUP.length - 1 ? "Final standings" : "Next race") : "Race again") + " <span>→</span>";
+      $("again").innerHTML = (podium ? "New cup" : k.mode === "cup" ? (k.cupRace >= CUPS[k.cup].tracks.length - 1 ? "Final standings" : "Next race") : "Race again") + " <span>→</span>";
     }
   }
   setInterval(() => cur && hudState(cur), 500);

@@ -3823,3 +3823,10 @@ body.kartphone.racing .phead {
 .kview.left .kplace {
   bottom: 84px;
 }
+/* Kart lobby: eight tracks wrap onto two rows. */
+#trackSeg {
+  flex-wrap: wrap;
+}
+#trackSeg button {
+  flex: 1 0 22%;
+}

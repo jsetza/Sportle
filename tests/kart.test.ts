@@ -16,6 +16,7 @@ import {
   SECTORS,
   SteerReader,
   TRACKS,
+  CUPS,
   itemOdds,
   learnSteer,
   locateAll,
@@ -594,8 +595,13 @@ test("drop → kart waits → bot takes over → rejoining takes the kart back",
   assert.ok(k.racers.includes(sam) && k.racers.length === 8);
 });
 
-test("tracks: four tracks with a racing line, cubes, pads, a shortcut and a start straight", () => {
-  assert.equal(TRACKS.length, 4);
+test("tracks: eight tracks, each with its own road, a racing line, cubes, pads, a shortcut and a start straight", () => {
+  assert.equal(TRACKS.length, 8);
+  // Every track has a different road surface and barrier.
+  assert.equal(new Set(TRACKS.map((d) => d.road.surface)).size, 8, "eight different road surfaces");
+  assert.equal(new Set(TRACKS.map((d) => d.road.barrier)).size, 8, "eight different barriers");
+  // Each track appears in exactly one cup of four.
+  assert.deepEqual(CUPS.flatMap((c) => c.tracks).sort(), TRACKS.map((d) => d.id).sort());
   for (const d of TRACKS) {
     const t = track(d.id);
     assert.ok(t.L > 450 && t.L < 900, `${d.id} length ${t.L}`);
@@ -608,6 +614,26 @@ test("tracks: four tracks with a racing line, cubes, pads, a shortcut and a star
   assert.ok(track("skyline").ground.some((g) => !g), "skyline has rooftop gaps");
   assert.ok(track("beach").ground.some((g) => !g), "beach has the pier jump");
   assert.ok(track("neon").def.pins, "neon has moving pins");
+  assert.ok(track("jungle").ground.some((g) => !g), "jungle has the river jump");
+  assert.ok(track("canyon").ground.some((g) => !g), "canyon has the canyon jump");
+  assert.ok((track("frost").def.grip ?? 1) < 0.8, "frost is icy");
+  // Stadium Eight crosses itself: two parts of the lap at the same spot, one on the bridge above.
+  const st = track("stadium");
+  let crossing = false;
+  for (let i = 0; i < st.n; i += 2)
+    for (let j = 0; j < st.n; j += 2)
+      if (Math.abs(st.s[i] - st.s[j]) > 100 && Math.hypot(st.x[i] - st.x[j], st.z[i] - st.z[j]) < 3 && Math.abs(st.y[i] - st.y[j]) > 6) crossing = true;
+  assert.ok(crossing, "figure-8 crossing on a bridge");
+  // Apart from that crossing, no two parts of any track overlap.
+  for (const d of TRACKS) {
+    const t = track(d.id);
+    for (let i = 0; i < t.n; i += 3)
+      for (let j = 0; j < t.n; j += 3) {
+        const ds = Math.min(Math.abs(t.s[i] - t.s[j]), t.L - Math.abs(t.s[i] - t.s[j]));
+        if (ds < 40 || Math.abs(t.y[i] - t.y[j]) > 4) continue;
+        assert.ok(Math.hypot(t.x[i] - t.x[j], t.z[i] - t.z[j]) > t.w[i] / 2 + t.w[j] / 2 + 2, `${d.id}: samples ${i} and ${j} overlap`);
+      }
+  }
 });
 
 test("cup: four tracks in a row with points, then final standings; time trial has no bots", () => {
@@ -650,3 +676,50 @@ test("cup: four tracks in a row with points, then final standings; time trial ha
 function nextRaceOrPodium(k: Kart) {
   nextRace(k, nowMs);
 }
+
+test("every track: a lap is driven with all checkpoints in order and a sane lap time", () => {
+  for (const d of TRACKS) {
+    const { k, hs } = race(1, d.id, false);
+    const me = hs[0];
+    me.bot = "pro"; // the server drives it along the racing line
+    const order: number[] = [];
+    let falls = 0,
+      last = me.sector;
+    for (let i = 0; i < 120 * 90 && me.laps.length < 2; i++) {
+      tick(k);
+      if (me.sector !== last) {
+        order.push(me.sector);
+        last = me.sector;
+      }
+      if (me.lift > 1.49) falls++;
+    }
+    assert.ok(me.laps.length >= 2, `${d.id}: two laps counted (lap ${me.lap})`);
+    for (const lt of me.laps) assert.ok(lt > 18 && lt < 50, `${d.id}: lap time ${lt}`);
+    // Sectors were passed one after another, never skipped.
+    for (let q = 1; q < order.length; q++) assert.equal(order[q], (order[q - 1] + 1) % SECTORS, `${d.id}: sector ${order[q - 1]} → ${order[q]}`);
+    assert.ok(falls <= 1, `${d.id}: falls ${falls}`);
+  }
+});
+
+test("wild cup: frost, jungle, stadium, canyon in a row", () => {
+  const k = newKart("cup", "canyon", "club", false, 1);
+  assert.equal(k.cup, 1);
+  assert.equal(k.track, "frost");
+  const me = addRacer(k, "h", "Ana", "classic", { ...DEFAULT_GEAR }, "classic", 2);
+  feed(k, me);
+  me.ready = true;
+  startKart(k, nowMs);
+  me.bot = "pro";
+  const seen: string[] = [];
+  for (let race = 0; race < 4; race++) {
+    seen.push(k.track);
+    for (let i = 0; i < 120 * 200 && k.phase !== "results"; i++) tick(k);
+    assert.equal(k.phase, "results");
+    me.bot = "";
+    feed(k, me);
+    nextRace(k, nowMs);
+    me.bot = "pro";
+  }
+  assert.deepEqual(seen, ["frost", "jungle", "stadium", "canyon"]);
+  assert.equal(k.phase, "podium");
+});

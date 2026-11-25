@@ -20,7 +20,7 @@ const lanes = (process.argv[3] || "").startsWith("bowling")
   ? (process.argv[3].split(":")[1] || "neon,championship,rooftop,beach").split(",")
   : null;
 const karts = (process.argv[3] || "").startsWith("kart")
-  ? (process.argv[3].split(":")[1] || "court,neon,beach,skyline").split(",")
+  ? (process.argv[3].split(":")[1] || "court,neon,beach,skyline,frost,jungle,stadium,canyon").split(",")
   : null;
 const views = (process.env.VIEWS || "third,broadcast").split(",");
 fs.mkdirSync(out, { recursive: true });

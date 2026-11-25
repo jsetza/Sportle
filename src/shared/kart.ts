@@ -10,7 +10,11 @@ import { deviceAxes, ease, wrap } from "./motion.ts";
 
 // ——————————————————————————— Tracks ———————————————————————————
 
-export type TrackId = "court" | "neon" | "beach" | "skyline";
+export type TrackId = "court" | "neon" | "beach" | "skyline" | "frost" | "jungle" | "stadium" | "canyon";
+/** How a track's road looks: surface, kerbs on the corners, barriers along the edge. */
+export type Surface = "court" | "neon" | "planks" | "rooftop" | "ice" | "dirt" | "hardwood" | "sandstone";
+export type Kerb = "court" | "neonline" | "rope" | "hazard" | "iceblocks" | "rocks" | "paint";
+export type Barrier = "fence" | "neon" | "rail" | "guardrail" | "snowbank" | "logs" | "pads" | "boulders";
 /** Laps per race and karts per race (players plus bots). */
 export const LAPS = 3;
 export const GRID = 8;
@@ -27,7 +31,16 @@ export interface TrackDef {
   pts: Pt[];
   /** Drivable but slow ground beyond the road edge, before the barrier (metres). */
   verge: number;
-  ground: "grass" | "sand" | "asphalt" | "roof";
+  ground: "grass" | "sand" | "asphalt" | "roof" | "snow" | "jungle" | "arena" | "desert";
+  road: { surface: Surface; kerb: Kerb; barrier: Barrier };
+  /** Tyre grip on this road (1 = normal; ice is slippery). */
+  grip?: number;
+  /** Top speed off the road (fraction; default 0.5). */
+  offroad?: number;
+  /** A stretch drawn as a glass skybridge (fractions of the lap), e.g. the figure-8 crossing. */
+  bridge?: [number, number];
+  /** Water drawn under the gaps (rivers, the harbour) rather than the ground far below. */
+  water?: boolean;
   /**
    * Ramps: start (fraction of the lap), length (m), lip height (m). The lip launches karts.
    * `gap`: metres with no ground after the lip (water, a street far below): fall in and the
@@ -55,6 +68,7 @@ export const TRACKS: TrackDef[] = [
     light: "centralpark",
     verge: 4,
     ground: "grass",
+    road: { surface: "court", kerb: "court", barrier: "fence" },
     pts: [
       [-40, -50, 0, 15],
       [0, -52, 0, 15],
@@ -92,6 +106,7 @@ export const TRACKS: TrackDef[] = [
     light: "tokyo",
     verge: 2.5,
     ground: "asphalt",
+    road: { surface: "neon", kerb: "neonline", barrier: "neon" },
     pts: [
       [-60, -40, 0, 14],
       [-10, -40, 0, 14],
@@ -126,6 +141,8 @@ export const TRACKS: TrackDef[] = [
     light: "hawaii",
     verge: 9,
     ground: "sand",
+    road: { surface: "planks", kerb: "rope", barrier: "rail" },
+    water: true,
     pts: [
       [-50, -46, 0.3, 14],
       [0, -48, 0.3, 14],
@@ -160,6 +177,7 @@ export const TRACKS: TrackDef[] = [
     light: "manila",
     verge: 2.5,
     ground: "roof",
+    road: { surface: "rooftop", kerb: "hazard", barrier: "guardrail" },
     pts: [
       [-60, -50, 14, 13],
       [-20, -50, 14, 13],
@@ -198,6 +216,157 @@ export const TRACKS: TrackDef[] = [
     cut: { from: 0.925, to: 0.995, bulge: 6 },
     start: 0.05,
     gantries: [0.055, 0.7],
+  },
+  {
+    id: "frost",
+    name: "Frost Pass",
+    note: "An icy mountain road: switchback hairpins up, a summit jump, a fast run down",
+    light: "alps",
+    verge: 3,
+    ground: "snow",
+    road: { surface: "ice", kerb: "iceblocks", barrier: "snowbank" },
+    grip: 0.6,
+    offroad: 0.45,
+    pts: [
+      [-70, -52, 0, 13],
+      [-20, -56, 0, 13],
+      [30, -52, 1, 13],
+      [62, -38, 2.5, 12],
+      [78, -16, 4, 11],
+      [62, 0, 5.5, 11],
+      [24, 4, 7, 11],
+      [2, 16, 8.5, 11],
+      [18, 32, 10, 11],
+      [52, 36, 12, 11],
+      [74, 54, 14, 12],
+      [44, 72, 15, 12],
+      [2, 66, 13, 12],
+      [-40, 58, 9, 12],
+      [-76, 34, 5, 13],
+      [-92, -2, 2, 13],
+      [-88, -36, 0.5, 13],
+    ],
+    ramps: [{ at: 0.6, len: 10, h: 1.6 }],
+    pads: [
+      { at: 0.11, d: 0 },
+      { at: 0.66, d: 0.3 },
+      { at: 0.8, d: -0.3 },
+    ],
+    cubes: [0.16, 0.5, 0.86],
+    cut: { from: 0.74, to: 0.9, bulge: 7 },
+    start: 0.05,
+    gantries: [0.055, 0.57],
+  },
+  {
+    id: "jungle",
+    name: "Jungle Trail",
+    note: "A dirt trail through the jungle: S-bends, log bridges and a river jump",
+    light: "hawaii",
+    verge: 3.5,
+    ground: "jungle",
+    road: { surface: "dirt", kerb: "rocks", barrier: "logs" },
+    grip: 0.88,
+    offroad: 0.6,
+    water: true,
+    pts: [
+      [-80, -42, 0, 12],
+      [-30, -50, 0, 12],
+      [8, -38, 0, 11],
+      [40, -56, 0, 11],
+      [76, -42, 0, 12],
+      [86, -6, 0, 11],
+      [60, 14, 0, 11],
+      [72, 44, 0, 11],
+      [40, 62, 0, 12],
+      [4, 50, 0.5, 12],
+      [-30, 64, 0, 11],
+      [-62, 52, 0, 11],
+      [-92, 26, 0, 12],
+      [-98, -14, 0, 12],
+    ],
+    ramps: [{ at: 0.655, len: 10, h: 2.2, gap: 11 }],
+    pads: [
+      { at: 0.1, d: 0 },
+      { at: 0.63, d: 0 },
+      { at: 0.35, d: -0.3 },
+    ],
+    cubes: [0.18, 0.45, 0.82],
+    cut: { from: 0.8, to: 0.94, bulge: 8 },
+    start: 0.05,
+    gantries: [0.055, 0.5],
+  },
+  {
+    id: "stadium",
+    name: "Stadium Eight",
+    note: "A figure-8 on a hardwood arena floor that crosses itself on a glass skybridge",
+    light: "texas",
+    verge: 2.5,
+    ground: "arena",
+    road: { surface: "hardwood", kerb: "paint", barrier: "pads" },
+    pts: [
+      [-28, -28, 0, 13],
+      [0, 0, 0, 13],
+      [28, 28, 0, 13],
+      [58, 44, 0, 13],
+      [90, 24, 0, 13],
+      [92, -20, 0, 13],
+      [60, -44, 0, 13],
+      [28, -28, 3.5, 13],
+      [0, 0, 7.5, 13],
+      [-28, 28, 3.5, 13],
+      [-60, 44, 0, 13],
+      [-92, 20, 0, 13],
+      [-90, -24, 0, 13],
+      [-58, -44, 0, 13],
+    ],
+    bridge: [0.45, 0.62],
+    ramps: [],
+    pads: [
+      { at: 0.06, d: 0 },
+      { at: 0.53, d: 0 },
+      { at: 0.3, d: 0.35 },
+      { at: 0.8, d: -0.35 },
+    ],
+    cubes: [0.14, 0.4, 0.66, 0.9],
+    cut: { from: 0.2, to: 0.36, bulge: 4 },
+    start: 0.03,
+    gantries: [0.035, 0.53],
+  },
+  {
+    id: "canyon",
+    name: "Canyon Run",
+    note: "Red-rock desert: a long straight, a canyon jump, a chicane and a split path",
+    light: "grandcanyon",
+    verge: 5,
+    ground: "desert",
+    road: { surface: "sandstone", kerb: "rocks", barrier: "boulders" },
+    offroad: 0.55,
+    pts: [
+      [-92, -44, 0, 13],
+      [-40, -48, 0, 13],
+      [10, -48, 0, 13],
+      [62, -46, 0, 13],
+      [92, -26, 0, 12],
+      [98, 10, 1, 12],
+      [78, 36, 2, 12],
+      [48, 40, 3, 11],
+      [26, 24, 3, 11],
+      [0, 38, 3, 11],
+      [-28, 56, 2, 12],
+      [-68, 56, 1, 12],
+      [-96, 30, 0, 12],
+      [-104, -10, 0, 13],
+    ],
+    ramps: [{ at: 0.17, len: 10, h: 2.4, gap: 12 }],
+    pads: [
+      { at: 0.13, d: 0.3 },
+      { at: 0.15, d: -0.3 },
+      { at: 0.6, d: 0 },
+    ],
+    cubes: [0.26, 0.5, 0.8],
+    cut: { from: 0.42, to: 0.6, bulge: 8 },
+    start: 0.06,
+    gantries: [0.065, 0.7],
   },
 ];
 
@@ -610,7 +779,15 @@ export const BOT_LEVELS: { id: BotLevel; name: string }[] = [
   { id: "club", name: "Club" },
   { id: "pro", name: "Pro" },
 ];
-export const CUP: TrackId[] = ["court", "neon", "beach", "skyline"];
+/** Two cups of four tracks. */
+export const CUPS: { id: string; name: string; tracks: TrackId[] }[] = [
+  { id: "classic", name: "Classic Cup", tracks: ["court", "neon", "beach", "skyline"] },
+  { id: "wild", name: "Wild Cup", tracks: ["frost", "jungle", "stadium", "canyon"] },
+];
+/** Every track id (single races and the track picker). */
+export const CUP: TrackId[] = CUPS.flatMap((c) => c.tracks);
+/** The cup a track belongs to. */
+export const cupOf = (id: TrackId) => CUPS.findIndex((c) => c.tracks.includes(id));
 /** Seconds a dropped phone's kart waits before a bot takes over. */
 export const WAIT_LIMIT = 30;
 export const COUNTDOWN = 3.6;
@@ -711,6 +888,8 @@ export type Kart = {
   cubes: { s: number; d: number; up: boolean }[];
   /** Moving pins on Neon Lanes (lateral offsets now). */
   pins: number[];
+  /** Which cup (CUPS index) and which race of it. */
+  cup: number;
   cupRace: number;
   laps: number;
   paused: boolean;

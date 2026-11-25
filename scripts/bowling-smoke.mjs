@@ -81,6 +81,9 @@ try {
   await tv.waitForFunction(() => window.__bowlScene.bowl?.players.every((p) => p.ready));
   if (SHOTS) await tv.screenshot({ path: SHOTS + "/lobby.png" });
   await tv.locator("#start").click();
+  // Music & sound like Pickleball: music started on the first click and plays during the game.
+  await tv.waitForFunction(() => { const m = window.__sportleMusic; return m?.ctx?.state === "running" && (m.filePlaying || m.playing); }, null, { timeout: slow(8000) });
+  assert.ok(await tv.locator("#settingsOpen").isVisible(), "Music & sound button");
   await tv.waitForFunction(() => window.__bowlScene.bowl?.phase === "aim");
   const state = () => tv.evaluate(() => window.__bowlScene.bowl);
   const phones = { Ana: a, Ben: b };

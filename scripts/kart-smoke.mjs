@@ -191,6 +191,9 @@ try {
   assert.ok(table.includes("Ana") && table.includes("Ben"), "results list both drivers");
   assert.match(await a.locator("#pStatus").textContent(), /pts|\d(st|nd|rd|th)/);
   if (SHOTS) await tv.screenshot({ path: SHOTS + "/kart-results.png" });
+  // Music started on the first click on the TV and is still playing at the results.
+  const playing = await tv.evaluate(() => { const m = window.__sportleMusic; return !!m && m.ctx?.state === "running" && (m.filePlaying || m.playing); });
+  assert.ok(playing, "music plays through the race");
   assert.deepEqual(errors, [], "no page errors");
   console.log("Kart smoke OK: hub → kart, two phones, split screen, steering, drift boost, item, lap, results");
 } finally {

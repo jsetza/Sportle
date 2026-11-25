@@ -1,5 +1,37 @@
 # Handoff status — 2026-11-22 (Claude session)
 
+
+## Kart: eight tracks, each with its own road; music in Bowling and Kart (2026-11-25, owner request)
+
+**Not yet tried on a real phone or a real TV.** Checked with unit tests, headless 8-bot race simulations and headless-Chrome screenshots (synthetic phones).
+
+- **Eight tracks, two cups.** Classic Cup: Court Circuit, Neon Lanes, Beach Boardwalk, Skyline Rooftops. Wild Cup (new): Frost Pass, Jungle Trail, Stadium Eight, Canyon Run. The TV menu lists all eight for single races and time trials; Cup mode asks which cup. The lobby's track switch has all eight.
+- **Each road is its own** (`road: { surface, kerb, barrier }` in `src/shared/kart.ts`, drawn in `kartscene.ts`):
+  - Court Circuit: blue court surface with white court lines; blue/white kerbs; court fencing with a white top rail.
+  - Neon Lanes: dark asphalt with glowing pink/cyan edge lines and violet dashes (wood on the bowling-lane section); glowing kerb lines; neon wall blocks.
+  - Beach Boardwalk: wooden boardwalk planks the whole lap; rope-and-post kerbs; wooden railing.
+  - Skyline Rooftops: concrete with a double yellow line and tar seams; yellow/black hazard kerbs; steel guardrail.
+  - Frost Pass: glossy pale-blue **ice** with frost streaks; ice-block kerbs; snowbank barriers. Tyre grip 0.6, so karts slide wider; off-road 45 % speed.
+  - Jungle Trail: **dirt** with two tyre ruts; rock kerbs; stacked log barriers. Grip 0.88; off-road 60 %.
+  - Stadium Eight: a **hardwood arena floor** (boards along the road, blue painted borders, white centre line); painted kerb stripes; padded walls in Sportle colours. The crossing is a glowing **glass skybridge** with glass rails and a steel deck underneath.
+  - Canyon Run: red **sandstone** with cracks; rock kerbs; boulder barriers.
+- **Different layouts:**
+  - Frost Pass: two switchback hairpins climbing ~15 m, a crest jump at the summit, then a long sweeping descent.
+  - Jungle Trail: S-bends and a river jump (11 m gap over water).
+  - Stadium Eight: a figure-8 whose second half climbs onto a bridge 7.5 m above the first.
+  - Canyon Run: a 150 m straight with a 12 m canyon jump, a chicane on a raised plateau, and a split path across the infield.
+  - Every track has its racing line, 12 in-order checkpoints, 3–4 cube rows, boost pads, a shortcut, a minimap and a start line on a straight.
+- **Checks:**
+  - `tests/kart.test.ts` now has 15 tests. New: every track is driven for two laps by the server with every checkpoint passed in order and lap times of 18–50 s; no two parts of any track overlap except the stadium's bridge crossing (asserted); all eight surfaces and barriers differ; the Wild Cup runs frost → jungle → stadium → canyon to the podium.
+  - In an 8-Club-bot simulation, the new tracks lap in about 30–37 s with no falls.
+  - `scripts/dev/find-zfighting.ts`: 0 coplanar overlaps on all eight tracks. That check covers axis-aligned boxes; the road ribbons and rotated kerb/barrier pieces are kept on separate heights by construction.
+  - Screenshots of every track (chase, bumper, broadcast), split screen and the phone: `docs/screenshots/kart/`.
+- **Music & sound in Bowling and Kart, the same as Pickleball.** `src/client/soundpanel.ts` gives both pages the Music button (cycles House / other styles / Off), Sound on/off and the **Music & sound** dialog (music style, music volume, sound effects on/off and volume). They use the same saved choices as Pickleball (`visual-music`, `pov-music-vol`, `pov-sfx-vol`, `visual-sound`), so a choice carries across games. House is the licensed `src/client/music/house.wav` via `findFiles()`; no new songs were added.
+  - Browsers block audio until a tap or key, so music starts on the first one anywhere on the page. If the page was in the background, it picks up again when it comes back.
+  - Checked in headless Chrome with autoplay blocked: before any click there is no audio context; after the first click the context is running and house.wav is playing, on both `/kart` and `/bowling`, and it is still playing in the lobby.
+  - `npm run check` passes (137 tests) and the full `npm run test:browser` passes on this Mac (2026-11-25).
+  - bowling-smoke now checks that music plays once the game starts. kart-smoke checks that it is still playing at the results, after a full race. Not listened to on real speakers or a TV browser.
+
 ## Sportle Kart (2026-11-24, third game in the hub)
 
 Built from `docs/prompts/SPORTLE_KART.md`. **Nothing here has been tried on a real phone yet.** Every phone check so far used synthetic orientation/motion events in headless Chrome; steering feel, thresholds and delay must be checked with docs/DEVICE_TESTS.md (Kart section) on iPhone Safari and Android Chrome.

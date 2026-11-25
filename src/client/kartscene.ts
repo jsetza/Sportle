@@ -31,6 +31,10 @@ const GROUND: Record<string, { ground: V; verge: V; road: V; road2: V }> = {
   sand: { ground: [0.9, 0.81, 0.6], verge: [0.93, 0.85, 0.64], road: [0.25, 0.24, 0.26], road2: [0.28, 0.27, 0.29] },
   asphalt: { ground: [0.07, 0.07, 0.1], verge: [0.12, 0.11, 0.16], road: [0.16, 0.15, 0.2], road2: [0.19, 0.18, 0.23] },
   roof: { ground: [0.2, 0.2, 0.23], verge: [0.45, 0.44, 0.42], road: [0.22, 0.22, 0.25], road2: [0.26, 0.26, 0.29] },
+  snow: { ground: [0.9, 0.93, 0.97], verge: [0.84, 0.89, 0.95], road: [0, 0, 0], road2: [0, 0, 0] },
+  jungle: { ground: [0.15, 0.34, 0.13], verge: [0.32, 0.27, 0.15], road: [0, 0, 0], road2: [0, 0, 0] },
+  arena: { ground: [0.1, 0.09, 0.13], verge: [0.2, 0.2, 0.27], road: [0, 0, 0], road2: [0, 0, 0] },
+  desert: { ground: [0.86, 0.63, 0.42], verge: [0.8, 0.57, 0.37], road: [0, 0, 0], road2: [0, 0, 0] },
 };
 type Cam = { eye: V; target: V; fov: number };
 export class KartScene extends Scene {
@@ -187,28 +191,111 @@ export class KartScene extends Scene {
       this.box(190, minY - 0.5, 0, 220, 0.1, 520, [0.08, 0.38, 0.55]);
       this.material(0.1, 0, 0.03);
     }
-    // Road with a light stripe pattern, verges, curbs on corners.
-    this.material(0.35, 0, def.id === "neon" ? 0.25 : 0.08);
+    // Under each jump gap: a river (water) or a dark ravine, across the track.
+    for (const rp of def.ramps) {
+      if (!rp.gap || def.id === "beach" || def.id === "skyline") continue;
+      const mid = pointAt(t, rp.at * t.L + rp.len + rp.gap / 2, 0);
+      const ry = Math.atan2(t.tx[mid.i], t.tz[mid.i]);
+      if (def.water) this.material(0.9, 0, 0.6);
+      else this.material(0.1);
+      this.box(mid.x, minY - 0.1, mid.z, 400, 0.1, rp.gap + 6, def.water ? [0.1, 0.42, 0.45] : [0.22, 0.09, 0.05], 0, 0, ry);
+      this.material(0.1, 0, 0.03);
+    }
+    const road = def.road;
     const lane = def.pins;
     const laneFrom = lane ? lane.at * t.L - 6 : -1,
       laneTo = lane ? lane.at * t.L + lane.len + 6 : -1;
-    const isLane = (i: number) => lane && t.s[i] > laneFrom && t.s[i] < laneTo;
-    const boardwalk = (i: number) => def.id === "beach" && t.y[i] > 0.8;
-    this.strip(
-      t,
-      (i) => -t.w[i] / 2,
-      (i) => t.w[i] / 2,
-      0,
-      (i) => (isLane(i) ? (i % 2 ? [0.82, 0.62, 0.38] : [0.76, 0.55, 0.32]) : boardwalk(i) ? (i % 2 ? [0.55, 0.38, 0.22] : [0.5, 0.34, 0.2]) : Math.floor(t.s[i] / 6) % 2 ? look.road : look.road2),
-      gap,
-    );
-    // Centre dashes.
-    this.material(0.2, 0.15);
-    for (let i = 0; i < t.n; i += 4) {
-      if (gap(i) || isLane(i)) continue;
-      const p = this.P(t, i, 0, 0.012);
-      this.box(p[0], p[1], p[2], 0.18, 0.012, 2.2, [0.85, 0.85, 0.8], 0, 0, Math.atan2(t.tx[i], t.tz[i]));
+    const isLane = (i: number) => !!lane && t.s[i] > laneFrom && t.s[i] < laneTo;
+    const bridge = def.bridge;
+    const isBridge = (i: number) => !!bridge && t.s[i] > bridge[0] * t.L && t.s[i] < bridge[1] * t.L && t.y[i] > 1;
+    const ry = (i: number) => Math.atan2(t.tx[i], t.tz[i]);
+    const segLen = (i: number) => Math.hypot(t.x[(i + 1) % t.n] - t.x[i], t.z[(i + 1) % t.n] - t.z[i]);
+    const WOOD: V = [0.82, 0.62, 0.38],
+      WOOD2: V = [0.76, 0.55, 0.32],
+      GLASS: V = [0.55, 0.8, 0.95];
+    const band = (i: number, m: number) => Math.floor(t.s[i] / m) % 2;
+    // ——— Road surface: each track its own ———
+    const S: Record<string, { spec: number; refl: number; col: (i: number) => V }> = {
+      court: { spec: 0.3, refl: 0.08, col: (i) => (band(i, 6) ? [0.2, 0.36, 0.66] : [0.22, 0.39, 0.7]) },
+      neon: { spec: 0.4, refl: 0.3, col: (i) => (isLane(i) ? (i % 2 ? WOOD : WOOD2) : band(i, 6) ? [0.08, 0.07, 0.12] : [0.1, 0.09, 0.15]) },
+      planks: { spec: 0.2, refl: 0.04, col: (i) => (i % 4 === 0 ? [0.4, 0.27, 0.15] : i % 2 ? [0.58, 0.41, 0.24] : [0.52, 0.36, 0.21]) },
+      rooftop: { spec: 0.25, refl: 0.05, col: (i) => (band(i, 8) ? [0.4, 0.4, 0.42] : [0.37, 0.37, 0.39]) },
+      ice: { spec: 0.95, refl: 0.55, col: (i) => (band(i, 5) ? [0.72, 0.86, 0.96] : [0.66, 0.82, 0.94]) },
+      dirt: { spec: 0.05, refl: 0, col: (i) => (band(i, 9) ? [0.46, 0.33, 0.2] : [0.44, 0.315, 0.19]) },
+      hardwood: { spec: 0.55, refl: 0.25, col: (i) => (band(i, 7) ? WOOD : WOOD2) },
+      sandstone: { spec: 0.15, refl: 0.02, col: (i) => (band(i, 6) ? [0.72, 0.42, 0.26] : [0.67, 0.38, 0.23]) },
+    };
+    const surf = S[road.surface];
+    this.material(surf.spec, 0, surf.refl, road.surface === "court" ? 0 : 0);
+    if (road.surface === "hardwood") {
+      // Boards run along the road: five strips across, alternating tones.
+      for (let k = 0; k < 5; k++)
+        this.strip(
+          t,
+          (i) => -t.w[i] / 2 + (t.w[i] * k) / 5,
+          (i) => -t.w[i] / 2 + (t.w[i] * (k + 1)) / 5,
+          0,
+          (i) => (k % 2 ? WOOD : WOOD2).map((c) => c * (band(i, 7) ? 1 : 0.95)),
+          (i) => gap(i) || isBridge(i),
+        );
+    } else this.strip(t, (i) => -t.w[i] / 2, (i) => t.w[i] / 2, 0, surf.col, (i) => gap(i) || isBridge(i));
+    // Glass skybridge: glossy and faintly glowing, with a steel deck under it.
+    if (bridge) {
+      this.material(0.95, 0.25, 0.7);
+      this.strip(t, (i) => -t.w[i] / 2 - 1, (i) => t.w[i] / 2 + 1, 0, () => GLASS, (i) => !isBridge(i));
+      this.material(0.4);
+      this.strip(t, (i) => -t.w[i] / 2 - 1, (i) => t.w[i] / 2 + 1, -0.45, () => [0.2, 0.22, 0.26], (i) => !isBridge(i));
     }
+    // ——— Road markings ———
+    const mark = (i: number, d: number, w: number, col: V, dy = 0.012, len = segLen(i)) => {
+      const p = this.P(t, i, d, dy);
+      this.box(p[0], p[1], p[2], w, 0.012, len, col, 0, 0, ry(i));
+    };
+    for (let i = 0; i < t.n; i++) {
+      if (gap(i) || isLane(i) || isBridge(i)) continue;
+      const hw = t.w[i] / 2;
+      if (road.surface === "court") {
+        // White court lines along both edges and a dashed centre line.
+        this.material(0.2, 0.15);
+        for (const s of [-1, 1]) mark(i, s * (hw - 0.4), 0.14, palette.white);
+        if (i % 4 === 0) mark(i, 0, 0.14, palette.white, 0.012, 2.2);
+      } else if (road.surface === "neon") {
+        // Glowing edge lines (pink left, cyan right) and violet centre dashes.
+        this.material(0.2, 1.6);
+        mark(i, -(hw - 0.3), 0.16, [1, 0.25, 0.75]);
+        mark(i, hw - 0.3, 0.16, [0.2, 0.85, 1]);
+        if (i % 4 === 0) mark(i, 0, 0.16, [0.6, 0.35, 1], 0.012, 2.2);
+      } else if (road.surface === "rooftop") {
+        // Double yellow centre line and dark tar seams across.
+        this.material(0.2, 0.15);
+        for (const s of [-0.15, 0.15]) mark(i, s, 0.1, [0.95, 0.78, 0.15]);
+        if (i % 8 === 0) {
+          const p = this.P(t, i, 0, 0.012);
+          this.box(p[0], p[1], p[2], t.w[i] - 0.4, 0.012, 0.12, [0.12, 0.12, 0.14], 0, 0, ry(i));
+        }
+      } else if (road.surface === "ice") {
+        // Pale frost streaks scattered on the ice.
+        this.material(0.8, 0.1, 0.3);
+        if (i % 3 === 0) mark(i, ((i * 37) % 11) - 5, 0.25, [0.95, 0.97, 1], 0.012, 3.5);
+      } else if (road.surface === "dirt") {
+        // Two darker tyre ruts.
+        this.material(0.05);
+        for (const s of [-2.2, 2.2]) mark(i, s, 0.9, [0.3, 0.21, 0.12]);
+      } else if (road.surface === "hardwood") {
+        // Blue painted borders and a white centre line, like a court floor.
+        this.material(0.4, 0.1, 0.2);
+        for (const s of [-1, 1]) mark(i, s * (hw - 0.35), 0.7, [0.2, 0.4, 0.85]);
+        if (i % 2 === 0) mark(i, 0, 0.12, palette.white);
+      } else if (road.surface === "sandstone") {
+        // Cracks in the rock road.
+        this.material(0.1);
+        if (i % 5 === 0) {
+          const p = this.P(t, i, ((i * 13) % 9) - 4, 0.012);
+          this.box(p[0], p[1], p[2], 0.08, 0.012, 2.4, [0.42, 0.2, 0.12], 0, 0, ry(i) + ((i % 3) - 1) * 0.6);
+        }
+      }
+    }
+    // ——— Verges (the ground's own colour; glass on the skybridge) ———
     this.material(0.1, 0, 0.02);
     for (const side of [-1, 1])
       this.strip(
@@ -216,35 +303,114 @@ export class KartScene extends Scene {
         (i) => (side * t.w[i]) / 2,
         (i) => side * (t.w[i] / 2 + def.verge),
         -0.012,
-        (i) => (isLane(i) ? [0.1, 0.1, 0.13] : def.id === "skyline" && t.y[i] > 3 ? look.verge : look.verge),
-        gap,
+        (i) => (isLane(i) ? [0.1, 0.1, 0.13] : look.verge),
+        (i) => gap(i) || isBridge(i),
       );
-    // Curbs on corners: red and white blocks.
-    this.material(0.4, 0.05);
+    // ——— Kerbs ———
+    const corner = (i: number) => Math.abs(t.k[i]) >= 0.012;
     for (let i = 0; i < t.n; i++) {
-      if (Math.abs(t.k[i]) < 0.012 || gap(i) || isLane(i)) continue;
+      if (gap(i) || isLane(i) || isBridge(i)) continue;
       for (const side of [-1, 1]) {
         const p = this.P(t, i, side * (t.w[i] / 2 + 0.35), 0.02);
-        this.box(p[0], p[1], p[2], 0.7, 0.05, (t.s[i + 1] - t.s[i]) * 0.98, i % 2 ? palette.white : palette.red, 0, 0, Math.atan2(t.tx[i], t.tz[i]));
+        const len = segLen(i) * 0.98;
+        if (road.kerb === "court" && corner(i)) {
+          this.material(0.4, 0.05);
+          this.box(p[0], p[1], p[2], 0.7, 0.05, len, i % 2 ? palette.white : palette.blue, 0, 0, ry(i));
+        } else if (road.kerb === "hazard" && corner(i)) {
+          this.material(0.4, 0.05);
+          this.box(p[0], p[1], p[2], 0.7, 0.05, len, i % 2 ? [0.1, 0.1, 0.1] : [0.98, 0.8, 0.1], 0, 0, ry(i));
+        } else if (road.kerb === "neonline") {
+          this.material(0.2, 1.4);
+          this.box(p[0], p[1], p[2], 0.25, 0.05, len, side < 0 ? [1, 0.25, 0.75] : [0.2, 0.85, 1], 0, 0, ry(i));
+        } else if (road.kerb === "rope" && i % 3 === 0) {
+          this.material(0.3);
+          this.box(p[0], p[1] + 0.3, p[2], 0.14, 0.6, 0.14, [0.45, 0.32, 0.18]);
+          this.box(p[0], p[1] + 0.48, p[2], 0.05, 0.05, segLen(i) * 3, [0.85, 0.78, 0.6], 0, 0, ry(i));
+        } else if (road.kerb === "iceblocks" && corner(i) && i % 2 === 0) {
+          this.material(0.9, 0.15, 0.4);
+          this.box(p[0], p[1] + 0.15, p[2], 0.6, 0.35, 0.6, i % 4 ? [0.8, 0.92, 1] : [0.96, 0.98, 1], 0, 0, ry(i) + 0.3);
+        } else if (road.kerb === "rocks" && corner(i) && i % 2 === 0) {
+          this.material(0.15);
+          const r = 0.3 + ((i * 7) % 5) * 0.06;
+          this.blob(p[0], p[1], p[2], r, r * 0.7, r, road.surface === "sandstone" ? [0.55, 0.3, 0.2] : [0.45, 0.45, 0.42], 0, 3, 6);
+        } else if (road.kerb === "paint") {
+          this.material(0.3, 0.1, 0.2);
+          this.box(p[0], p[1] - 0.008, p[2], 0.5, 0.01, len, corner(i) ? (i % 2 ? palette.white : palette.orange) : palette.white, 0, 0, ry(i));
+        }
       }
     }
-    // Barriers along the outer edge (open at the shortcut's ends and over gaps).
-    this.material(0.45, 0, 0.05);
+    // ——— Barriers along the outer edge (open at the shortcut's ends and over gaps) ———
     for (let i = 0; i < t.n; i++) {
       for (const side of [-1, 1]) {
         if (nearCut(i, side) || gap(i)) continue;
-        const p = this.P(t, i, side * (t.w[i] / 2 + def.verge + 0.35), 0.4);
-        const len = Math.hypot(t.x[(i + 1) % t.n] - t.x[i], t.z[(i + 1) % t.n] - t.z[i]);
-        const col = def.id === "neon" ? (i % 6 < 3 ? [0.9, 0.2, 0.7] : [0.2, 0.75, 1]) : Math.floor(i / 3) % 2 ? palette.blue : palette.white;
-        if (def.id === "neon") this.glow(0.9);
-        this.box(p[0], p[1], p[2], 0.5, 0.8, len + 0.05, col, 0, 0, Math.atan2(t.tx[i], t.tz[i]));
-        if (def.id === "neon") this.glow(0);
+        const bridgeHere = isBridge(i);
+        const at = side * (t.w[i] / 2 + (bridgeHere ? 1.2 : def.verge) + 0.35);
+        const p = this.P(t, i, at, 0);
+        const len = segLen(i) + 0.05,
+          r0 = ry(i);
+        const kind = bridgeHere ? "glass" : road.barrier;
+        if (kind === "glass") {
+          this.material(0.95, 0.6, 0.5);
+          this.box(p[0], p[1] + 0.55, p[2], 0.08, 1.1, len, [0.6, 0.85, 1], 0, 0, r0);
+          this.material(0.6, 1.2);
+          this.box(p[0], p[1] + 1.12, p[2], 0.14, 0.06, len, [0.3, 0.9, 1], 0, 0, r0);
+        } else if (kind === "neon") {
+          this.material(0.45, 0.9, 0.05);
+          this.box(p[0], p[1] + 0.4, p[2], 0.5, 0.8, len, i % 6 < 3 ? [0.9, 0.2, 0.7] : [0.2, 0.75, 1], 0, 0, r0);
+        } else if (kind === "fence") {
+          // Court fencing: dark mesh between posts, a white top rail.
+          this.material(0.3);
+          this.box(p[0], p[1] + 0.75, p[2], 0.06, 1.5, len, [0.12, 0.16, 0.14], 0, 0, r0);
+          this.material(0.4, 0.1);
+          this.box(p[0], p[1] + 1.52, p[2], 0.1, 0.08, len, palette.white, 0, 0, r0);
+          if (i % 3 === 0) this.box(p[0], p[1] + 0.8, p[2], 0.14, 1.6, 0.14, [0.3, 0.32, 0.34]);
+        } else if (kind === "rail") {
+          // Boardwalk railing: wooden posts and two rails.
+          this.material(0.25);
+          for (const h of [0.45, 0.85]) this.box(p[0], p[1] + h, p[2], 0.1, 0.1, len, [0.62, 0.46, 0.3], 0, 0, r0);
+          if (i % 2 === 0) this.box(p[0], p[1] + 0.48, p[2], 0.16, 0.96, 0.16, [0.5, 0.36, 0.22]);
+        } else if (kind === "guardrail") {
+          // Steel guardrail on short posts.
+          this.material(0.8, 0, 0.3);
+          this.box(p[0], p[1] + 0.6, p[2], 0.08, 0.32, len, [0.72, 0.74, 0.78], 0, 0, r0);
+          if (i % 2 === 0) {
+            this.material(0.4);
+            this.box(p[0] + side * 0.1 * -t.tz[i], p[1] + 0.35, p[2] + side * 0.1 * t.tx[i], 0.12, 0.7, 0.12, [0.35, 0.36, 0.4]);
+          }
+        } else if (kind === "snowbank") {
+          this.material(0.4, 0.05);
+          if (i % 2 === 0) this.blob(p[0], p[1] + 0.1, p[2], 0.9, 0.75 + ((i * 7) % 5) * 0.08, 1.8, [0.95, 0.97, 1], 0, 4, 8);
+        } else if (kind === "logs") {
+          this.material(0.2);
+          for (const h of [0.25, 0.7]) this.box(p[0], p[1] + h, p[2], 0.45, 0.45, len, h > 0.5 ? [0.42, 0.27, 0.14] : [0.36, 0.23, 0.12], 0, 0, r0);
+        } else if (kind === "pads") {
+          // Padded arena wall in Sportle colours with a white top trim.
+          this.material(0.35, 0.05);
+          const c = [palette.blue, palette.orange, palette.red][Math.floor(i / 4) % 3];
+          this.box(p[0], p[1] + 0.6, p[2], 0.35, 1.2, len, c, 0, 0, r0);
+          this.material(0.4, 0.2);
+          this.box(p[0], p[1] + 1.23, p[2], 0.4, 0.06, len, palette.white, 0, 0, r0);
+        } else if (kind === "boulders" && i % 2 === 0) {
+          this.material(0.15);
+          const r = 0.7 + ((i * 13) % 7) * 0.12;
+          this.blob(p[0], p[1] + r * 0.4, p[2], r, r * 0.8, r * 1.2, [0.62 - (i % 3) * 0.05, 0.34, 0.22], 0, 4, 7);
+        }
       }
     }
+    // Bridge supports: pillars at the skybridge's ends, clear of the road underneath.
+    if (bridge)
+      for (let i = 0; i < t.n; i += 6) {
+        if (!isBridge(i) || t.y[i] > 5) continue;
+        this.material(0.5, 0, 0.2);
+        for (const side of [-1, 1]) {
+          const p = this.P(t, i, side * (t.w[i] / 2 + 1.6), 0);
+          this.box(p[0], p[1] / 2 - 0.2, p[2], 0.5, p[1] - 0.4, 0.5, [0.75, 0.78, 0.82]);
+        }
+      }
     // Shortcut strip (dirt / gravel / sand): drivable, slow without a boost.
     if (cut) {
       this.material(0.08, 0, 0.02);
-      const col: V = def.ground === "sand" ? [0.8, 0.68, 0.46] : def.ground === "grass" ? [0.45, 0.33, 0.2] : [0.32, 0.3, 0.3];
+      const col: V = def.ground === "sand" ? [0.8, 0.68, 0.46] : def.ground === "grass" || def.ground === "jungle" ? [0.45, 0.33, 0.2] : def.ground === "snow" ? [0.78, 0.84, 0.9] : def.ground === "desert" ? [0.62, 0.42, 0.28] : [0.32, 0.3, 0.3];
       for (let q = 0; q + 1 < cut.x.length; q++) {
         const ex = cut.x[q + 1] - cut.x[q],
           ez = cut.z[q + 1] - cut.z[q],
@@ -490,7 +656,7 @@ export class KartScene extends Scene {
         this.box(x + 1.4, -0.05, z, 0.9, 0.02, 1.9, c);
       }
       crowd(-30, -86, 50, 0, 4);
-    } else {
+    } else if (def.id === "skyline") {
       // Skyline: buildings under the rooftop sections, garage pillars, the city around.
       for (let i = 0; i < t.n; i += 8) {
         if (!t.ground[i]) continue;
@@ -517,6 +683,98 @@ export class KartScene extends Scene {
           z = (rnd() * 2 - 1) * 150;
         if (!clear(x, z, 12)) continue;
         building(x, z, 10 + rnd() * 12, 10 + rnd() * 12, 8 + rnd() * 50, [0.3 + rnd() * 0.2, 0.32, 0.38], 0.5);
+      }
+    } else if (def.id === "frost") {
+      // Snowy mountain: rock and snow under the climbing road, pines, peaks all round.
+      for (let i = 0; i < t.n; i += 8) {
+        const y = t.y[i];
+        if (y < 0.6) continue;
+        const p = this.P(t, i, 0, 0);
+        const w = t.w[i] + def.verge * 2 + 3;
+        building(p[0], p[2], w, w, y - 0.06 - (((i / 8) * 5) % 9) * 0.009, [0.82, 0.86, 0.9], 0, 0, true);
+      }
+      const pine = (x: number, z: number, s: number) => {
+        this.material(0.2);
+        this.box(x, 0.6 * s, z, 0.3 * s, 1.2 * s, 0.3 * s, [0.35, 0.24, 0.15]);
+        for (let k = 0; k < 3; k++) {
+          this.blob(x, (1.4 + k * 1.1) * s, z, (1.5 - k * 0.4) * s, 0.9 * s, (1.5 - k * 0.4) * s, [0.1, 0.3 + k * 0.03, 0.18], 0, 4, 7);
+          this.blob(x, (1.75 + k * 1.1) * s, z, (0.9 - k * 0.25) * s, 0.3 * s, (0.9 - k * 0.25) * s, [0.95, 0.97, 1], 0, 3, 7);
+        }
+      };
+      for (let i = 0; i < 90; i++) {
+        const x = (rnd() * 2 - 1) * 170,
+          z = (rnd() * 2 - 1) * 140;
+        if (clear(x, z, 4)) pine(x, z, 0.9 + rnd() * 0.6);
+      }
+      this.material(0.3, 0, 0.1);
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + rnd() * 0.3,
+          r = 230 + rnd() * 60,
+          h = 50 + rnd() * 60;
+        this.blob(Math.cos(a) * r, h * 0.3, Math.sin(a) * r, 55 + rnd() * 30, h, 55 + rnd() * 30, [0.42, 0.45, 0.52], 0, 5, 9);
+        this.blob(Math.cos(a) * r, h * 0.3 + h * 0.72, Math.sin(a) * r, 22, h * 0.32, 22, [0.96, 0.97, 1], 0, 4, 9);
+      }
+    } else if (def.id === "jungle") {
+      // Dense jungle: big canopy trees, palms, ferns and mossy rocks; the river under the jump.
+      for (let i = 0; i < 110; i++) {
+        const x = (rnd() * 2 - 1) * 170,
+          z = (rnd() * 2 - 1) * 130;
+        if (!clear(x, z, 3)) continue;
+        if (rnd() < 0.3) palm(x, z, 0.9 + rnd() * 0.4);
+        else {
+          const s = 1.2 + rnd() * 0.9;
+          this.material(0.2);
+          this.box(x, 2 * s, z, 0.5 * s, 4 * s, 0.5 * s, [0.32, 0.22, 0.13]);
+          this.blob(x, 5 * s, z, 2.6 * s, 1.8 * s, 2.6 * s, [0.08 + rnd() * 0.06, 0.32 + rnd() * 0.12, 0.1], 0, 5, 8);
+        }
+      }
+      this.material(0.15);
+      for (let i = 0; i < 60; i++) {
+        const x = (rnd() * 2 - 1) * 150,
+          z = (rnd() * 2 - 1) * 110;
+        if (clear(x, z, 1)) this.blob(x, 0.2, z, 0.8 + rnd(), 0.5, 0.8 + rnd(), rnd() < 0.5 ? [0.2, 0.5, 0.18] : [0.38, 0.42, 0.34], 0, 3, 6);
+      }
+    } else if (def.id === "stadium") {
+      // An indoor-style stadium: stands with a crowd on every side, floodlight towers.
+      crowd(0, -78, 150, 0, 8);
+      crowd(0, 78, 150, Math.PI, 8);
+      crowd(-142, 0, 90, -Math.PI / 2, 8);
+      crowd(142, 0, 90, Math.PI / 2, 8);
+      for (const [x, z] of [[-130, -70], [130, -70], [-130, 70], [130, 70]]) {
+        this.material(0.4);
+        this.box(x, 14, z, 1.2, 28, 1.2, [0.3, 0.3, 0.34]);
+        this.material(0.2, 2.2);
+        this.box(x, 28.5, z, 6, 2, 1, [1, 0.97, 0.88]);
+      }
+      this.material(0.2, 1.1);
+      this.box(0, 18, -98, 40, 12, 0.6, [0.05, 0.05, 0.08]);
+      this.text("SPORTLE KART", -16, 17, -97.6, 0.45, 1, 0, palette.orange);
+    } else if (def.id === "canyon") {
+      // Red-rock desert: layered mesas, rock spires and cacti; ground under the raised road.
+      for (let i = 0; i < t.n; i += 8) {
+        const y = t.y[i];
+        if (y < 0.6) continue;
+        const p = this.P(t, i, 0, 0);
+        const w = t.w[i] + def.verge * 2 + 3;
+        building(p[0], p[2], w, w, y - 0.06 - (((i / 8) * 5) % 9) * 0.009, [0.74, 0.46, 0.3], 0, 0, true);
+      }
+      for (let i = 0; i < 24; i++) {
+        const x = (rnd() * 2 - 1) * 210,
+          z = (rnd() * 2 - 1) * 170;
+        if (!clear(x, z, 25)) continue;
+        const w = 18 + rnd() * 30,
+          h = 12 + rnd() * 30;
+        for (let k = 0; k < 3; k++) building(x, z, w - k * 4, w * 0.8 - k * 4, (h * (k + 1)) / 3, [0.72 - k * 0.07, 0.38 + k * 0.03, 0.24], 0, 0, true);
+      }
+      for (let i = 0; i < 70; i++) {
+        const x = (rnd() * 2 - 1) * 160,
+          z = (rnd() * 2 - 1) * 120;
+        if (!clear(x, z, 3)) continue;
+        this.material(0.2);
+        const h = 2 + rnd() * 2.5;
+        this.box(x, h / 2, z, 0.5, h, 0.5, [0.25, 0.5, 0.25]);
+        this.box(x + 0.55, h * 0.6, z, 0.4, 1.2, 0.4, [0.25, 0.5, 0.25]);
+        this.box(x - 0.55, h * 0.45, z, 0.4, 1, 0.4, [0.25, 0.5, 0.25]);
       }
     }
   }
