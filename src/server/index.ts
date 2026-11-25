@@ -35,6 +35,21 @@ import {
   stepBowl,
 } from "./bowling.ts";
 import { LANES, MAX_BOWLERS } from "../shared/bowling.ts";
+import { createKartRoom, joinRacer } from "./rooms.ts";
+import {
+  botForNow,
+  humans as kartHumans,
+  kartBackground,
+  kartLive,
+  kartView,
+  nextRace,
+  setOptions as kartOptions,
+  startKart,
+  stepKart,
+  toLobby,
+} from "./kart.ts";
+import { BODIES, CUP } from "../shared/kart.ts";
+import type { BodyId, BotLevel as KartBot, KartMode, TrackId } from "../shared/kart.ts";
 import type { BotLevel, LaneId } from "../shared/bowling.ts";
 import {
   createLobby,
@@ -85,6 +100,8 @@ function json(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data));
 }
 function view(r: Room) {
+  if (r.kart)
+    return { code: r.code, game: "kart", state: kartView(r.kart), serverTime: Date.now() };
   if (r.bowl)
     return { code: r.code, game: "bowling", state: r.bowl, serverTime: Date.now() };
   return { code: r.code, state: r.state, serverTime: Date.now() };
@@ -165,6 +182,23 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === "POST" && path === "/api/create") {
         const a = await body(req);
+        if (a.game === "kart") {
+          if (rooms.size >= 100) throw Error("Server room limit reached");
+          const mode = (["race", "cup", "trial"].includes(a.mode) ? a.mode : "race") as KartMode;
+          const trackId = (CUP.includes(a.track) ? a.track : "court") as TrackId;
+          const bot = (["rookie", "club", "pro"].includes(a.bot) ? a.bot : "club") as KartBot;
+          const laps = Number.isInteger(a.laps) && a.laps >= 1 && a.laps <= 5 ? a.laps : 3;
+          const r = createKartRoom(mode, trackId, bot, a.items !== false, laps);
+          if (a.shared === true) r.kart!.shared = true;
+          return json(res, {
+            ...view(r),
+            credential: r.host,
+            displayId: "host",
+            pair: r.pair,
+            pairExpires: r.pairExpires,
+            publicOrigin: publicURL,
+          });
+        }
         if (a.game === "bowling") {
           if (rooms.size >= 100) throw Error("Server room limit reached");
           const lane = (LANES.some((l) => l.id === a.lane) ? a.lane : "neon") as LaneId;
@@ -284,6 +318,21 @@ const server = createServer(async (req, res) => {
         }
         const name =
           typeof a.name === "string" ? a.name.trim().slice(0, 20) : "Player";
+        if (r.kart) {
+          const result = joinRacer(
+            r,
+            name || "Driver",
+            a.credential,
+            display,
+            (OUTFITS.some((o) => o.id === a.outfit) ? a.outfit : "classic") as Outfit,
+            cleanGear(a.gear),
+            (BODIES.some((b) => b.id === a.body) ? a.body : "classic") as BodyId,
+            Number.isInteger(a.color) ? a.color : 0,
+          );
+          r.updated = Date.now();
+          r.kart.event++;
+          return json(res, { ...view(r), ...result });
+        }
         if (r.bowl) {
           const result = joinBowler(
             r,
@@ -351,6 +400,43 @@ const server = createServer(async (req, res) => {
         return json(res, { accepted: acceptInput(r, session, a) });
       if (path === "/api/move")
         return json(res, { accepted: acceptMove(r, session, a) });
+      if (r.kart) {
+        const k = r.kart;
+        const kp = k.racers.find((p) => p.id === session.playerId && !p.bot);
+        if (path === "/api/ready" && kp) {
+          if (!kartLive(kp)) throw Error("Turn on motion and set the centre first");
+          kp.ready = !!a.ready;
+          k.event++;
+          return json(res, { ok: true });
+        }
+        if (path === "/api/background" && kp) {
+          kartBackground(k, kp);
+          return json(res, { ok: true });
+        }
+        if (path === "/api/pair" && session.role !== "controller")
+          return json(res, issuePair(r, session, null));
+        // Pause: the host screen, or the phone in a one-driver race.
+        if (path === "/api/pause" || path === "/api/resume") {
+          if (session.role === "controller" && !(kp && kartHumans(k).length === 1))
+            return json(res, { error: "Only the host can pause a race with several drivers" }, 403);
+          if (k.phase === "countdown" || k.phase === "race") k.paused = path === "/api/pause";
+          k.message = k.paused ? "Paused" : "Racing";
+          k.event++;
+          return json(res, { ok: true });
+        }
+        if (path === "/api/kart/layout" && session.role !== "controller") {
+          kartOptions(k, { shared: !!a.shared });
+          return json(res, { ok: true });
+        }
+        if (session.role !== "host") return json(res, { error: "Host action only" }, 403);
+        if (path === "/api/start") startKart(k);
+        else if (path === "/api/kart/next") nextRace(k);
+        else if (path === "/api/kart/lobby") toLobby(k);
+        else if (path === "/api/kart/options") kartOptions(k, a);
+        else if (path === "/api/kart/bot") botForNow(k, String(a.id || ""));
+        else return json(res, { error: "Unknown action" }, 404);
+        return json(res, { ok: true });
+      }
       if (r.bowl) {
         const b = r.bowl;
         const bp = b.players.find((p) => p.id === session.playerId);
@@ -460,6 +546,8 @@ const server = createServer(async (req, res) => {
         ? resolve(root, "index.html")
         : path === "/bowling" || path === "/bowling/phone"
           ? resolve(root, "bowling.html")
+        : path === "/kart" || path === "/kart/phone"
+          ? resolve(root, "kart.html")
         : resolve(root, "." + decodeURIComponent(path));
     if (path.startsWith("/shared/")) file = resolve(source, "..", "." + path);
     const allowed =
@@ -537,12 +625,17 @@ function safely(r: Room, fn: () => void) {
     fn();
   } catch (e) {
     console.error(`[room ${r.code}] simulation error:`, e);
+    if (r.kart && !r.kart.paused) {
+      r.kart.paused = true;
+      r.kart.message = "Something went wrong in this race. Host: press Resume.";
+      r.kart.event++;
+    }
     if (r.bowl && !r.bowl.paused) {
       r.bowl.paused = true;
       r.bowl.message = "Something went wrong in this game. Host: press Resume.";
       r.bowl.event++;
     }
-    if (!r.bowl && !r.state.paused) {
+    if (!r.bowl && !r.kart && !r.state.paused) {
       r.state.paused = true;
       r.state.pauseReason = "host";
       r.state.message =
@@ -560,7 +653,9 @@ const interval = setInterval(() => {
   last = now;
   while (acc >= 1 / 120) {
     for (const r of rooms.values())
-      safely(r, () => (r.bowl ? stepBowl(r.bowl) : step(r.state)));
+      safely(r, () =>
+        r.kart ? stepKart(r.kart) : r.bowl ? stepBowl(r.bowl) : step(r.state),
+      );
     acc -= 1 / 120;
   }
   if (++tick % 4 === 0) {

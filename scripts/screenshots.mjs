@@ -5,16 +5,22 @@
  * Env: CHROME_PATH, QUALITY (high/medium/low), VIEWS (comma list of third,first,broadcast).
  * Bowling: `node scripts/screenshots.mjs <outDir> bowling` (every lane) or `bowling:neon,beach`;
  * each lane is shot in every camera view at the aim, mid-roll and at the pins.
+ * Kart: `node scripts/screenshots.mjs <outDir> kart` (every track) or `kart:court,neon`; each track in
+ * chase, bumper and TV broadcast view, plus split screen with two phones and the phone controls.
  */
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { setUpPhone } from "./phone-setup.mjs";
 import { joinPhone, bowl } from "./bowling-phone.mjs";
+import { joinPhone as joinKart, pose, wheel } from "./kart-phone.mjs";
 const out = process.argv[2] || "screens";
 const maps = (process.argv[3] || "arena,tokyo,nyc,centralpark,haas").split(",");
 const lanes = (process.argv[3] || "").startsWith("bowling")
   ? (process.argv[3].split(":")[1] || "neon,championship,rooftop,beach").split(",")
+  : null;
+const karts = (process.argv[3] || "").startsWith("kart")
+  ? (process.argv[3].split(":")[1] || "court,neon,beach,skyline").split(",")
   : null;
 const views = (process.env.VIEWS || "third,broadcast").split(",");
 fs.mkdirSync(out, { recursive: true });
@@ -37,6 +43,39 @@ try {
       : {}),
     args: ["--enable-gpu", "--ignore-gpu-blocklist"],
   });
+  for (const id of karts ?? []) {
+    const ctx = await browser.newContext();
+    const tv = await ctx.newPage({ viewport: { width: 1440, height: 900 } });
+    const pa = await ctx.newPage({ viewport: { width: 844, height: 390 } });
+    const errors = [];
+    for (const p of [tv, pa]) p.on("pageerror", (e) => errors.push(e.message));
+    const split = id === (karts[0] ?? "court");
+    await tv.goto(`http://127.0.0.1:${PORT}/kart#test`);
+    await tv.locator(split ? "#goMulti" : "#goSingle").click();
+    await tv.locator(`label[for=kt-${id}]`).click();
+    await tv.locator("#create").click();
+    await tv.locator("#lobby").waitFor({ state: "visible" });
+    const room = (await tv.locator("#roomcode").textContent()).trim();
+    await joinKart(pa, `http://127.0.0.1:${PORT}`, room, "Jordan");
+    let pb = null;
+    if (split) {
+      pb = await (await browser.newContext()).newPage({ viewport: { width: 844, height: 390 } });
+      await joinKart(pb, `http://127.0.0.1:${PORT}`, room, "Sam", { grip: -1, body: "roller" });
+    }
+    await tv.waitForFunction(() => window.__kartScene.kart?.racers.filter((r) => !r.bot).every((r) => r.ready));
+    await tv.locator("#start").click();
+    await tv.waitForFunction(() => window.__kartScene.kart?.phase === "race", null, { timeout: 20000 });
+    await pose(pa, wheel(8));
+    for (const v of ["chase", "bumper", "broadcast"]) {
+      await tv.evaluate((v) => (window.__kartScene.viewMode2 = v), v);
+      await tv.waitForTimeout(1800);
+      await tv.screenshot({ path: `${out}/kart-${id}-${split ? "split-" : ""}${v}.png` });
+    }
+    await pa.screenshot({ path: `${out}/kart-${id}-phone.png` });
+    console.log("kart", id, errors.length ? errors : "ok");
+    await ctx.close();
+    if (pb) await pb.context().close();
+  }
   for (const lane of lanes ?? []) {
     const ctx = await browser.newContext();
     const tv = await ctx.newPage({ viewport: { width: 1440, height: 900 } }),
@@ -68,7 +107,7 @@ try {
     console.log("bowling", lane, errors.length ? errors : "ok");
     await ctx.close();
   }
-  for (const map of lanes ? [] : maps) {
+  for (const map of lanes || karts ? [] : maps) {
     const ctx = await browser.newContext();
     const display = await ctx.newPage({
         viewport: { width: 1440, height: 900 },

@@ -43,6 +43,19 @@ const BOWL_ART = `<svg viewBox="0 0 320 200" aria-hidden="true">
     </g></g>
 </svg>`;
 
+const KART_ART = `<svg viewBox="0 0 320 200" aria-hidden="true">
+  <defs><linearGradient id="hkSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d2a5c"/><stop offset="1" stop-color="#3f8fe0"/></linearGradient></defs>
+  <rect width="320" height="200" fill="url(#hkSky)"/>
+  <path d="M0 120 Q80 96 160 112 T320 104 V200 H0 Z" fill="#2f7d3c"/>
+  <path id="hkRoad" d="M-20 196 C60 150 120 168 170 140 S270 100 340 118" fill="none" stroke="#2c2c36" stroke-width="38"/>
+  <path d="M-20 196 C60 150 120 168 170 140 S270 100 340 118" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="12 12" opacity=".8"><animate attributeName="stroke-dashoffset" values="0;-48" dur=".8s" repeatCount="indefinite"/></path>
+  <g><animateMotion dur="3.2s" repeatCount="indefinite" rotate="auto" path="M-20 196 C60 150 120 168 170 140 S270 100 340 118"/>
+    <g transform="translate(0 -8)"><rect x="-16" y="-7" width="32" height="14" rx="5" fill="#f2457f"/><circle cx="-10" cy="8" r="5" fill="#111"/><circle cx="11" cy="8" r="5" fill="#111"/><circle cx="-2" cy="-12" r="7" fill="#54a8fa"/><circle cx="-2" cy="-14" r="3.2" fill="#fff"/><path d="M-22 -2 h-10 M-22 3 h-14" stroke="#ff8a1f" stroke-width="3" stroke-linecap="round"><animate attributeName="opacity" values="1;.3;1" dur=".3s" repeatCount="indefinite"/></path></g></g>
+  <g transform="translate(250 52)"><g><animateTransform attributeName="transform" type="rotate" values="-22;22;-22" dur="2.4s" repeatCount="indefinite"/>
+    <rect x="-34" y="-18" width="68" height="36" rx="8" fill="#151524" stroke="#ebf538" stroke-width="3"/><circle cx="-24" cy="0" r="5" fill="#ff8a1f"/><circle cx="24" cy="0" r="5" fill="#54a8fa"/></g></g>
+  <rect x="150" y="24" width="10" height="10" rx="2" fill="#ff8a1f" transform="rotate(20 155 29)"><animateTransform attributeName="transform" type="rotate" values="0 155 29;360 155 29" dur="2s" repeatCount="indefinite"/></rect>
+</svg>`;
+
 const SOON_ART = `<svg viewBox="0 0 320 200" aria-hidden="true">
   <rect width="320" height="200" fill="#14141f"/>
   <g fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="3" stroke-dasharray="8 8">
@@ -73,6 +86,7 @@ interface Card {
 const CARDS: Card[] = [
   { id: "play", tag: "button", name: "Pickleball", line: "Your phone is the paddle", who: "1–4 players · offline or online", art: PICKLE_ART, cls: "pickle" },
   { id: "playBowling", tag: "a", href: "/bowling", name: "Bowling", line: "Your phone is the ball", who: "1–6 players · take turns", art: BOWL_ART, cls: "bowl" },
+  { id: "playKart", tag: "a", href: "/kart", name: "Kart", line: "Your phone is the wheel", who: "1–8 players · split screen", art: KART_ART, cls: "kart" },
   { id: "playSoon", tag: "div", name: "More soon", line: "New games are on the way", who: "Coming later", art: SOON_ART, cls: "soon" },
 ];
 
@@ -165,6 +179,7 @@ export function mountHub(root: HTMLElement, opts: { intro: boolean; startOpen: b
     const c = cards[k];
     if (c.id === "play") opts.onPickleball();
     else if (c.id === "playBowling") location.href = "/bowling";
+    else if (c.id === "playKart") location.href = "/kart";
   };
   cards.forEach((c, i) =>
     c.addEventListener("click", (e) => {

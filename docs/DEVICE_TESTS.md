@@ -93,3 +93,21 @@ Use `npm run tunnel`, pick **Bowling** on the TV, then Multiplayer and a lane.
 10. Play a full 10-frame game with two phones: check the scoresheet (strikes/spares/10th frame) and the winner card.
 11. **Hold to bowl:** on your turn, press and hold the orange button, swing back, let go swinging forward. Bowl 10 normal straight balls from the centre: how many reach the pins without a gutter? ____ / 10. Do the ball's speed and line feel the same ball to ball? Does the dotted predicted path match where the ball goes (the solid line after)? Does the thumb slip off the button during a hard swing (pointer cancel)?
 12. Record: does underhand bowling feel right with the phone screen-forward? Is the hook amount controllable? Any accidental releases during the backswing?
+
+## Sportle Kart phone checks (added 2026-11-24, not yet tried on a real phone)
+
+Use `npm run tunnel`, pick **Kart** on the TV, then Multiplayer and a track. Do each check on **iPhone Safari** and **Android Chrome**.
+
+1. Two or more phones scan the **same** QR; each lands on `/kart/phone`, enters a name/outfit/kart/paint, and reloads once into setup.
+2. **Landscape:** after the tap in step 01, does the page lock to landscape (Android Chrome goes full screen)? On iPhone, does the "Turn your phone sideways" card show in portrait and go away in landscape?
+3. **Both grips:** do the setup and a lap with the phone's left edge up, then again with the right edge up. Left must steer left in both. Record any grip where it is mirrored: ____.
+4. Step 02 (centre): hold level like a wheel; the bar fills in about a second. Step 03: full left and hold, full right and hold. Note the range it saved (`localStorage["sportle-kart"]`): left ____° right ____°.
+5. **Steering feel:** drive a few laps of Court Circuit. Is the dead zone right (straight when holding still, no drift on the straights)? Are small corrections fine enough? Is full lock reachable without straining the wrists? Try Gentle / Normal / Sharp and note the favourite: ____.
+6. **Buttons:** are DRIFT and ITEM reachable with the thumbs while holding the phone like a wheel? Any accidental presses? Does the hop/drift feel responsive? Do Android presses buzz, and do iPhone presses flash?
+7. **Drift:** hold DRIFT around the long right-hander after the start: the sparks should go blue → orange → pink; letting go gives a boost. Is the arc controllable (counter-steer widens it)?
+8. **Items:** tap ITEM to throw forward; hold, tilt the phone toward you, let go to throw back. Does a normal grip ever throw backwards by accident?
+9. **Gestures:** flick the phone up sharply off the Court Circuit net jumps (NICE TRICK!). Shake to break free of a Net Toss. Check that hard steering never triggers either.
+10. **Tilt to drive** (menu): top edge away = gas, toward you = brake/reverse. Is the neutral zone comfortable?
+11. **Drop and rejoin:** lock one phone mid-race: the TV says "Waiting for <name>'s phone…", the kart stops; after 30 s a bot drives it. Unlock/reload: the same kart comes back to the phone.
+12. **Delay:** film the phone and the TV together at 120/240 fps and count frames from a quick tilt to the kart turning on the TV, over home Wi-Fi and over the tunnel. Wi-Fi: ____ ms. Tunnel: ____ ms. Does steering feel late?
+13. Split screen with 2, 3 and 4 phones on one TV: does each quarter follow its own kart, and are the place/lap/item readable from the couch?

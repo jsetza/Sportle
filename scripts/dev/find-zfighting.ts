@@ -5,6 +5,8 @@ import { buildMap, LOOKS } from "../../src/client/maps.ts";
 import { MAPS } from "../../src/shared/types.ts";
 import { LANES } from "../../src/shared/bowling.ts";
 import { BowlScene } from "../../src/client/bowlscene.ts";
+import { KartScene } from "../../src/client/kartscene.ts";
+import { TRACKS, track } from "../../src/shared/kart.ts";
 import type { MapId } from "../../src/shared/types.ts";
 type Box = {
   x: number;
@@ -68,8 +70,10 @@ const WRAP =
 for (const map of [
   ...MAPS.map((m) => m.id as string),
   ...LANES.map((l) => "bowling:" + l.id),
+  ...TRACKS.map((t) => "kart:" + t.id),
 ]) {
-  const bowling = map.startsWith("bowling:");
+  const kart = map.startsWith("kart:");
+  const bowling = map.startsWith("bowling:") || kart;
   const boxes: Box[] = [];
   const blobs: {
     x: number;
@@ -84,8 +88,8 @@ for (const map of [
   const caller = () =>
     new Error()
       .stack!.split("\n")
-      .map((l) => /maps\.ts:(\d+)/.exec(l)?.[1] ?? (/bowlscene\.ts:(\d+)/.exec(l) ? "bowlscene:" + /bowlscene\.ts:(\d+)/.exec(l)![1] : undefined))
-      .filter((n) => n && (n.startsWith("bowlscene") || Number(n) < WRAP || Number(n) > WRAP + 20))[0] ??
+      .map((l) => /maps\.ts:(\d+)/.exec(l)?.[1] ?? (/(bowl|kart)scene\.ts:(\d+)/.exec(l) ? /(bowl|kart)scene\.ts:(\d+)/.exec(l)![0] : undefined))
+      .filter((n) => n && (/scene/.test(n) || Number(n) < WRAP || Number(n) > WRAP + 20))[0] ??
     "?";
   const b = {
     box(
@@ -124,7 +128,23 @@ for (const map of [
       glow = k;
     },
   };
-  if (bowling) {
+  if (kart) {
+    // The kart scene's static build (track, barriers, pads, scenery) with this recorder.
+    const fake = Object.assign(Object.create(KartScene.prototype), b, {
+      trackId: map.slice(5),
+      map: "arena",
+      mat: [0, 0, 0, 0],
+      material() {},
+      with(_m: unknown, fn: () => void) {
+        fn();
+      },
+      tri() {},
+      vertex() {},
+    });
+    const t = track(map.slice(5) as never);
+    fake.trackMesh(t);
+    fake.scenery(t);
+  } else if (bowling) {
     // The bowling scene's static build (lane, alley, scenery) with this recorder as the builder.
     const fake = Object.assign(Object.create(BowlScene.prototype), b, {
       lane: map.slice(8),

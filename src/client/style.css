@@ -3334,3 +3334,492 @@ body.hub-open .panel {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ——————————————— Sportle Kart ——————————————— */
+.khud {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.kview {
+  position: absolute;
+  overflow: hidden;
+}
+.kplace {
+  position: absolute;
+  left: 18px;
+  bottom: 84px;
+  font: italic 900 clamp(46px, 7vw, 92px) / 1 var(--display);
+  color: #fff;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.55), 0 0 24px rgba(0, 0, 0, 0.5);
+}
+.kplace i {
+  font-size: 0.42em;
+  font-style: italic;
+  vertical-align: top;
+}
+.kplace small {
+  font-size: 0.3em;
+  color: rgba(255, 255, 255, 0.7);
+}
+.klap {
+  position: absolute;
+  right: 18px;
+  top: 64px;
+  text-align: right;
+  font: 700 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+.klap b {
+  font: italic 900 32px var(--display);
+}
+.klap small {
+  display: block;
+  color: rgba(255, 255, 255, 0.75);
+}
+.kitem {
+  position: absolute;
+  left: 18px;
+  top: 64px;
+  width: 92px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(8, 8, 16, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+.kitem:empty {
+  display: none;
+}
+.kitem .kicon {
+  width: 72px;
+  height: 72px;
+}
+.kitem small {
+  font: 700 10px/1.2 ui-monospace, Menlo, monospace;
+  color: #fff;
+  text-align: center;
+}
+.kview.small .kplace {
+  font-size: clamp(30px, 4.2vw, 56px);
+}
+.kview.small .kitem,
+.kview.small .klap {
+  top: 12px;
+}
+.kview.small .kitem {
+  width: 70px;
+}
+.kview.small .kitem .kicon {
+  width: 52px;
+  height: 52px;
+}
+.kcharge {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  width: min(240px, 40%);
+  height: 10px;
+  transform: translateX(-50%);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.kcharge:empty {
+  display: none;
+}
+.kcharge i,
+.kmeter i {
+  display: block;
+  height: 100%;
+  background: #fff;
+  transition: width 0.1s;
+}
+.kcharge i.lvl1,
+.kmeter i.lvl1 {
+  background: var(--blue);
+}
+.kcharge i.lvl2,
+.kmeter i.lvl2 {
+  background: var(--orange);
+}
+.kcharge i.lvl3,
+.kmeter i.lvl3 {
+  background: #f2457f;
+}
+.kwrong,
+.kwait {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: rgba(220, 43, 69, 0.85);
+  font: italic 900 clamp(20px, 2.4vw, 34px) var(--display);
+  white-space: nowrap;
+}
+.kwait {
+  background: rgba(8, 8, 16, 0.8);
+  font: 700 15px/1.3 Inter, system-ui, sans-serif;
+  white-space: normal;
+  text-align: center;
+  max-width: 80%;
+}
+.kcall {
+  left: 50%;
+  bottom: 30%;
+}
+.kind-bad .callout-name {
+  color: #ff6f86;
+}
+.kind-up .callout-name,
+.kind-lap .callout-name {
+  color: var(--ball);
+}
+.kind-finish .callout-name {
+  color: var(--orange);
+  font-size: clamp(40px, 6vw, 80px);
+}
+.kmap {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 4;
+  width: min(220px, 22vw);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+.kboard {
+  position: fixed;
+  left: 14px;
+  top: 64px;
+  z-index: 4;
+  display: grid;
+  gap: 3px;
+  pointer-events: none;
+  font: 700 14px/1.3 Inter, system-ui, sans-serif;
+}
+.kboard div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px 3px 6px;
+  border-radius: 8px;
+  background: rgba(8, 8, 16, 0.65);
+  min-width: 180px;
+}
+.kboard div.human {
+  background: rgba(84, 168, 250, 0.4);
+}
+.kboard i,
+.kresults td i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.kboard small {
+  margin-left: auto;
+  color: var(--muted);
+  font: 700 11px ui-monospace, Menlo, monospace;
+}
+.kcount {
+  position: fixed;
+  left: 50%;
+  top: 30%;
+  z-index: 5;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.kcount b {
+  font: italic 900 clamp(90px, 16vw, 220px) / 1 var(--display);
+  color: #fff;
+  text-shadow: 0 6px 0 rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 0, 0, 0.6);
+  animation: callout-in 0.28s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+.kcount b.n1 {
+  color: var(--ball);
+}
+.kcount b.go {
+  color: var(--orange);
+}
+.kcount small {
+  font: 700 13px/1.3 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.14em;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(8, 8, 16, 0.7);
+}
+.kresults {
+  width: min(640px, 92vw);
+}
+.kresults table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 16px;
+  font-variant-numeric: tabular-nums;
+}
+.kresults th {
+  font: 700 10px/1.6 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-align: left;
+}
+.kresults td {
+  padding: 4px 6px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.kresults tr.human td {
+  font-weight: 800;
+  color: #fff;
+}
+.kresults td small {
+  font: 700 9px ui-monospace, Menlo, monospace;
+  color: var(--muted);
+}
+/* Kart phone: landscape wheel with big thumb buttons. */
+body.kartphone.joined .phone {
+  max-width: none;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+body.kartphone.joined .phead {
+  margin-bottom: 4px;
+}
+body.kartphone.racing .phead {
+  display: none;
+}
+.kturn {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+}
+.kturn svg {
+  width: 140px;
+  animation: kturn 1.6s ease-in-out infinite;
+}
+@keyframes kturn {
+  0%,
+  20% {
+    transform: rotate(0);
+  }
+  60%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+.kturn b {
+  font: italic 900 26px var(--display);
+}
+.kturn small {
+  color: var(--muted);
+}
+.kturn.hidden {
+  display: none;
+}
+.ksetup .kcols {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+.kgauge .karc {
+  width: 150px;
+}
+.krace {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(200px, 1.4fr) minmax(120px, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  height: calc(100dvh - 24px);
+  min-height: 280px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.krace.hidden {
+  display: none;
+}
+.kbtn {
+  align-self: end;
+  height: min(62dvh, 260px);
+  border-radius: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 4px;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+.kbtn b {
+  font: italic 900 clamp(24px, 5vw, 38px) var(--display);
+}
+.kbtn small {
+  font: 700 11px/1.2 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.7);
+}
+.kbtn.drift {
+  border-color: var(--blue);
+  background: rgba(84, 168, 250, 0.14);
+}
+.kbtn.item {
+  border-color: var(--orange);
+  background: rgba(255, 140, 46, 0.12);
+}
+.kbtn.item.has {
+  box-shadow: 0 0 24px rgba(255, 140, 46, 0.55);
+}
+.kbtn.held {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.22);
+}
+.kbtn.flash,
+.kwheel.flash {
+  animation: kflash 0.25s ease-out;
+}
+@keyframes kflash {
+  0% {
+    filter: brightness(2.2);
+  }
+  100% {
+    filter: none;
+  }
+}
+.kbtn .kicon {
+  width: clamp(64px, 14vw, 110px);
+  height: clamp(64px, 14vw, 110px);
+}
+.kmid {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ktop {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+}
+.kplacep {
+  font: italic 900 clamp(38px, 9vw, 64px) / 1 var(--display);
+}
+.kplacep small {
+  font-size: 0.36em;
+  color: var(--muted);
+}
+.klapp {
+  font: 700 13px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.12em;
+}
+.klapp b {
+  font: italic 900 26px var(--display);
+}
+.kpause {
+  width: 44px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+}
+.kwheel {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+.kwheel .karc {
+  width: min(100%, 260px);
+}
+.kmeter {
+  width: 80%;
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.kstatus {
+  font: 700 13px/1.3 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-align: center;
+  min-height: 1.3em;
+}
+.kcallp {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translateX(-50%) skewX(-6deg);
+  font: italic 900 clamp(26px, 6vw, 44px) var(--display);
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.kcallp.hidden {
+  display: none;
+}
+.kmenu {
+  max-width: 460px;
+}
+.kmenu .optrow {
+  margin: 12px 0 4px;
+}
+.kdot {
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  flex: none;
+}
+.kcharge svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.kcharge rect {
+  fill: #fff;
+}
+.kcharge rect.lvl1 {
+  fill: var(--blue);
+}
+.kcharge rect.lvl2 {
+  fill: var(--orange);
+}
+.kcharge rect.lvl3 {
+  fill: #f2457f;
+}
+/* Split screen: keep the HUD clear of the top bar and the Room tab. */
+.kview.small.top .kitem,
+.kview.small.top .klap {
+  top: 64px;
+}
+.kview.left .kplace {
+  bottom: 84px;
+}

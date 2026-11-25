@@ -27,6 +27,8 @@ import type {
 import type { Bowl } from "../shared/bowling.ts";
 import { addBowler, bowlInput, newBowl } from "./bowling.ts";
 import type { BotLevel, LaneId } from "../shared/bowling.ts";
+import type { Kart, KartMode, TrackId, BodyId, BotLevel as KartBot } from "../shared/kart.ts";
+import { addRacer, kartFieldsOk, kartInput, kartAway, newKart, resetIds } from "./kart.ts";
 export const token = () => randomBytes(24).toString("base64url");
 export type Session = {
   role: "host" | "display" | "controller";
@@ -53,6 +55,8 @@ export type Room = {
   updated: number;
   /** Set for a Sportle Bowling room (then `state` is an idle pickleball placeholder). */
   bowl?: Bowl;
+  /** Set for a Sportle Kart room (then `state` is an idle pickleball placeholder). */
+  kart?: Kart;
 };
 export const rooms = new Map<string, Room>();
 export const PAIR_TTL = 600000;
@@ -149,6 +153,46 @@ export function createBowlRoom(
   const r = createRoom("practice", "easy");
   r.bowl = newBowl(mode, lane, bot, cap);
   return r;
+}
+/** A Sportle Kart room: same pairing, sessions and transport as the other games. */
+export function createKartRoom(mode: KartMode, trackId: TrackId, bot: KartBot, items: boolean, laps = 3): Room {
+  const r = createRoom("practice", "easy");
+  r.kart = newKart(mode, trackId, bot, items, laps);
+  return r;
+}
+/** A phone joins (or rejoins) a kart room. Rejoining takes back the same kart, even mid-race. */
+export function joinRacer(
+  r: Room,
+  name: string,
+  credential: string | undefined,
+  display: string,
+  outfit: Outfit,
+  gear: Gear,
+  body: BodyId,
+  color: number,
+) {
+  const k = r.kart!;
+  if (credential) {
+    const session = r.sessions.get(credential);
+    const p = k.racers.find((q) => q.id === session?.playerId && !q.bot);
+    if (!session || session.role !== "controller" || session.expires < Date.now() || !p)
+      throw Error("Reconnect expired. Scan the QR again.");
+    p.outfit = outfit;
+    p.gear = gear;
+    resetIds(p);
+    k.event++;
+    return { credential, player: p, seq: session.lastSeq };
+  }
+  const p = addRacer(k, token().slice(0, 10), name, outfit, gear, body, color, display);
+  const key = token();
+  r.sessions.set(key, {
+    role: "controller",
+    playerId: p.id,
+    expires: Date.now() + 86400000,
+    lastSeq: -1,
+    lastInput: 0,
+  });
+  return { credential: key, player: p, seq: -1 };
 }
 /** A phone joins (or rejoins) a bowling room. Rejoining resumes the same seat and score. */
 export function joinBowler(
@@ -355,6 +399,12 @@ export function acceptInput(
 ): boolean {
   if (!admitInput(s, a, now)) return false;
   r.updated = now;
+  if (r.kart) {
+    const p = r.kart.racers.find((p) => p.id === s.playerId && !p.bot);
+    if (!p || !kartFieldsOk(a as unknown as Record<string, unknown>)) return false;
+    kartInput(r.kart, p, a, now);
+    return true;
+  }
   if (r.bowl) {
     const p = r.bowl.players.find((p) => p.id === s.playerId);
     if (!p) return false;
@@ -382,6 +432,7 @@ export function acceptInput(
   return true;
 }
 export function housekeeping(r: Room, now = Date.now()) {
+  if (r.kart) kartAway(r.kart, now);
   if (r.bowl)
     for (const p of r.bowl.players)
       if (!p.bot && p.connected && now - p.lastSeen > 2500) {

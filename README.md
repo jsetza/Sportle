@@ -1,8 +1,8 @@
-# Sportle — motion-controlled pickleball and bowling
+# Sportle — motion-controlled pickleball, bowling and kart racing
 
 _(Formerly “visual”.)_
 
-An experimental browser-based hub of 3D motion games. A computer renders the court or lane; phones provide orientation and swing intent. No phone app and no runtime packages are required. The start screen offers **Pickleball** (your phone is the paddle) and **Bowling** (your phone is the ball); see [Sportle Bowling](#sportle-bowling) below.
+An experimental browser-based hub of 3D motion games. A computer renders the court or lane; phones provide orientation and swing intent. No phone app and no runtime packages are required. The start screen offers **Pickleball** (your phone is the paddle), **Bowling** (your phone is the ball) and **Kart** (your phone is the steering wheel); see [Sportle Bowling](#sportle-bowling) and [Sportle Kart](#sportle-kart) below.
 
 **Status:** Working local prototype with a real authoritative server, real controller connections, practice, singles, and doubles mode paths. TypeScript/build and 42 automated tests pass, including a real-HTTP/SSE four-phone, two-household doubles scenario. A Chromium smoke test connects a synthetic phone, calibrates, starts practice, and hits distinct 37% and 65% shots. `npm run tunnel` provides a no-account public HTTPS URL for phone testing. **No physical iPhone/Android testing or permanent public deployment has been completed.** Do not interpret browser sensor simulation as device validation.
 
@@ -53,7 +53,7 @@ An existing Chrome installation may be used with `CHROME_PATH=/absolute/path/to/
 
 ## Play
 
-The start screen opens with a short **Welcome to Sportle** intro (any key or tap skips it; it plays once per browser tab), then **Pick a game**: a side-scrolling row of game cards (swipe, scroll, ← → or the ‹ › buttons; Enter or a click on the middle card plays). Pickleball opens the steps below; Bowling opens `/bowling`. **← All games** in the side panel goes back to the picker.
+The start screen opens with a short **Welcome to Sportle** intro (any key or tap skips it; it plays once per browser tab), then **Pick a game**: a side-scrolling row of game cards (swipe, scroll, ← → or the ‹ › buttons; Enter or a click on the middle card plays). Pickleball opens the steps below; Bowling opens `/bowling`; Kart opens `/kart`. **← All games** in the side panel goes back to the picker.
 
 1. Create a **Motion lab** room on the display.
 2. Scan its QR code on a phone, or open `/controller` on the same public origin and enter its six-character room code.
@@ -91,6 +91,29 @@ Pick **Bowling** on the start screen (or open `/bowling`). Choose **Single playe
 If the bowler who is up drops out or locks their phone, the game waits (“Waiting for Sam's phone…”); after 30 s the host can **Skip turn** (scores an open frame of zeros) or **Let a bot bowl** that frame for them. Rejoining with the same phone resumes the same seat and score. Late joiners start at the next frame; their missed frames count as empty, or, with **Handicap** on, they're credited with the field's average per frame.
 
 Simplifications (honest list): the ball is simulated as sliding on the oiled front and hooking on the dry back third, then rolling; pins are simulated on the deck as standing circles that tip over into falling capsules (2D plus tilt, not full 3D rigid bodies), with a seeded random scatter so the same bowl gives a similar, not identical, result. Stepping over the foul line is a warning only (casual), triggered by very hard bowls since the phone can't see your feet. The km/h readout is the game's ball speed, not a measurement of your arm, and the phone does not track your hand's exact position. Online bowling between households is not built yet; the turn system is per room and could take a second display later.
+
+## Sportle Kart
+
+Pick **Kart** on the start screen (or open `/kart`). Choose **Single player** (you vs 7 bots, or a time trial) or **Multiplayer** (up to 8 phones, all scanning the **same QR**), then **Single race** (3 laps), **Cup** (all four tracks in a row, points per race) or **Time trial** (single player, no bots, best lap kept as a ghost in this browser), a track, bot level (Rookie / Club / Pro), items on/off and the screen layout.
+
+1. Each phone scans the QR (`/kart/phone`), enters a name, outfit, kart (**Classic go-kart**, **Paddle cart**, **Ball roller**: small stat differences) and paint colour.
+2. **Hold the phone sideways like a steering wheel**, both hands, screen toward you. The page tries to lock landscape; where the browser won't (iPhone Safari), a "Turn your phone sideways" card shows until you do. Either long edge can be up.
+3. **Setup:** 01 tap to allow motion; 02 hold the phone level like a wheel and press and hold (sets the centre); 03 turn it all the way left and hold, then all the way right and hold (your comfortable range). **✓ Saved on this phone**: next time only the centre is needed (**Skip** uses the saved or a standard range).
+4. **Steering = tilt:** turning the phone like a wheel steers (the angle of "up" within the screen's plane, from the orientation sensor), with a small dead zone, a gentle response curve (small tilts = fine control, big tilts = full lock) and time-based smoothing, so 60 Hz and 120 Hz phones steer the same. **Steering: Gentle / Normal / Sharp** in the phone's menu, saved per phone.
+5. **Gas:** automatic by default. Menu → **Tilt to drive**: top edge away from you = gas, toward you = brake/reverse (from the centre you set), saved per phone.
+6. **Left thumb: DRIFT.** Tap to hop; hold while steering to drift. Sparks go blue → orange → pink (3 levels); letting go gives a short boost. Steering into the drift tightens it and charges faster; counter-steering widens it. **Right thumb: ITEM.** Tap to use it forward; hold, tilt the phone toward you and let go to throw it behind. **❚❚ (top centre):** menu; pausing works only for the host's screen or in a one-driver race. Android buzzes on presses; iPhone Safari has no web vibration, so the button flashes instead.
+7. **Gestures on top of the buttons:** a sharp upward flick while airborne off a ramp does a trick (small boost on landing); a sharp flick right after a **Paddle Guard** blocks something sends it back; shaking the phone breaks free of a **Net Toss** faster. Thresholds are strict (a sharp jolt, not a rotation), so steering doesn't trigger them.
+8. The phone shows your place (3rd/8), lap, held item (big icon), a steering arc with your current tilt and the drift charge meter. The race itself is watched on the TV.
+
+**Tracks:** **Court Circuit** (a giant pickleball complex: jumps over two giant nets, under the scoreboard), **Neon Lanes** (night city and a giant bowling-lane section with sliding pins), **Beach Boardwalk** (sand off-road, a pier jump over the water, boost pads on the boardwalk), **Skyline Rooftops** (rooftop gaps and a tight spiral down a parking garage, then the ramp road back up). Each has a racing line for the bots, three rows of item cubes, boost pads, a shortcut (a slow dirt/sand/gravel strip through the infield that pays off with a boost or a good drift) and a minimap. Falling into a gap: a little drone lifts you back after ~1.5 s.
+
+**Sportle power-ups** (original, from glowing Sportle item cubes; odds depend on place: the leader mostly gets defensive items, the back gets catch-up items): **Dink Shot** (a lobbed pickleball that bounces twice; spin-out), **Pin Bowl** (rolls straight down its lane; knocks karts over) and the uncommon **Strike Bowl** (a giant ball along the centre line through the leaders), **Paddle Guard** (blocks the next item; flick to send it back), **Spin Serve ×3** (curving balls: the tilt as you tap bends them), **Pin Fence** (three pins dropped behind; karts wobble), **Turbo Tape ×3** (short boosts), **Sweet Spot** (glow: nothing knocks you over, boost pads doubled), **Net Toss** (sticks to the kart ahead until its driver shakes free or ~2 s pass), **Comeback Cannon** (last two places only: fires you to just behind the kart ahead), **Crowd Wave** (bumps karts ahead in range into the air, no spin; you get a boost), **Ball Machine** (fires pickleballs across the road for 6 s). Hits are short: at most ~1.3 s of spin, 2 s of net.
+
+**Race:** 8 karts (players + bots), a 3-2-1 countdown with a start boost (hold DRIFT, or tilt to gas, in the last ~0.7 s; too early stalls), FINAL LAP / DRIFT BOOST / NICE TRICK / position-change callouts, LED boards showing the top three, a slow-motion finish replay, results with points (15-12-10-8-6-4-2-1), cups with standings. **Cameras** (**View** / `V`): chase (default), bumper and TV broadcast (trackside cameras). On the shared TV, 2 local drivers get side-by-side split screen and 3–4 get quadrants; **Screen: Shared** shows one view following the leader with a leaderboard (forced for 5–8 drivers).
+
+If a phone drops out mid-race, its kart slows to a stop and waits ("Waiting for Sam's phone… 30 s"); then a bot drives it (the host can also do this right away). Rejoining with the same phone takes the kart back mid-race.
+
+Simplifications (honest list): arcade driving on a 2D track with heights (ramps, jumps, gaps, the spiral), not a vehicle simulation; karts bump as circles; bots follow a precomputed racing line with a mild catch-up (bots more than ~70 m ahead of the best human lose 5 % top speed, far behind gain 4 %; nothing for humans); shortcuts are separate strips, not free off-road driving. The phone reads how far it is turned (orientation), never its position or the real steering-wheel angle. Online racing between households is not built.
 
 ## Controls and simulation
 
@@ -150,9 +173,11 @@ Court dimensions, diagonal service, two-bounce restrictions, kitchen volleys/mom
 ```text
 src/client/    Typed DOM menus, phone sensors, WebGL renderer, QR encoder, transport
                (bowling: bowling.ts TV + phone pages, bowlscene.ts lane/pins on the same renderer)
+               (kart: kart.ts TV + phone wheel, kartscene.ts track/karts/split screen)
 src/shared/    Shared types, motion filter, pure scoring and rule decisions
 src/server/    Node HTTP/SSE transport, rooms/auth, authoritative simulation
                (bowling: bowling.ts turns/scoring/bots, bowlphysics.ts ball and pins)
+               (kart: kart.ts 120 Hz driving, items, bots, laps; shared/kart.ts tracks, steering)
 scripts/       Type-stripping build, browser smoke test, HTTPS tunnel launcher, load probe
 tests/         Rules, physics, input/room lifecycle and real HTTP integration
 ```
