@@ -6,6 +6,8 @@ An experimental browser-based hub of 3D motion games. A computer renders the cou
 
 **Status:** Working local prototype with a real authoritative server, real controller connections, practice, singles, and doubles mode paths. TypeScript/build and 42 automated tests pass, including a real-HTTP/SSE four-phone, two-household doubles scenario. A Chromium smoke test connects a synthetic phone, calibrates, starts practice, and hits distinct 37% and 65% shots. `npm run tunnel` provides a no-account public HTTPS URL for phone testing. **No physical iPhone/Android testing or permanent public deployment has been completed.** Do not interpret browser sensor simulation as device validation.
 
+**Play:** [play.sportle.online](https://play.sportle.online). It runs from the owner's computer, so it is only up while that computer is on. Open it on a TV or laptop and scan the QR with your phone.
+
 ## Run
 
 Use Node.js 24 or newer.

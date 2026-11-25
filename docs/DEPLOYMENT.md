@@ -57,6 +57,26 @@ Cloudflare quick tunnels do not support Server-Sent Events and cap in-flight req
 
 Any other trusted HTTPS tunnel works the same way: set its real public URL as `PUBLIC_ORIGIN`, then restart. Never instruct a player to bypass a certificate warning.
 
+### Fixed address from your own computer: a named Cloudflare Tunnel
+
+This is how the public game at `https://play.sportle.online` is served: from the owner's Mac, so it is only up while that Mac is on and awake. You need a free Cloudflare account with your domain on it.
+
+1. `cloudflared tunnel login` and pick the domain (writes `~/.cloudflared/cert.pem`).
+2. `cloudflared tunnel create sportle`, then `cloudflared tunnel route dns sportle play.<your-domain>`.
+3. `~/.cloudflared/config.yml`:
+   ```yaml
+   tunnel: <tunnel id>
+   credentials-file: <home>/.cloudflared/<tunnel id>.json
+   ingress:
+     - hostname: play.<your-domain>
+       service: http://127.0.0.1:3111
+     - service: http_status:404
+   ```
+4. Run the server with `HOST=127.0.0.1 PORT=3111 PUBLIC_ORIGIN=https://play.<your-domain> DATA_DIR=<a folder outside the repo>` (after `npm run build`, `node dist/server/index.js`), and `cloudflared tunnel run sportle`.
+5. To start both at login on macOS, use two user LaunchAgents (`~/Library/LaunchAgents/*.plist` with `RunAtLoad` and `KeepAlive`), loaded with `launchctl bootstrap gui/$(id -u) <plist>`. No admin password is needed.
+
+Named tunnels keep the SSE stream (only `*.trycloudflare.com` falls back to polling). Rebuild/restart the server after pulling new code: `launchctl kickstart -k gui/$(id -u)/<server label>` (its start script runs the build first).
+
 ## Validate the deployment
 
 1. Open the public origin from a different network. `/api/config` should report the same origin.
