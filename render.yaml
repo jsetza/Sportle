@@ -3,7 +3,7 @@
 # PUBLIC_ORIGIN is detected from RENDER_EXTERNAL_URL automatically; set it only for a custom domain.
 services:
   - type: web
-    name: povpickle
+    name: sportle
     runtime: node
     # free sleeps after 15 idle minutes (first visit then takes ~1 minute);
     # switch to "starter" for an always-on game.

@@ -23,8 +23,8 @@ Open `http://localhost:3000` for a **desktop preview only**. The UI deliberately
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jsetza/Sportle)
 
 1. Sign in at render.com with GitHub and allow access to this repository.
-2. Click the button above (or Dashboard → **New → Blueprint** → this repo). `render.yaml` creates one web service, `povpickle`, with a health check at `/healthz`.
-3. Open the `https://povpickle….onrender.com` address Render shows. The phone QR address is detected automatically from Render's `RENDER_EXTERNAL_URL`, so no settings are needed. For a custom domain, set `PUBLIC_ORIGIN` to it.
+2. Click the button above (or Dashboard → **New → Blueprint** → this repo). `render.yaml` creates one web service, `sportle`, with a health check at `/healthz`.
+3. Open the `https://sportle….onrender.com` address Render shows. The phone QR address is detected automatically from Render's `RENDER_EXTERNAL_URL`, so no settings are needed. For a custom domain, set `PUBLIC_ORIGIN` to it.
 4. The blueprint uses the **free** plan, which sleeps after 15 idle minutes (the first visit then takes about a minute). Switch the service to **Starter** for an always-on game. Keep it at **one instance**: rooms live in memory.
 
 Railway and Fly.io also work with zero configuration of the phone address (detected from `RAILWAY_PUBLIC_DOMAIN` / `FLY_APP_NAME`); the Dockerfile builds the same server. On these hosts the server reads the visitor address from the platform's own header (Render: `True-Client-IP`, Fly: `Fly-Client-IP`, Railway: `X-Real-IP`) so per-visitor limits work behind their proxies.

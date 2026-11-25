@@ -25,10 +25,10 @@ Set `HOST=0.0.0.0`, the platform's `PORT`, and `PUBLIC_ORIGIN=https://your-actua
 Alternatively:
 
 ```sh
-docker build -t povpickle .
+docker build -t sportle .
 docker run --rm -p 3000:3000 \
   -e PUBLIC_ORIGIN=https://your-actual-hostname \
-  povpickle
+  sportle
 ```
 
 The image builds the app and runs as the unprivileged `node` user. The Docker recipe is supplied but was not built in the original environment.
