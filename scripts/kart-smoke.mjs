@@ -55,7 +55,7 @@ try {
     b = await ctxB.newPage();
   for (const p of [tv, a, b]) p.on("pageerror", (e) => errors.push(e.message));
   // Start screen: Kart is the third card in the picker; Enter opens it.
-  await tv.goto(BASE + "/");
+  await tv.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await tv.locator("#hubIntro").waitFor({ state: "visible" });
   await tv.keyboard.press("x");
   await tv.locator("#hubPick").waitFor({ state: "visible" });

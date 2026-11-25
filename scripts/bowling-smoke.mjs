@@ -42,7 +42,7 @@ try {
     b = await ctxB.newPage();
   for (const p of [tv, a, b]) p.on("pageerror", (e) => errors.push(e.message));
   // Start screen: the hub shows both games; Bowling opens the bowling page.
-  await tv.goto(`http://127.0.0.1:${PORT}/`);
+  await tv.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "domcontentloaded" });
   // Welcome intro first, then the side-scrolling picker: any key skips the intro, → moves to
   // Bowling, Enter plays it.
   await tv.locator("#hubIntro").waitFor({ state: "visible" });
@@ -64,7 +64,7 @@ try {
   await tv.keyboard.press("Enter");
   await tv.waitForURL(/\/bowling$/);
   // Coming back from Bowling skips the intro and goes straight to the picker.
-  await tv.goto(`http://127.0.0.1:${PORT}/`);
+  await tv.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "domcontentloaded" });
   await tv.locator("#hubPick").waitFor({ state: "visible" });
   assert.equal(await tv.locator("#hubIntro").isVisible(), false);
   await tv.goto(`http://127.0.0.1:${PORT}/bowling#test`);

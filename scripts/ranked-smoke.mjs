@@ -53,7 +53,7 @@ try {
     });
     for (const p of [display, phone])
       p.on("pageerror", (e) => errors.push(name + ": " + e.message));
-    await display.goto(BASE);
+    await display.goto(BASE, { waitUntil: "domcontentloaded" }); // the clicks below wait for the page; CI can take minutes to fire "load"
     await display.locator("#play").click();
     await display.locator("#goOnline").click();
     await display.locator("label[for=m-online-ranked1]").click();
