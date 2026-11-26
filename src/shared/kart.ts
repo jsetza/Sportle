@@ -1079,14 +1079,17 @@ export const ledSize = (msg: string, width: number) => Math.min(0.16, (width * 0
  */
 export function cameraReach(t: Track, s: number, from: number[], eye: number[]) {
   const hint = pointAt(t, s).i;
-  for (let f = 1; f > 0.25; f -= 0.075) {
+  const len = Math.hypot(eye[0] - from[0], eye[1] - from[1], eye[2] - from[2]) || 1;
+  // Never closer than 1.5 m to the kart; if nothing farther is clear, that is the fallback.
+  const near = Math.min(1, 1.5 / len);
+  for (let f = 1; f > near; f -= 0.075) {
     const x = from[0] + (eye[0] - from[0]) * f,
       y = from[1] + (eye[1] - from[1]) * f,
       z = from[2] + (eye[2] - from[2]) * f;
     const w = locate(t, x, z, y, hint, 12);
     if (Math.abs(w.d) <= t.w[w.i] / 2 + t.def.verge - 0.3 && y >= w.y + 0.8) return f;
   }
-  return 0.25;
+  return near;
 }
 /** Highest road near a point (for trackside cameras: stay above other levels and terrain). */
 export function roadTop(t: Track, x: number, z: number, r = 24) {

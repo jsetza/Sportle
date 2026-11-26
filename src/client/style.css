@@ -2575,8 +2575,9 @@ body.controller {
   overflow-x: auto;
   pointer-events: none;
 }
+/* Below the top bar (View, Music & sound…), which it used to cover on 1280–1440 px screens. */
 body.playing .bsheet {
-  top: 12px;
+  top: 64px;
 }
 body.bowling:not(.playing) .bsheet {
   display: none;
@@ -3898,4 +3899,78 @@ body.kartphone.racing .phead {
 }
 #trackSeg button {
   flex: 1 0 22%;
+}
+/* Bowling game-over card: why Bowl again didn't start (e.g. a phone is away). */
+.gameover .goerr:empty {
+  display: none;
+}
+.gameover .goerr {
+  color: var(--orange);
+  margin: 10px 0 0;
+}
+
+/* Kart phone menu: two columns; in landscape (e.g. 844×390) everything fits without scrolling. */
+.kmenu .kmcol {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .kmenu[open] {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    column-gap: 22px;
+    width: min(820px, 96vw);
+    max-width: 96vw;
+    max-height: 96vh;
+    padding: 12px 20px;
+  }
+  .kmenu h2 {
+    grid-column: 1 / -1;
+    margin: 0 0 4px;
+    font-size: 20px;
+  }
+  .kmenu .fine {
+    margin: 0;
+    font-size: 11px;
+  }
+  .kmenu .optrow {
+    margin: 2px 0;
+  }
+}
+/* Kart split screen with 3–4 quadrants: the minimap in the middle, where the quadrants meet. */
+body.kquad .kmap {
+  left: 50%;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  width: min(170px, 15vw);
+}
+/* Kart 3–4 quadrants: each HUD hugs its outer edge (mirrored on the right-hand quadrants), so the
+   middle of the screen, where the minimap sits, stays clear. */
+.kview.quad .klap {
+  top: 12px;
+  text-align: left;
+}
+.kview.quad.qleft .klap {
+  left: 100px;
+  right: auto;
+}
+.kview.quad.qright .kitem {
+  left: auto;
+  right: 18px;
+}
+.kview.quad.qright .klap {
+  right: 100px;
+  left: auto;
+  text-align: right;
+}
+.kview.quad.qright .kplace {
+  left: auto;
+  right: 18px;
+}
+.kview.quad.top .klap,
+.kview.quad.top .kitem {
+  top: 64px;
 }

@@ -329,6 +329,8 @@ function tv() {
   const shownCall = new Map<string, number>();
   const callTimers = new Map<string, number>();
   scene.onViews = (r) => {
+    // Three or four quadrants: the minimap sits where they meet, clear of every HUD.
+    document.body.classList.toggle("kquad", r.length >= 3);
     const key = r.map((q) => `${q.id}:${q.x | 0},${q.y | 0},${q.w | 0},${q.h | 0}`).join("|");
     if (key !== rects.map((q) => `${q.id}:${q.x | 0},${q.y | 0},${q.w | 0},${q.h | 0}`).join("|")) {
       rects = r;
@@ -340,7 +342,7 @@ function tv() {
     hud.innerHTML = rects
       .map(
         (q, i) =>
-          `<div class="kview${rects.length > 1 ? " small" : ""}${q.y < 40 ? " top" : ""}${q.x < 40 && q.y + q.h > innerHeight - 40 ? " left" : ""}" id="kview${i}"><div class="kplace" id="kplace${i}"></div><div class="klap" id="klap${i}"></div><div class="kitem" id="kitem${i}"></div><div class="kcharge" id="kcharge${i}"></div><div class="kwrong hidden" id="kwrong${i}">WRONG WAY</div><div class="kwait hidden" id="kwait${i}"></div><div class="tcall kcall hidden" id="kcall${i}"></div></div>`,
+          `<div class="kview${rects.length > 1 ? " small" : ""}${q.y < 40 ? " top" : ""}${q.x < 40 && q.y + q.h > innerHeight - 40 ? " left" : ""}${rects.length >= 3 ? (q.x > 40 ? " quad qright" : " quad qleft") : ""}" id="kview${i}"><div class="kplace" id="kplace${i}"></div><div class="klap" id="klap${i}"></div><div class="kitem" id="kitem${i}"></div><div class="kcharge" id="kcharge${i}"></div><div class="kwrong hidden" id="kwrong${i}">WRONG WAY</div><div class="kwait hidden" id="kwait${i}"></div><div class="tcall kcall hidden" id="kcall${i}"></div></div>`,
       )
       .join("");
     rects.forEach((q, i) => {
@@ -537,7 +539,7 @@ function phone() {
   <button class="kbtn item" id="itemBtn"><span id="pItem"></span><b>ITEM</b><small id="pItemName">tap = forward</small></button>
   <div class="kcallp hidden" id="pCall"></div>
 </div>
-<dialog id="menu" class="kmenu"><h2>Menu</h2><button class="cta" id="pauseRace">Pause race</button><p class="fine" id="pauseNote"></p><div class="optrow"><span>Steering</span><div class="seg" id="sensSeg"><button data-v="gentle">Gentle</button><button data-v="normal">Normal</button><button data-v="sharp">Sharp</button></div></div><div class="optrow"><span>Steering assist</span><div class="seg" id="assistSeg"><button data-v="on">On</button><button data-v="off">Off</button></div></div><p class="fine">Assist: a light pull back toward the middle of the road near its edges.</p><div class="optrow"><span>Gas</span><div class="seg" id="gasSeg"><button data-v="auto">Automatic</button><button data-v="tilt">Tilt to drive</button></div></div><p class="fine">Tilt to drive: top edge away from you = gas, toward you = brake/reverse.</p><button class="link" id="recenter">Set the centre again</button><button class="link" id="redo">Set up steering again</button><button class="ghost" id="menuClose">Back to the race</button></dialog>
+<dialog id="menu" class="kmenu"><h2>Menu</h2><div class="kmcol"><button class="cta" id="pauseRace">Pause race</button><p class="fine" id="pauseNote"></p><button class="link" id="recenter">Set the centre again</button><button class="link" id="redo">Set up steering again</button><button class="ghost" id="menuClose">Back to the race</button></div><div class="kmcol"><div class="optrow"><span>Steering</span><div class="seg" id="sensSeg"><button data-v="gentle">Gentle</button><button data-v="normal">Normal</button><button data-v="sharp">Sharp</button></div></div><div class="optrow"><span>Steering assist</span><div class="seg" id="assistSeg"><button data-v="on">On</button><button data-v="off">Off</button></div></div><p class="fine">Assist: a light pull back toward the middle of the road near its edges.</p><div class="optrow"><span>Gas</span><div class="seg" id="gasSeg"><button data-v="auto">Automatic</button><button data-v="tilt">Tilt to drive</button></div></div><p class="fine">Tilt to drive: top edge away from you = gas, toward you = brake/reverse.</p></div></dialog>
 </div><div id="error" role="alert"></div></div>`;
   document.body.classList.add("controller", "kartphone");
   const PROFILE = "sportle-kart";
@@ -994,7 +996,9 @@ function phone() {
     const live = sensorLive();
     const k = state;
     const countdown = k?.phase === "countdown";
-    const throttle = gas === "tilt" ? reader.throttle() : countdown ? (driftHeld ? 1 : 0) : 1;
+    // Auto-gas only while racing; in the countdown, DRIFT held is the gas (start boost).
+    const racing = k?.phase === "race";
+    const throttle = gas === "tilt" ? reader.throttle() : countdown ? (driftHeld ? 1 : 0) : racing ? 1 : 0;
     const input: Input & Record<string, unknown> = {
       seq: seq++,
       t: Date.now() + net.offset,

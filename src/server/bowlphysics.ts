@@ -81,6 +81,9 @@ export function moveBall(b: Ball, dt: number) {
     b.vd = Math.max(1.5, b.vd - 0.3 * dt);
     b.d += b.vd * dt;
     b.roll += (b.vd / LANE.ballR) * dt;
+    // Past the end of the pin deck the ball drops into the pit (it used to roll on at lane
+    // height over the pit for 30 cm). Only the picture changes: no pins are in play there.
+    if (b.d > PIT) b.y = Math.min(b.y, LANE.ballR - (b.d - PIT) * 1.2);
     if (b.d > PIT + 0.3) b.phase = "pit";
     return;
   }
@@ -104,6 +107,9 @@ export function moveBall(b: Ball, dt: number) {
     b.y = LANE.ballR - 0.07;
     b.vx = 0;
   }
+  // Past the end of the pin deck the ball drops into the pit (it used to roll on at lane
+  // height over the pit for 30 cm). Only the picture changes: no pins are in play there.
+  if (b.d > PIT) b.y = Math.min(b.y, LANE.ballR - (b.d - PIT) * 1.2);
   if (b.d > PIT + 0.3) b.phase = "pit";
 }
 /** Closest points between segments p1–q1 and p2–q2 in 2D (x, d). */
@@ -273,6 +279,18 @@ export function stepLane(
       p.vx = -p.vx * 0.55;
       p.down = true;
       if (!p.tiltRate && p.tilt < Math.PI / 2) p.tiltRate = 6;
+    }
+    // A tipping pin's body stays inside the kickbacks too, not only its base: a pin falling
+    // against a side wall ends up lying along it (its fall direction turns), so its top never
+    // pokes through the wall. The base isn't moved, so the pin action is unchanged.
+    if (p.down && p.tilt > 0) {
+      const reach = LANE.pinH * 0.85 * Math.sin(p.tilt);
+      const room = Math.max(0, LANE.wall - 0.05 - Math.abs(p.x));
+      const side = Math.sin(p.dir) * reach;
+      if (Math.sign(side) === Math.sign(p.x) && Math.abs(side) > room) {
+        const sn = (Math.sign(side) * room) / reach;
+        p.dir = Math.atan2(sn, (Math.cos(p.dir) >= 0 ? 1 : -1) * Math.sqrt(1 - sn * sn));
+      }
     }
     // Off the deck into a gutter: down, and out of play once it settles there.
     if (Math.abs(p.x) > LANE.half + 0.03 && p.d > LANE.length - 0.3) {

@@ -284,8 +284,20 @@ export function addRacer(
   r.body = body;
   r.color = clamp(Math.round(color), 0, PADDLES.length - 1);
   r.display = display;
-  k.racers = humans(k);
-  k.racers.push(r);
+  if (k.phase === "lobby") {
+    k.racers = humans(k);
+    k.racers.push(r);
+  } else {
+    // Between races (results, podium): keep the bots and their cup points. The newcomer goes
+    // before the bots, and a bot gives up its place if the grid would be over GRID.
+    const firstBot = k.racers.findIndex((q) => q.bot);
+    if (firstBot < 0) k.racers.push(r);
+    else k.racers.splice(firstBot, 0, r);
+    while (k.racers.length > GRID) {
+      k.racers.splice(k.racers.findLastIndex((q) => !!q.bot), 1);
+    }
+    r.place = k.racers.length;
+  }
   say(k, `${name} joined`);
   return r;
 }
@@ -308,6 +320,15 @@ export function setOptions(k: Kart, a: Record<string, unknown>) {
 /** Host: start the race (or the cup) once every phone that joined is set up. */
 export function startKart(k: Kart, now = Date.now()) {
   if (k.phase === "countdown" || k.phase === "race") throw Error("Already racing");
+  // A phone that left the lobby over WAIT_LIMIT ago is dropped (it can scan the QR again),
+  // so one missing phone can't block the start forever.
+  if (k.phase === "lobby" || k.phase === "podium") {
+    const gone = humans(k).filter((r) => !live(r, now) && now - P(r).lastSeen > WAIT_LIMIT * 1000);
+    if (gone.length) {
+      k.racers = k.racers.filter((r) => !gone.includes(r));
+      say(k, `${gone.map((r) => r.name).join(" & ")} left`);
+    }
+  }
   const h = humans(k);
   if (!h.length) throw Error("Scan the QR with a phone to join first");
   const notReady = h.filter((r) => !r.ready || !live(r, now));
@@ -433,6 +454,7 @@ function setPhase(k: Kart, phase: Kart["phase"]) {
 /** Host: next race of the cup (after results), or race this track again. */
 export function nextRace(k: Kart, now = Date.now()) {
   if (k.phase !== "results") throw Error("Finish the race first");
+  const missing = humans(k).filter((r) => !live(r, now));
   if (k.mode === "cup") {
     if (k.cupRace >= CUPS[k.cup].tracks.length - 1) {
       setPhase(k, "podium");
@@ -441,10 +463,14 @@ export function nextRace(k: Kart, now = Date.now()) {
     k.cupRace++;
     k.track = CUPS[k.cup].tracks[k.cupRace];
   }
-  const h = humans(k);
-  const missing = h.filter((r) => !live(r, now));
-  if (missing.length) throw Error(`Waiting for ${missing.map((r) => r.name).join(" & ")}'s phone`);
   setupRace(k);
+  // A phone that's away doesn't hold everyone up: a bot drives its kart until it's back.
+  for (const r of missing) {
+    r.away = now;
+    r.botFor = true;
+    P(r).bot = { level: "club", drift: 0.5, aggro: 0.4, holdFor: 0, side: 0 };
+  }
+  if (missing.length) say(k, `A bot drives for ${missing.map((r) => r.name).join(" & ")} until their phone is back`);
 }
 /** Back to the lobby: pick another track or mode. */
 export function toLobby(k: Kart) {
@@ -1333,7 +1359,9 @@ export function stepKart(k: Kart, dt = DT, now = Date.now()) {
       // Start boost: gas pressed in the last 0.7 s before GO; earlier than 1.6 s stalls.
       const p = P(r),
         gas = p.throttle > 0.5;
-      if (gas && k.clock < -1.6) p.early = true;
+      // Too early = gas 2.8–1.6 s before GO. The first 0.8 s doesn't count: phones are still
+      // sending the lobby's gas until the countdown reaches them.
+      if (gas && k.clock < -1.6 && k.clock > -COUNTDOWN + 0.8) p.early = true;
       if (gas && k.clock >= -0.7) p.good = true;
     }
     if (k.clock >= 0) {

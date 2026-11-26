@@ -136,10 +136,14 @@ export function addBowler(
     say(b, `${name} joins at frame ${start + 1}`);
   }
   // Bots bowl last: insert humans before any bot.
+  const up = b.players[b.turn];
   const firstBot = b.players.findIndex((q) => q.bot);
   if (firstBot >= 0) b.players.splice(firstBot, 0, p);
   else b.players.push(p);
-  if (b.phase !== "lobby") syncTurn(b);
+  // Inserting can shift the bowler who is up (a bot) along by one: keep the turn with them,
+  // and only re-pick whose turn it is between balls (never mid-ball, result or sweep).
+  if (up) b.turn = b.players.indexOf(up);
+  if (b.phase === "aim" && b.mode === "game") syncTurn(b);
   return p;
 }
 const anyBowledIn = (b: Bowl, f: number) =>
@@ -467,6 +471,8 @@ export function skipTurn(b: Bowl) {
   const p = b.players[b.turn];
   if (b.phase !== "aim" || !p) throw Error("Nobody is waiting to bowl");
   if (p.bot) throw Error("Bots bowl by themselves");
+  // A skipped frame is skipped: no bot keeps bowling for them afterwards.
+  p.botFor = false;
   if (b.mode === "practice") {
     p.practice = [];
     b.turn = (b.turn + 1) % b.players.length;

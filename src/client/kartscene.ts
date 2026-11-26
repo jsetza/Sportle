@@ -6,6 +6,7 @@
  * by side, 3–4 = quadrants) or one shared view following the leader.
  */
 import { GLYPHS, Scene, camera, palette } from "./scene.ts";
+import { easeCam, lobbyCam, viewIds } from "./kartview.ts";
 import { lightingFor } from "./maps.ts";
 import type { Lighting } from "./renderer.ts";
 import type { ViewDraw } from "./renderer.ts";
@@ -36,7 +37,7 @@ const GROUND: Record<string, { ground: V; verge: V; road: V; road2: V }> = {
   arena: { ground: [0.1, 0.09, 0.13], verge: [0.2, 0.2, 0.27], road: [0, 0, 0], road2: [0, 0, 0] },
   desert: { ground: [0.86, 0.63, 0.42], verge: [0.8, 0.57, 0.37], road: [0, 0, 0], road2: [0, 0, 0] },
 };
-type Cam = { eye: V; target: V; fov: number };
+import type { Cam } from "./kartview.ts";
 export class KartScene extends Scene {
   trackId: TrackId = "court";
   kart: Kart | null = null;
@@ -46,6 +47,7 @@ export class KartScene extends Scene {
   local: string[] = [];
   shared = false;
   cams = new Map<string, Cam>();
+  camAt = new Map<string, number>();
   /** Shown positions per kart (eased corrections, like the pickleball view). */
   shown = new Map<string, { x: number; y: number; z: number; h: number }>();
   /** Recent snapshots for the finish-line slow-motion replay. */
@@ -993,10 +995,8 @@ export class KartScene extends Scene {
     const k = this.kart;
     let goal: Cam;
     if (!k || !r || !pos || k.phase === "lobby") {
-      // Menu: a slow orbit over the start straight.
-      const a = now / 14000;
-      const p = pointAt(t, t.S0, 0);
-      goal = { eye: [p.x + Math.cos(a) * 34, p.y + 14, p.z + Math.sin(a) * 34], target: [p.x, p.y + 1, p.z], fov: 50 };
+      // Menu and lobby: a slow fly-along over the road (an orbit used to pass through scenery).
+      goal = lobbyCam(t, now);
       this.cams.set(key, goal);
       return goal;
     }
@@ -1025,19 +1025,10 @@ export class KartScene extends Scene {
         fov: 62 + boost * 8,
       };
     }
-    const prev = this.cams.get(key);
-    if (prev && mode !== "broadcast") {
-      const e = 1 - Math.exp(-dt * (mode === "bumper" ? 30 : 7));
-      goal = {
-        eye: prev.eye.map((v, i) => lerp(v, goal.eye[i], e)),
-        target: prev.target.map((v, i) => lerp(v, goal.target[i], Math.min(1, e * 1.6))),
-        fov: lerp(prev.fov, goal.fov, e),
-      };
-    } else if (prev && mode === "broadcast") {
-      const e = 1 - Math.exp(-dt * 6);
-      const jump = Math.hypot(prev.eye[0] - goal.eye[0], prev.eye[2] - goal.eye[2]) > 30;
-      if (!jump) goal = { eye: goal.eye, target: prev.target.map((v, i) => lerp(v, goal.target[i], e)), fov: goal.fov };
-    }
+    // Eased toward the goal (a camera idle for a moment or far away jumps there; see kartview.ts).
+    const usedAt = this.camAt.get(key) ?? -1e9;
+    this.camAt.set(key, now);
+    goal = easeCam(this.cams.get(key), goal, mode, dt, now - usedAt);
     // Chase cameras never leave the road corridor (no clipping into walls, rock or buildings).
     if (mode === "chase" && !r.lift) {
       const from = [pos.x, pos.y + 1.2, pos.z];
@@ -1084,7 +1075,9 @@ export class KartScene extends Scene {
       }
     }
     // Karts, drivers and their effects.
-    const views = this.shared || !this.local.length ? ["shared"] : this.local.slice(0, 4);
+    // One view in the lobby; split screen while racing. Three drivers get a fourth quadrant
+    // following the leader (instead of an empty one).
+    const views = viewIds(this.local, this.shared, k?.phase ?? null);
     const bumperOwn = this.viewMode2 === "bumper" && views.length === 1 && views[0] !== "shared" ? views[0] : "";
     for (const r of racers) {
       const p = pos.get(r.id);

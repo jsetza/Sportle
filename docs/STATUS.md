@@ -2,6 +2,81 @@
 
 
 
+## Bowling bug hunt (2026-11-26, owner request)
+
+Whole Bowling flow exercised with real browser pages and synthetic phones (`scripts/bowling-phone.mjs`), a full 10-frame game against the Pro bot plus a Bowl again, unit tests, a 20,000-game scoring fuzz against an independent scorer, and 600-ball pin-physics sweeps. **Nothing here was tried on a real phone.** Bowling feel is unchanged (strike rates for pocket / head-on / light hits stay within sampling noise).
+
+Fixed (each with a test that failed before the fix):
+- **A phone joining a practice game while the bot was up took over the bot's ball** (inserting the newcomer before the bot shifted the turn index; the bot's pinfall was credited to the newcomer). A phone joining a 10-frame game during a result or sweep also moved the turn early. The turn now stays with the bowler who is up; whose turn it is is only re-picked between balls. Tests: `tests/bowling-bugs.test.ts`.
+- **Skip turn after "Let a bot bowl" left the bot bowling that player's later frames too.** Skip now clears it. Test: `tests/bowling-bugs.test.ts`.
+- **Fallen pins lay through the side kickbacks** (about 4% of pins in a 600-ball sweep, up to 31 cm through): only a pin's base was kept inside the wall. A pin falling against a wall now lies along it; the base isn't moved, so pin action is unchanged. Test: `tests/bowling-bugs.test.ts` (240 balls, no pin through a wall).
+- **The ball floated over the pit** for 30 cm after the pin deck before disappearing; it now drops in. Test: `tests/bowling-bugs.test.ts`.
+- **Skip turn / Let a bot bowl were invisible:** after a 30 s wait they appeared inside the Room panel, which is tucked away during play, while the message said "Host: Skip turn or let a bot bowl". The panel now opens when they appear and closes after. Test: `scripts/bowling-smoke.mjs` closes the phone that is up, waits for the buttons to be fully on screen and skips.
+- **Bowl again did nothing visible when it couldn't start** (e.g. a phone away): the reason went to the hidden panel. It now shows on the game-over card. **Change game** was a link back to `/bowling`, which rejoined the same finished room on load; it now leaves the room for the bowling menu. Test: `scripts/bowling-smoke.mjs` (a single-player game skipped to the end → game over → Bowl again restarts → with the phone gone Bowl again shows why → Change game reaches the menu).
+- **The in-game scoresheet covered the top bar** (All games, View, Music & sound) on 1280–1440 px wide screens; it now sits below it. Test: `scripts/bowling-smoke.mjs` checks no top-bar button overlaps the sheet.
+- **The lobby kept saying "Scan the QR to join"** after everyone had joined and was ready; it now says who's still setting up, then "Everyone's ready". Test: `scripts/bowling-smoke.mjs`.
+- **The phone's connection dot never turned green** (the page set class `on`; the shared CSS styles `live`). Test: `scripts/bowling-smoke.mjs`.
+- Test robustness: the smoke test now waits for the hub's game name to update after → instead of reading it at once (it failed under load).
+
+Checked and found fine: ten-pin scoring incl. 10th frame (fuzz, 0 mismatches), splits, turn order 1–6, a full 10-frame game vs the Pro bot (sheet totals match the server's rolls, winner card), Bowl again, no extra timers across two games on TV or phone, no console errors, phone pages at 390×844 without horizontal overflow.
+
+Not fixed / noted:
+- The TV turn banner says "SWING TO BOWL" although phones default to hold-to-bowl (wording only).
+- After the game and in the lobby the phone still shows the curve indicator and stand-position strip (harmless).
+- `/api/bowl/skip` is accepted by the server at any time during a turn (the TV only offers it after 30 s); fine for a host-only action, left as is.
+- Every page logs one 404 for `/favicon.ico` (no page declares an icon); shared by all games, not changed here.
+
+Result: `npm run check` passes (157 tests, including 5 new regression tests in `tests/bowling-bugs.test.ts`); `node scripts/bowling-smoke.mjs` passes (needed reruns while the Mac was heavily loaded: page loads over 30 s).
+
+## Kart: second bug sweep: menus, phones, split screen, races (2026-11-26, owner request)
+
+Checked headless only: synthetic phones in headless Chrome, server simulations and unit tests. **Not yet tried on real phones or a TV.**
+
+**How it was explored:**
+- `scripts/dev/kart-explore.mjs` (developer tool, not in CI):
+  - TV menu, cup and track pickers, 4 phones in both landscape grips plus one joining in portrait;
+  - the phone menu settings;
+  - countdown, 4-way split, the three camera modes and the shared layout;
+  - a phone closed mid-race → "Waiting for…" → host's "Let a bot drive" → the phone rejoins and takes its kart back;
+  - three races in a row with Race again and Change track, measuring memory and console errors.
+- `scripts/dev/kart-explore2.mjs` (developer tool, not in CI): 3 phones, 8 phones plus a refused 9th, a phone joining on the results screen, the phone menu at 844×390, and a 2-lap time trial with the ghost.
+- Server stress tests:
+  - a fall hunt: 60 Skyline races plus 20 on each of the eight tracks, logging any kart that ends up more than 2 m below its road away from a gap;
+  - an item stress run: 24 races where every kart, the leader included, is given and uses an item every 2 s (about 8,000 uses), checking for exceptions, NaN and pile-ups.
+
+**Bugs found and fixed (each with a check that would have caught it):**
+1. **Joining between races removed all the bots.** On the results screen, a new phone's join left only the phones, so the next race had 2 karts and the bots' cup points were lost. Bots now stay, and one gives up its place if the grid is full. Check: `tests/kart-client.test.ts` (late join keeps 8 karts and the bots' points).
+2. **Auto-gas players could stall at GO.** Phones send full gas in the lobby, and the first packets after Start arrived in the countdown's first moments, which counted as "too early". The server now ignores the countdown's first 0.8 s for that, and the phone sends no gas outside races. Checks: a unit test (timed gas → START BOOST, early → TOO EARLY, none → nothing; FINAL LAP and finish) and kart-smoke asserts no TOO EARLY for auto-gas phones.
+3. **Next race in a cup with a phone away moved the cup on and then refused.** Each retry skipped a track. Now the race starts, and a bot drives the missing phone's kart until it's back. Check: unit test.
+4. **A phone that left the lobby blocked Start forever.** Phones away for over 30 s are now dropped (they can scan again). Check: unit test.
+5. **Switching to the shared view swept the camera across the track from the old lobby position.** For a moment it flew through walls and the leader wasn't on screen. A camera that is idle or far from its goal now jumps there. Checks: unit tests on `easeCam` in the new `src/client/kartview.ts`, and the camera fallback (stays 1.5 m from the kart, not 25 % of a long line).
+6. **The bumper camera trailed behind the kart at speed in split screen,** showing your own kart from above. Its eye now stays on the nose. Check: unit test.
+7. **The lobby showed four identical split views.** It is one view now. **With 3 drivers, the fourth quadrant was empty;** it now follows the leader. Check: `viewIds` unit test; `kart-explore2.mjs` counts the views.
+8. **In 3–4 way split, the minimap covered a quadrant's HUD.** The minimap now sits in the middle, and the right-hand quadrants' HUDs are mirrored to their outer edges. Check: `kart-explore2.mjs` asserts the minimap overlaps no place, lap or item readout.
+9. **The phone menu ran off the bottom of an 844×390 landscape screen** (Gas, Set the centre again, Back hidden). It is now two columns. Check: kart-smoke asserts every menu control is on screen at 844×390.
+10. **The menu/lobby camera orbited through scenery** (Skyline towers, the Stadium bridge). It now flies slowly along the road. Check: unit test that the lobby camera stays inside the barriers and above the road on all eight tracks.
+
+**Checked and found working:**
+- Cup and track pickers (Wild Cup hint, the track list hidden in cup mode, time trial offered for single player only).
+- 4 phones with both grips; joining in portrait shows the "turn sideways" card, which goes away in landscape.
+- The phone menu saves sensitivity, assist and gas per phone; pause is disabled in multi-driver races.
+- Countdown on the TV and the start-boost hint on the phone.
+- Drop → "Waiting for Dee's phone… 30 s" → Let a bot drive → rejoin reuses the saved steering and takes the kart back.
+- Shared view with the leaderboard; 8 phones force the shared view; a 9th phone gets "All eight kart spots are taken".
+- Results with 8 rows, Race again, and Change track to another track.
+- Time trial: one kart, the ghost saved after lap 1 and shown on lap 2, and "Best lap" on the results.
+- Music already checked (2026-11-25).
+- No console or page errors in any run.
+- **Memory:** heap 50–112 MB with no growth trend over 3 races; DOM nodes, name tags and camera maps stay constant.
+- **Item stress:** no exceptions, NaN or pile-ups.
+
+**Not fixed / still open:**
+- The single fall on Skyline's garage spiral (2026-11-25) never happened again in 220 more races (60 + 160) with the fixes in place. Still unexplained; the fall-hunt script is noted here so it can be rerun.
+- The 3–4 quadrant layout and late-join flows are covered only by the developer explore scripts, not by CI: they take several minutes.
+- Nothing was tried on real phones, so real touch, haptics and orientation lock are unverified.
+
+**Results:** `npm run check` passes (158 tests) and `node scripts/kart-smoke.mjs` passes (2 of 2 runs).
+
 ## Kart: track bug sweep and easier, more consistent driving (2026-11-25, owner request)
 
 Checked headless only: bot races, a synthetic "player" that steers like a phone (150 ms reaction delay, small noise), unit tests and headless-Chrome screenshots. **Not yet driven by a person on a real phone**, so the new handling numbers are estimates to confirm with docs/DEVICE_TESTS.md.

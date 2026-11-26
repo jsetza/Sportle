@@ -58,7 +58,7 @@ try {
   await tv.keyboard.press("ArrowRight");
   await tv.locator("#playBowling.active").waitFor();
   // The picked game's own scene fills the screen above the strip, with its name and Play.
-  assert.equal((await tv.locator("#hubName").textContent()).trim(), "Bowling");
+  await tv.waitForFunction(() => document.getElementById("hubName").textContent.trim() === "Bowling", null, { timeout: slow(3000) });
   await tv.locator("#hubStage .hubscene.on").waitFor({ state: "visible" });
   const [stripH, screenH] = await tv.evaluate(() => [document.querySelector(".hubstrip").getBoundingClientRect().height, innerHeight]);
   assert.ok(stripH <= screenH / 6 + 1, `game strip takes at most a sixth of the screen: ${stripH} of ${screenH}`);
@@ -86,6 +86,10 @@ try {
   await tv.locator("#order li", { hasText: "Ben" }).waitFor();
   await tv.waitForFunction(() => window.__bowlScene.bowl?.players.every((p) => p.ready));
   if (SHOTS) await tv.screenshot({ path: SHOTS + "/lobby.png" });
+  // The lobby message follows the phones (it used to keep saying "Scan the QR to join").
+  await tv.waitForFunction(() => /Everyone's ready/.test(document.getElementById("message").textContent), null, { timeout: slow(5000) });
+  // Connected phones show the green dot (the class the shared CSS styles is "live").
+  for (const p of [a, b]) await p.waitForFunction(() => document.getElementById("pDot").classList.contains("live"));
   await tv.locator("#start").click();
   // Music & sound like Pickleball: music started on the first click and plays during the game.
   await tv.waitForFunction(() => { const m = window.__sportleMusic; return m?.ctx?.state === "running" && (m.filePlaying || m.playing); }, null, { timeout: slow(8000) });
@@ -145,6 +149,14 @@ try {
     }
     await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "aim" || window.__bowlScene.bowl.phase === "over", null, { timeout: slow(8000) });
   }
+  // The scoresheet doesn't cover the top bar's buttons (View, Music & sound, …).
+  const covered = await tv.evaluate(() => {
+    const r = document.getElementById("sheet").getBoundingClientRect();
+    return [...document.querySelectorAll(".topbar nav > *")]
+      .filter((e) => { const q = e.getBoundingClientRect(); return q.width && q.left < r.right && q.right > r.left && q.top < r.bottom && q.bottom > r.top; })
+      .map((e) => e.textContent.trim());
+  });
+  assert.deepEqual(covered, [], "scoresheet covers top-bar buttons");
   const s = await state();
   // Turns alternate frame by frame: Ana's frame 1, then Ben's frame 1.
   const firstBen = seen.indexOf("Ben");
@@ -179,6 +191,73 @@ try {
       await tv.screenshot({ path: `${SHOTS}/view-${v}.png` });
     }
     await a.screenshot({ path: SHOTS + "/phone.png" });
+  }
+  // The phone that is up goes away: the TV waits for it, then (after 30 s) shows Skip turn and
+  // Let a bot bowl where the host can see them (the Room panel opens), and Skip works.
+  {
+    await tv.waitForFunction(() => window.__bowlScene.bowl.phase === "aim", null, { timeout: slow(15000) });
+    const st = await state();
+    const away = st.players[st.turn].name;
+    await phones[away].close();
+    await tv.waitForFunction((n) => new RegExp("Waiting for " + n).test(document.getElementById("message").textContent), away, { timeout: slow(8000) });
+    await tv.locator("#skip").waitFor({ state: "visible", timeout: slow(40000) });
+    // The Room panel slides in (0.45 s): the button must end up fully on screen.
+    await tv
+      .waitForFunction(() => { const r = document.getElementById("skip").getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }, null, { timeout: slow(3000) })
+      .catch(async () => assert.fail("Skip turn is off screen: " + JSON.stringify(await tv.locator("#skip").boundingBox())));
+    await tv.locator("#skip").click();
+    await tv.waitForFunction((n) => { const b = window.__bowlScene.bowl; return b.players[b.turn].name !== n; }, away, { timeout: slow(5000) });
+    await tv.waitForFunction(() => !document.body.classList.contains("panel-open"), null, { timeout: slow(5000) });
+  }
+  // Game over, Bowl again and Change game: a single-player game skipped to the end by the host.
+  {
+    const ctxT = await browser.newContext({ viewport: { width: 1280, height: 720 } }),
+      ctxC = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const tv2 = await ctxT.newPage(),
+      c = await ctxC.newPage();
+    for (const p of [tv2, c]) p.on("pageerror", (e) => errors.push(e.message));
+    await tv2.goto(BASE + "/bowling#test");
+    await tv2.locator("#goSingle").click();
+    await tv2.locator("#create").click();
+    await tv2.locator("#lobby").waitFor({ state: "visible" });
+    const room2 = (await tv2.locator("#roomcode").textContent()).trim();
+    await joinPhone(c, room2, "Cy");
+    await tv2.waitForFunction(() => window.__bowlScene.bowl?.players[0]?.ready);
+    const skipAll = () =>
+      tv2.evaluate(async () => {
+        const h = JSON.parse(sessionStorage.getItem("bowl-host"));
+        for (let i = 0; i < 10; i++) {
+          const r = await fetch("/api/bowl/skip?room=" + h.room, {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: "Bearer " + h.credential },
+            body: "{}",
+          });
+          if (!r.ok) return await r.text();
+        }
+        return "ok";
+      });
+    await tv2.locator("#start").click();
+    await tv2.waitForFunction(() => window.__bowlScene.bowl?.phase === "aim");
+    assert.equal(await skipAll(), "ok");
+    await tv2.locator("#gameover").waitFor({ state: "visible", timeout: slow(5000) });
+    // Bowl again: a fresh game with the same phone.
+    await tv2.locator("#again").click();
+    await tv2.waitForFunction(() => { const b = window.__bowlScene.bowl; return b.phase === "aim" && b.players[0].rolls.length === 0; }, null, { timeout: slow(5000) });
+    assert.equal(await tv2.locator("#gameover").isVisible(), false);
+    assert.equal(await skipAll(), "ok");
+    await tv2.locator("#gameover").waitFor({ state: "visible", timeout: slow(5000) });
+    // With the phone gone, Bowl again says why on the card instead of doing nothing.
+    await c.close();
+    await tv2.waitForFunction(() => window.__bowlScene.bowl.players[0].connected === false, null, { timeout: slow(8000) });
+    await tv2.locator("#again").click();
+    await tv2.waitForFunction(() => /Waiting for Cy/.test(document.getElementById("goErr").textContent), null, { timeout: slow(5000) });
+    assert.ok(await tv2.locator("#goErr").isVisible(), "the reason shows on the game-over card");
+    // Change game: back to the bowling menu, not back into this finished room.
+    await tv2.locator("#changeGame").click();
+    await tv2.waitForURL(/\/bowling$/, { waitUntil: "commit", timeout: slow(20000) });
+    await tv2.locator("#goSingle").waitFor({ state: "visible", timeout: slow(20000) });
+    await ctxT.close();
+    await ctxC.close();
   }
   assert.deepEqual(errors, []);
   console.log("Bowling smoke passed: one QR, two phones, turns alternate, only the bowler who is up is armed, frame scored.", seen.join(" → "));

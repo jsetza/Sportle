@@ -128,7 +128,7 @@ function tv() {
 <div class="bread hidden" id="readout"></div>
 <div class="tcall bcall hidden" id="callout" aria-live="assertive"></div>
 <div class="message" id="message" aria-live="polite">Pick single player or multiplayer to start.</div>
-<div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small>FINAL</small><h2 id="goTitle">Winner</h2><div class="goscore" id="goScore"></div><p id="goNames"></p><button class="cta" id="again">Bowl again <span>↻</span></button><a class="link" href="/bowling">Change game</a></div>
+<div class="gameover hidden" id="gameover" role="dialog" aria-labelledby="goTitle"><small>FINAL</small><h2 id="goTitle">Winner</h2><div class="goscore" id="goScore"></div><p id="goNames"></p><button class="cta" id="again">Bowl again <span>↻</span></button><p class="fine goerr" id="goErr" role="alert"></p><button class="link" id="changeGame">Change game</button></div>
 <dialog id="howto"><h2>How to bowl</h2><ol><li><b>Create a game</b> and scan the QR with each phone. Everyone scans the same code (up to six). Pick a name, your bowling hand and an outfit.</li><li><b>Set up the phone</b>: hold it in your bowling hand, screen facing the TV, upright. Tap, then press and hold to aim. Then two practice bowls: one normal, one a little toward the left. Saved on the phone for next time.</li><li><b>Bowl</b> when your phone says YOUR TURN: press and hold the big button, swing back, and let go as you swing forward underhand. Harder = faster ball. The dotted line on the lane shows where the ball will go; after the bowl, a solid line shows where it went.</li><li><b>Hook</b>: keep the phone upright for a straight ball. Tilt (roll) your wrist one way and the ball hooks that way, late, on the dry back of the lane. The curve indicator on your phone and on the TV shows STRAIGHT / SLIGHT HOOK / BIG HOOK before you bowl.</li><li><b>Move</b>: drag the strip on your phone left or right to choose where you stand.</li></ol><p class="fine">Ball speed shown in km/h and mph is the game's speed, not a measurement of your arm. Phone sensors estimate swing intent; they don't track your hand's exact position.</p><button class="cta" id="howtoClose">Got it</button></dialog>`;
   let scene: BowlScene;
   try {
@@ -269,7 +269,17 @@ function tv() {
     pairing();
   });
   act("start", () => net.api("start", {}));
-  act("again", () => net.api("rematch", {}));
+  // The Room panel (and its error line) is hidden on the game-over card: show problems there.
+  $("again").onclick = () => {
+    $("goErr").textContent = "";
+    net.api("rematch", {}).catch((e) => ($("goErr").textContent = e instanceof Error ? e.message : String(e)));
+  };
+  // Leave this room for the bowling menu (a plain link would rejoin the saved room on load).
+  $("changeGame").onclick = () => {
+    sessionStorage.removeItem("bowl-host");
+    net.stop();
+    location.href = "/bowling";
+  };
   act("pause", () => net.api("pause", {}));
   act("resume", () => net.api("resume", {}));
   act("skip", () => net.api("bowl/skip", {}));
@@ -307,7 +317,8 @@ function tv() {
   });
   // ——— Rendering the state ———
   let calloutAt = -1,
-    calloutTimer = 0;
+    calloutTimer = 0,
+    waitOpened = false;
   scene.onShot = (b) => {
     const s = b.shot!;
     if (s.callout) {
@@ -394,8 +405,27 @@ function tv() {
       );
     // Waiting for a missing bowler: the host may skip or let a bot bowl after 30 s.
     const waited = b.waitSince ? (Date.now() - b.waitSince) / 1000 : 0;
-    $("waitBtns").classList.toggle("hidden", !host || !b.waitSince || waited < WAIT_LIMIT);
-    put("message", esc(b.message));
+    const waitShown = !!host && !!b.waitSince && waited >= WAIT_LIMIT && b.phase === "aim";
+    $("waitBtns").classList.toggle("hidden", !waitShown);
+    // The buttons live in the Room panel, which is tucked away during play: open it when
+    // they appear (and close it again afterwards if it was opened for them).
+    if (waitShown && !waitOpened && !document.body.classList.contains("panel-open")) {
+      waitOpened = true;
+      document.body.classList.add("panel-open");
+    } else if (!waitShown && waitOpened) {
+      waitOpened = false;
+      document.body.classList.remove("panel-open");
+    }
+    scene.panelOpen = !playing || document.body.classList.contains("panel-open");
+    // In the lobby, say who's still setting up (the server's "Scan the QR to join" goes stale).
+    let message = b.message;
+    if (b.phase === "lobby" && humans.length) {
+      const setting = humans.filter((p) => !p.ready || !p.connected).map((p) => p.name);
+      message = setting.length
+        ? `Waiting for ${setting.join(" & ")} to set up their phone`
+        : `Everyone's ready · ${host ? "press Start" : "the host starts the game"}`;
+    }
+    put("message", esc(message));
     // Game over.
     $("gameover").classList.toggle("hidden", b.phase !== "over");
     if (b.phase === "over") {
@@ -817,7 +847,7 @@ function phone() {
   }
   net.onStatus = (s) => {
     put("connection", esc(s.toUpperCase()));
-    $("pDot").className = "dot" + (s === "Connected" ? " on" : " wait");
+    $("pDot").className = "dot" + (s === "Connected" ? " live" : " wait");
   };
   net.onGone = (reason) => {
     error(reason + ". Scan the QR on the TV again.");

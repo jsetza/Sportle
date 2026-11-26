@@ -82,6 +82,11 @@ try {
   await joinPhone(a, BASE, room, "Ana", { grip: 1 });
   await joinPhone(b, BASE, room, "Ben", { grip: -1, body: "paddle" });
   await tv.locator("#drivers li", { hasText: "Ben" }).waitFor();
+  // The phone menu fits a landscape phone (844×390) without scrolling (it used to run off the bottom).
+  await a.locator("#menuBtn").click();
+  const menuFits = await a.evaluate(() => ["menuClose", "gasSeg", "assistSeg", "sensSeg", "redo", "pauseRace"].every((id) => { const b = document.getElementById(id).getBoundingClientRect(); return b.height > 0 && b.top >= 0 && b.bottom <= innerHeight; }));
+  assert.ok(menuFits, "every phone menu setting is on screen at 844×390");
+  await a.locator("#menuClose").click();
   await tv.waitForFunction(() => window.__kartScene.kart?.racers.filter((r) => !r.bot).every((r) => r.ready));
   if (SHOTS) {
     await tv.screenshot({ path: SHOTS + "/kart-lobby.png" });
@@ -91,6 +96,10 @@ try {
   const me = async (p, name) => (await state(p)).racers.find((r) => r.name === name);
   await tv.locator("#start").click();
   await a.waitForFunction(() => window.__kartPhone.state?.phase === "race", null, { timeout: slow(15000) });
+  // Auto-gas phones that didn't press anything in the countdown must not be stalled at GO
+  // (lobby gas used to arrive in the countdown's first moments and count as "too early").
+  const early = await a.evaluate(() => window.__kartPhone.state.callouts.filter((c) => c.text === "TOO EARLY!").length);
+  assert.equal(early, 0, "no TOO EARLY stall for auto-gas phones");
   // Split screen on the TV: one view per phone.
   await tv.waitForFunction(() => document.querySelectorAll(".kview").length === 2, null, { timeout: slow(8000) });
   // Tilt Ana's phone left: her kart steers left and turns left (heading decreases).
