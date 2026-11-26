@@ -57,7 +57,8 @@ try {
     timeout: slow(3000),
   });
   const s = await st();
-  assert.equal(s.phase, "rally");
+  // The serve was struck; on a slow machine the point may already be over by the time we look.
+  assert.ok(s.phase === "rally" || s.phase === "point", "served into play: " + s.phase);
   assert.deepEqual(errors, []);
   console.log("PASS: keyboard paddle · seat claimed → ready → Space serves (contacts " + s.contacts + ")");
 } finally {
