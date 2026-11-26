@@ -1036,11 +1036,12 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
   const grip = r.drift ? PHYS.driftGrip * (0.6 + 0.4 * tg) : r.air ? 0.8 : PHYS.grip * tg;
   p.m = angle(p.m + angle(r.h - p.m) * (1 - Math.exp(-grip * DT)));
   // In the air, the kart follows the road's curve (jumps on a bend land on the road).
-  if (r.air && !p.onCut && t.ground[p.hint]) {
+  if (r.air && !p.onCut) {
     const turn = t.k[p.hint] * Math.abs(r.v) * DT;
     p.m = angle(p.m + turn);
     r.h = angle(r.h + turn);
   }
+  if (r.air && !p.onCut) glideOverGap(t, r, p);
   r.x += Math.cos(p.m) * r.v * DT;
   r.z += Math.sin(p.m) * r.v * DT;
   // Visual yaw: drift slip and spin-outs.
@@ -1089,6 +1090,33 @@ function drive(k: Kart, t: Track, r: Racer, now: number) {
   else p.wrongFor = Math.max(0, p.wrongFor - DT * 2);
   r.wrong = p.wrongFor > 1.2;
   if (!r.air && t.ground[ti] && !p.onCut && Math.abs(r.d) < t.w[ti] / 2) p.safeS = r.s;
+}
+/**
+ * Glide assist over gaps (river, canyon, pier, rooftops). A kart in the air over a gap, or just
+ * before one, and moving forward keeps at least 19 m/s and enough lift to reach the far side.
+ * Without it, a kart knocked into the air on the ramp (a Pin Bowl tumble, a Crowd Wave bump, a
+ * bump from another kart) left the lip at a fraction of its speed and dropped into the gap.
+ */
+function glideOverGap(t: Track, r: Racer, p: Phys) {
+  const i0 = p.hint;
+  let start = -1;
+  for (let q = 0; q < 16; q++)
+    if (!t.ground[(i0 + q) % t.n]) {
+      start = q;
+      break;
+    }
+  if (start < 0) return;
+  // Moving forward along the road?
+  const along = Math.cos(p.m) * t.tx[i0] + Math.sin(p.m) * t.tz[i0];
+  if (along < 0.3 || r.v <= 0) return;
+  let end = start;
+  while (end < 60 && !t.ground[(i0 + end) % t.n]) end++;
+  const land = (i0 + end + 1) % t.n;
+  r.v = Math.max(r.v, 19);
+  const rem = Math.max(0.5, (t.s[land] - r.s + t.L) % t.L) + 1;
+  const time = rem / (r.v * along);
+  const need = (t.y[land] + 0.3 - r.y + 0.5 * PHYS.gravity * time * time) / time;
+  if (p.vy < need) p.vy = Math.min(need, 9);
 }
 /** Track position (on the shortcut strip when on it). */
 function locateOn(t: Track, r: Racer, p: Phys) {

@@ -217,41 +217,83 @@ test("jumps: a slow kart still clears every gap, a hit mid-air doesn't drop it, 
   }
 });
 
-test("bots: a full race with items on every track: no falls, no stalls, no grinding, all finish", () => {
-  for (const d of TRACKS) {
-    const k = newKart("race", d.id, "club", true, 2);
-    const me = addRacer(k, "h", "Me", "classic", { ...DEFAULT_GEAR }, "classic", 0);
-    feed(k, me);
-    me.ready = true;
-    startKart(k, now);
-    me.bot = "pro";
-    const t = track(d.id);
-    const stuck = new Map<string, number>();
-    let falls = 0,
-      longest = 0,
-      order = 0;
-    const last = new Map(k.racers.map((r) => [r.id, r.sector]));
-    for (let i = 0; i < 120 * 160 && k.phase !== "results"; i++) {
-      tick(k);
-      if (k.phase !== "race") continue;
-      for (const r of k.racers) {
-        if (r.lift > 1.49) falls++;
-        const s = Math.abs(r.v) < 2 && !r.spin && !r.lift && !r.finished && k.clock > 3 ? (stuck.get(r.id) ?? 0) + 1 : 0;
-        stuck.set(r.id, s);
-        longest = Math.max(longest, s);
-        const was = last.get(r.id)!;
-        if (r.sector !== was) {
-          if (r.sector !== (was + 1) % SECTORS && r.sector !== (was - 1 + SECTORS) % SECTORS) order++;
-          last.set(r.id, r.sector);
-        }
+/**
+ * One full seeded race (Club bots, items, 2 laps; the phone's kart driven by a Pro bot). Races only
+ * depend on the room's seed, so any failure can be replayed exactly with that seed (and the dev
+ * stress version, scripts/dev/kart-falls.ts, runs many seeds).
+ */
+function seededRace(id: TrackId, seed: number) {
+  const k = newKart("race", id, "club", true, 2);
+  k.seed = seed;
+  const me = addRacer(k, "h", "Me", "classic", { ...DEFAULT_GEAR }, "classic", 0);
+  feed(k, me);
+  me.ready = true;
+  startKart(k, now);
+  me.bot = "pro";
+  const stuck = new Map<string, number>();
+  const falls: string[] = [];
+  let longest = 0,
+    order = 0;
+  const last = new Map(k.racers.map((r) => [r.id, r.sector]));
+  for (let i = 0; i < 120 * 160 && k.phase !== "results"; i++) {
+    tick(k);
+    if (k.phase !== "race") continue;
+    for (const r of k.racers) {
+      // A fall starts the 1.5 s drone pickup: count it once.
+      if (r.lift > 1.5 - 1 / 240) falls.push(`${r.name} at ${(r.s / track(id).L).toFixed(3)} of the lap`);
+      const s = Math.abs(r.v) < 2 && !r.spin && !r.lift && !r.finished && k.clock > 3 ? (stuck.get(r.id) ?? 0) + 1 : 0;
+      stuck.set(r.id, s);
+      longest = Math.max(longest, s);
+      const was = last.get(r.id)!;
+      if (r.sector !== was) {
+        if (r.sector !== (was + 1) % SECTORS && r.sector !== (was - 1 + SECTORS) % SECTORS) order++;
+        last.set(r.id, r.sector);
       }
     }
-    assert.equal(k.phase, "results", d.id + ": race finished");
-    assert.ok(k.racers.every((r) => r.laps.length >= 2 || r.finished), d.id + ": laps counted");
-    assert.equal(order, 0, d.id + ": checkpoints passed in order");
-    assert.equal(falls, 0, d.id + ": no falls");
-    assert.ok(longest < 120 * 1.5, `${d.id}: a kart stalled for ${(longest / 120).toFixed(1)} s`);
-    const walls = k.racers.reduce((a, r) => a + physOf(r).walls, 0);
-    assert.ok(walls <= 8, `${d.id}: ${walls} wall hits in one race`);
   }
+  return { k, falls, longest, order };
+}
+/** Fixed seeds per track (and the replay hint printed with every failure). */
+const SEEDS = [11, 22, 33];
+test("bots: full seeded races with items on every track: no falls, no stalls, no grinding, all finish", () => {
+  for (const d of TRACKS)
+    for (const seed of SEEDS) {
+      const { k, falls, longest, order } = seededRace(d.id, seed);
+      const at = `${d.id} seed ${seed} (replay: node scripts/dev/kart-falls.ts ${d.id} 1 ${seed} verbose)`;
+      assert.equal(k.phase, "results", at + ": race finished");
+      assert.ok(k.racers.every((r) => r.laps.length >= 2 || r.finished), at + ": laps counted");
+      assert.equal(order, 0, at + ": checkpoints passed in order");
+      assert.deepEqual(falls, [], at + ": no falls");
+      assert.ok(longest < 120 * 1.5, `${at}: a kart stalled for ${(longest / 120).toFixed(1)} s`);
+      const walls = k.racers.reduce((a, r) => a + physOf(r).walls, 0);
+      assert.ok(walls <= 8, `${at}: ${walls} wall hits in one race`);
+    }
+});
+
+test("regression: Beach seeds where a kart tumbled off the pier ramp at low speed and fell (CI, 2026-11-26)", () => {
+  // A Pin Bowl hit on the ramp threw the kart into the air at 40 % speed; the jump assist only
+  // ran for karts leaving the lip normally, so it dropped into the water. Now a glide assist
+  // keeps any kart in the air near a gap fast and high enough to reach the far side.
+  for (const seed of [13, 96, 146]) {
+    const { falls } = seededRace("beach", seed);
+    assert.deepEqual(falls, [], `beach seed ${seed}: no falls`);
+  }
+});
+
+test("glide assist: a kart knocked into the air on a gap's ramp at low speed still lands on the far side", () => {
+  for (const d of TRACKS)
+    for (const rp of d.ramps.filter((r) => r.gap)) {
+      const { k, me, t } = solo(d.id);
+      const at = rp.at * t.L + rp.len * 0.6;
+      put(k, me, at, 0, 21);
+      tick(k, 2);
+      hitKart(k, me, "pinbowl", "x"); // a tumble on the ramp: 40 % speed, thrown into the air
+      assert.ok(me.air && me.v < 10, d.id + ": knocked up and slowed");
+      let fell = false;
+      for (let i = 0; i < 120 * 3; i++) {
+        tick(k);
+        fell ||= me.lift > 0;
+      }
+      assert.ok(!fell, `${d.id}: fell into the gap at ${rp.at}`);
+    }
 });

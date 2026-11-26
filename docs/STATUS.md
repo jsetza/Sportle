@@ -30,6 +30,23 @@ Not fixed / noted:
 
 Result: `npm run check` passes (157 tests, including 5 new regression tests in `tests/bowling-bugs.test.ts`); `node scripts/bowling-smoke.mjs` passes (needed reruns while the Mac was heavily loaded: page loads over 30 s).
 
+## Kart: falls at gap jumps found by CI, fixed; seeded race tests (2026-11-26)
+
+- **What CI saw:** on e2073b5, `tests/kart-tracks.test.ts` "bots: a full race with items on every track" failed with `beach: no falls — 4 !== 0` (2 karts; each fall was counted on two ticks). It passed locally because each race used a random seed.
+- **Reproduced:** races depend only on the room's seed (`k.seed`). With seeds, 3 of 300 Beach races had falls (seeds 13, 96 and 146), all at the pier gap.
+- **Cause:** a kart hit by a Pin Bowl or Strike Bowl (a tumble) while still on the ramp was thrown into the air at 40 % of its speed (21 → 8.5 m/s). The jump assist only ran for karts leaving the lip normally, and "a hit in the air keeps its speed" only applied to karts already airborne, so it sailed off the ramp slowly and dropped into the water. A Crowd Wave bump or a kart-to-kart bump on any gap's ramp could do the same.
+- **Fix (`glideOverGap` in `src/server/kart.ts`):** a kart in the air over a gap, or within 16 samples before one, and moving forward keeps at least 19 m/s, and its lift is topped up just enough to reach the far side. In the air, karts also now follow the road's curve over the gap itself (before, only over solid road).
+- **Seeded tests:**
+  - The CI test now runs fixed seeds (11, 22, 33) on every track. Every failure message names the seed and the exact replay command.
+  - New: a regression test for Beach seeds 13, 96 and 146, and a test that knocks a kart into the air at low speed on every gap's ramp and checks that it lands. With the fix disabled, both new tests fail (seed 13 falls); with it, they pass.
+  - Falls are counted once.
+- **Stress (dev script `scripts/dev/kart-falls.ts [tracks] [seeds] [firstSeed] [verbose]`):**
+  - After the fix: **2,400 seeded races (300 per track, Club bots, 2 laps) with 0 falls** and every race finished.
+  - Plus 1,200 more (150 per track on Skyline, Beach, Jungle and Canyon, 3 laps, with Pro bots and with Rookie bots): 0 falls.
+  - The script also flags a kart whose road position jumps to another part of the track in one step (e.g. another floor of the garage spiral). 300 Skyline seeds: none.
+- **Skyline spiral fall (2026-11-25):** still not reproduced. The spiral has no gap, so this cause doesn't explain it, and the new "wrong floor" check never fired. It may have been one of the edge cases fixed since (soft walls, hits in the air), but that isn't proven.
+- `npm run check` passes (160 tests); kart-smoke passes.
+
 ## Kart: second bug sweep: menus, phones, split screen, races (2026-11-26, owner request)
 
 Checked headless only: synthetic phones in headless Chrome, server simulations and unit tests. **Not yet tried on real phones or a TV.**
