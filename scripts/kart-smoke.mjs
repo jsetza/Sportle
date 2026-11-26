@@ -108,9 +108,17 @@ try {
   await pose(a, wheel(30, 1));
   await a.waitForFunction(() => window.__kartPhone.state.racers.find((r) => r.name === "Ana").steer < -0.2, null, { timeout: slow(4000) });
   const delay = Date.now() - t0;
-  await a.waitForTimeout(slow(900));
-  const after = await me(a, "Ana");
-  const turned = Math.atan2(Math.sin(after.h - before.h), Math.cos(after.h - before.h));
+  // Add up the heading change in small steps, so a long left turn on a slow machine (more than
+  // half a circle) can't wrap around and read as a right turn.
+  let turned = 0,
+    prevH = before.h,
+    after = before;
+  for (const end = Date.now() + slow(900); Date.now() < end; ) {
+    await a.waitForTimeout(100);
+    after = await me(a, "Ana");
+    turned += Math.atan2(Math.sin(after.h - prevH), Math.cos(after.h - prevH));
+    prevH = after.h;
+  }
   assert.ok(after.steer < -0.3, "server steering is left: " + after.steer);
   assert.ok(turned < -0.1, "the kart turned left: " + turned.toFixed(2) + " rad");
   console.log(`Loopback tilt → server steering seen on the phone: ${delay} ms (synthetic sensors, same machine; not a real-phone measurement)`);
