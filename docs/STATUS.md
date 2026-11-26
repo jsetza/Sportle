@@ -26,6 +26,8 @@ Not fixed / noted:
 - `/api/bowl/skip` is accepted by the server at any time during a turn (the TV only offers it after 30 s); fine for a host-only action, left as is.
 - Every page logs one 404 for `/favicon.ico` (no page declares an icon); shared by all games, not changed here.
 
+**CI follow-up (same day):** bowling-smoke timed out on GitHub CI at 9641741 waiting for the TV page to show "result" after a ball. Not reproduced locally (it passes with 8× CPU throttling and with the TV rendered at 4× scale in SwiftShader, ~1.5 fps). The wait was fragile: "result" lasts only 2.2 s, and Playwright's default `waitForFunction` checks once per drawn frame, which a GPU-less runner may not produce in time. The smoke test now (a) takes each ball's result from the server's own state, polled every 100 ms, (b) polls the TV on a timer instead of per frame, (c) drains the server's stderr (an unread pipe can block a Linux process) and (d) on any timeout prints the TV state, the server's phase log and server errors. `THROTTLE=<n>` / `SLOWTV=<scale>` reproduce slow machines locally. Whether CI was simply too slow or something else happened will show in that printout if it fails again.
+
 Result: `npm run check` passes (157 tests, including 5 new regression tests in `tests/bowling-bugs.test.ts`); `node scripts/bowling-smoke.mjs` passes (needed reruns while the Mac was heavily loaded: page loads over 30 s).
 
 ## Kart: second bug sweep: menus, phones, split screen, races (2026-11-26, owner request)
