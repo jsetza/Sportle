@@ -111,3 +111,22 @@ Use `npm run tunnel`, pick **Kart** on the TV, then Multiplayer and a track. Do 
 11. **Drop and rejoin:** lock one phone mid-race: the TV says "Waiting for <name>'s phone…", the kart stops; after 30 s a bot drives it. Unlock/reload: the same kart comes back to the phone.
 12. **Delay:** film the phone and the TV together at 120/240 fps and count frames from a quick tilt to the kart turning on the TV, over home Wi-Fi and over the tunnel. Wi-Fi: ____ ms. Tunnel: ____ ms. Does steering feel late?
 13. Split screen with 2, 3 and 4 phones on one TV: does each quarter follow its own kart, and are the place/lap/item readable from the couch?
+
+## Sportle Boxing phone checks (added 2026-11-27, not yet tried on a real phone)
+
+Use `npm run tunnel`, pick **Boxing** on the TV, then 2 players (or Solo) and a ring. Do each check on **iPhone Safari** and **Android Chrome**, holding the phone in your fist like a glove, screen toward your thumb.
+
+1. The phone scans the QR, lands on `/boxing/phone`, enters a name/outfit/gloves and reloads once into setup. Step 01 asks for motion (iPhone shows the permission prompt).
+2. Step 02: pick your hand. Step 03: hold the phone upright in front of your face; the ring fills in about a second (if it doesn't, note what the hint says: "turn the screen to the side", "hold it upright", "keep still").
+3. Step 04: two jabs, two hooks, two uppercuts. Note the power shown for each: jabs ____ ____ hooks ____ ____ uppercuts ____ ____. Then "✓ Saved on this phone".
+4. **Reading:** throw 10 jabs, 10 hooks and 10 uppercuts (Training → Punching bag shows each). How many read as the right type? Jabs __/10 hooks __/10 uppercuts __/10. Does a gentle punch read clearly weaker than a hard one?
+5. **No ghost punches:** walk across the room holding the phone, then shake it gently: nothing should be thrown. Fast small waggles: what power do they read? ____
+6. **SWITCH:** hold SWITCH with your thumb and punch: the TV shows the other hand punching.
+7. **Guard:** phone upright, still: GUARD lights on the phone and the fighter's gloves go up within ~0.2 s. Does a normal fighting stance (top tipped toward the TV) stay out of guard?
+8. **Dodges:** tip left, tip right, tip forward and down: SLIP LEFT / SLIP RIGHT / DUCK on the phone and the fighter moves. Any slips while punching? ____
+9. **Two phones:** on phone 1 tap **Add a second phone**; phone 2 scans it and joins the same fighter as the other glove (the TV lists L + R gloves). SWITCH disappears; the guard needs both phones up.
+10. **Knockdown:** get knocked down (a short test match: `/boxing?hp=30`) and shake the phone: the meter fills and the fighter gets up before 10.
+11. **Haptics:** Android buzzes when your punch lands or is blocked and when you're hit; iPhone flashes the screen.
+12. **Drop and rejoin:** lock a phone mid-fight: the TV pauses ("Waiting for <name>'s phone…") and resumes when it's unlocked. Reload the phone: it rejoins the same glove by itself.
+13. **Delay:** film the phone and the TV together at 120/240 fps and count frames from the start of a jab to the hit on the TV, over home Wi-Fi and over the tunnel. Wi-Fi: ____ ms. Tunnel: ____ ms. The TV's Room panel also shows the measured phone → server part ("Phone → server punch delay"): ____ ms. Does it feel late?
+14. Split screen on one TV from the couch: are the health bars, clock, callouts and the count readable?

@@ -29,6 +29,8 @@ import { addBowler, bowlInput, newBowl } from "./bowling.ts";
 import type { BotLevel, LaneId } from "../shared/bowling.ts";
 import type { Kart, KartMode, TrackId, BodyId, BotLevel as KartBot } from "../shared/kart.ts";
 import { addRacer, kartFieldsOk, kartInput, kartAway, newKart, resetIds } from "./kart.ts";
+import type { Box, BoxMode, BotId as BoxBot, BotLevel as BoxLevel, Drill, Hand, RingId } from "../shared/boxing.ts";
+import { addBoxer, addSecondGlove, boxAway, boxFieldsOk, boxInput, gloveCode, gloveOf, newBox, resetGlove } from "./boxing.ts";
 export const token = () => randomBytes(24).toString("base64url");
 export type Session = {
   role: "host" | "display" | "controller";
@@ -57,6 +59,8 @@ export type Room = {
   bowl?: Bowl;
   /** Set for a Sportle Kart room (then `state` is an idle pickleball placeholder). */
   kart?: Kart;
+  /** Set for a Sportle Boxing room (then `state` is an idle pickleball placeholder). */
+  box?: Box;
 };
 export const rooms = new Map<string, Room>();
 export const PAIR_TTL = 600000;
@@ -159,6 +163,59 @@ export function createKartRoom(mode: KartMode, trackId: TrackId, bot: KartBot, i
   const r = createRoom("practice", "easy");
   r.kart = newKart(mode, trackId, bot, items, laps);
   return r;
+}
+/** A Sportle Boxing room: same pairing, sessions and transport as the other games. */
+export function createBoxRoom(
+  mode: BoxMode,
+  ring: RingId,
+  level: BoxLevel,
+  opponent: BoxBot,
+  drill: Drill,
+  opts: { roundTime?: number; hp?: number } = {},
+): Room {
+  const r = createRoom("practice", "easy");
+  r.box = newBox(mode, ring, level, opponent, drill, opts);
+  return r;
+}
+/**
+ * A phone joins (or rejoins) a boxing room: as a new fighter, or with a glove code from a
+ * fighter's first phone as that fighter's second glove. Rejoining takes back the same glove.
+ */
+export function joinBoxer(
+  r: Room,
+  name: string,
+  hand: Hand,
+  credential: string | undefined,
+  display: string,
+  outfit: Outfit,
+  gear: Gear,
+  glove: string,
+) {
+  const b = r.box!;
+  if (credential) {
+    const session = r.sessions.get(credential);
+    const found = session?.playerId ? gloveOf(b, session.playerId) : null;
+    if (!session || session.role !== "controller" || session.expires < Date.now() || !found)
+      throw Error("Reconnect expired. Scan the QR again.");
+    if (found.fighter.gloves[0] === found.glove) {
+      found.fighter.outfit = outfit;
+      found.fighter.gear = gear;
+    }
+    resetGlove(found.glove);
+    b.event++;
+    return { credential, player: { id: found.glove.id, fighter: found.fighter.id, hand: found.glove.hand }, gloveCode: gloveCode(found.fighter), seq: session.lastSeq };
+  }
+  const id = token().slice(0, 10);
+  const { fighter, glove: g } = glove ? addSecondGlove(b, id, glove, hand) : addBoxer(b, id, name, hand, outfit, gear, display);
+  const key = token();
+  r.sessions.set(key, {
+    role: "controller",
+    playerId: g.id,
+    expires: Date.now() + 86400000,
+    lastSeq: -1,
+    lastInput: 0,
+  });
+  return { credential: key, player: { id: g.id, fighter: fighter.id, hand: g.hand }, gloveCode: gloveCode(fighter), seq: -1 };
 }
 /** A phone joins (or rejoins) a kart room. Rejoining takes back the same kart, even mid-race. */
 export function joinRacer(
@@ -405,6 +462,12 @@ export function acceptInput(
     kartInput(r.kart, p, a, now);
     return true;
   }
+  if (r.box) {
+    const found = s.playerId ? gloveOf(r.box, s.playerId) : null;
+    if (!found || !boxFieldsOk(a as unknown as Record<string, unknown>)) return false;
+    boxInput(r.box, found.fighter, found.glove, a, now);
+    return true;
+  }
   if (r.bowl) {
     const p = r.bowl.players.find((p) => p.id === s.playerId);
     if (!p) return false;
@@ -433,6 +496,7 @@ export function acceptInput(
 }
 export function housekeeping(r: Room, now = Date.now()) {
   if (r.kart) kartAway(r.kart, now);
+  if (r.box) boxAway(r.box, now);
   if (r.bowl)
     for (const p of r.bowl.players)
       if (!p.bot && p.connected && now - p.lastSeen > 2500) {

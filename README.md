@@ -1,8 +1,8 @@
-# Sportle — motion-controlled pickleball, bowling and kart racing
+# Sportle — motion-controlled pickleball, bowling, kart racing and boxing
 
 _(Formerly “visual”.)_
 
-An experimental browser-based hub of 3D motion games. A computer renders the court or lane; phones provide orientation and swing intent. No phone app and no runtime packages are required. The start screen offers **Pickleball** (your phone is the paddle), **Bowling** (your phone is the ball) and **Kart** (your phone is the steering wheel); see [Sportle Bowling](#sportle-bowling) and [Sportle Kart](#sportle-kart) below.
+An experimental browser-based hub of 3D motion games. A computer renders the court or lane; phones provide orientation and swing intent. No phone app and no runtime packages are required. The start screen offers **Pickleball** (your phone is the paddle), **Bowling** (your phone is the ball) and **Kart** (your phone is the steering wheel) and **Boxing** (your phone is the glove); see [Sportle Bowling](#sportle-bowling), [Sportle Kart](#sportle-kart) and [Sportle Boxing](#sportle-boxing) below.
 
 **Status:** Working local prototype with a real authoritative server, real controller connections, practice, singles, and doubles mode paths. TypeScript/build and 42 automated tests pass, including a real-HTTP/SSE four-phone, two-household doubles scenario. A Chromium smoke test connects a synthetic phone, calibrates, starts practice, and hits distinct 37% and 65% shots. `npm run tunnel` provides a no-account public HTTPS URL for phone testing. **No physical iPhone/Android testing or permanent public deployment has been completed.** Do not interpret browser sensor simulation as device validation.
 
@@ -55,7 +55,7 @@ An existing Chrome installation may be used with `CHROME_PATH=/absolute/path/to/
 
 ## Play
 
-The start screen opens with a short **Welcome to Sportle** intro (any key or tap skips it; it plays once per browser tab), then **Pick a game**: a side-scrolling row of game cards (swipe, scroll, ← → or the ‹ › buttons; Enter or a click on the middle card plays). Pickleball opens the steps below; Bowling opens `/bowling`; Kart opens `/kart`. **← All games** in the side panel goes back to the picker.
+The start screen opens with a short **Welcome to Sportle** intro (any key or tap skips it; it plays once per browser tab), then **Pick a game**: a side-scrolling row of game cards (swipe, scroll, ← → or the ‹ › buttons; Enter or a click on the middle card plays). Pickleball opens the steps below; Bowling opens `/bowling`; Kart opens `/kart`; Boxing opens `/boxing`. **← All games** in the side panel goes back to the picker.
 
 1. Create a **Motion lab** room on the display.
 2. Scan its QR code on a phone, or open `/controller` on the same public origin and enter its six-character room code.
@@ -117,6 +117,28 @@ If a phone drops out mid-race, its kart slows to a stop and waits ("Waiting for 
 
 Simplifications (honest list): arcade driving on a 2D track with heights (ramps, jumps, gaps, the spiral), not a vehicle simulation; karts bump as circles; bots follow a precomputed racing line with a mild catch-up (bots more than ~70 m ahead of the best human lose 5 % top speed, far behind gain 4 %; nothing for humans); shortcuts are separate strips, not free off-road driving. The phone reads how far it is turned (orientation), never its position or the real steering-wheel angle. Online racing between households is not built.
 
+## Sportle Boxing
+
+Pick **Boxing** on the start screen (or open `/boxing`). Choose **Solo vs bots** (a ladder of six original opponents at Rookie / Club / Pro), **2 players** (one TV, one QR, side-by-side split screen) or **Training** (a punching bag, or a mitt drill with Coach Kip), and a ring: **Neon Club**, **Championship Arena** or **Rooftop**. Music & sound works as in the other games.
+
+1. Each phone scans the QR (`/boxing/phone`), enters a name, outfit and glove colour.
+2. **Hold the phone in your punching hand like a glove**: in your fist, screen facing sideways toward your thumb.
+3. **Setup:** 01 tap to allow motion; 02 choose **left** or **right** hand; 03 **guard up**: hold the phone upright in front of your face and keep still for a second (this sets the guard pose and which way the TV is); 04 throw **2 jabs, 2 hooks and 2 uppercuts** so the phone learns your style. **✓ Saved on this phone**: next time, guard up and you're in (**Teach my punches again** redoes step 04).
+4. **Punches:** a quick straight thrust = **jab**; a sideways swing that arcs round = **hook**; an upward swing = **uppercut**. The phone reads one short burst of movement: its direction (from the forward direction set by your guard) and how quick it was (power, with a floor and a cap). Gentle shakes and walking throw nothing; little waggles read as very weak punches. Each punch is sent at once as one input (type, hand, power, timestamp, id).
+5. **The other hand:** hold the big **SWITCH** button with your thumb while you punch. Or **two phones, one per hand**: on your phone tap **Add a second phone**; the second phone scans that code (or types the glove code) and joins the same fighter as the other glove. With two gloves, SWITCH disappears and the guard needs both phones up.
+6. **Guard:** the phone upright and still for ~0.2 s raises the gloves. **Dodge:** tip the phone left or right to **slip**, or tip the top toward the TV and down to **duck**. Each tip is one quick dodge.
+7. **Knocked down?** Shake (or raise) your phone: the faster you move, the faster the meter fills. Android buzzes when a punch lands or is blocked; iPhone Safari has no web vibration, so the screen flashes.
+
+**The fight (decided on the server):** jabs are fast and weak; hooks are stronger and go round a guard (for less), but can be ducked; uppercuts are the strongest and slowest and break a guard, but a slip beats them and ducking into one hurts more. A guard blocks jabs (chip damage). A punch landing while the other fighter is mid-punch is a **COUNTER** (+50 %). **Stamina:** every punch uses some; tired punches are weaker and slower; it comes back when you stop. **Health and knockdowns:** at zero, a knockdown and a 10-count; three knockdowns in a round is a **TKO**, staying down through 10 is a **KO**. **Rounds:** 3 × 60 s with an 8 s break; without a KO, a **points decision** (clean hits landed + 3 per knockdown scored). After the fight: punches thrown/landed, power, counters, dodges, blocks, knockdowns.
+
+**Ladder (original characters, each with a tell):** **Zippy Zola** (fast jabs, slips; bounces quicker before a flurry), **Tank Tortuga** (turtles behind a big guard; drops it to breathe), **Marsh Mellow** (slow, soft, huge punches; glows on the wind-up, and a counter doesn't stop it), **Professor Parry** (waits and counters; taps his gloves when set), **Disco Dina** (two dance steps, then jab-jab-hook), **Grandpa Gusto** (every trick, but huffs after a flurry). After a win, **Next opponent** moves up the ladder.
+
+**Cameras** (**View** / `V`): **Behind you** (just behind your own see-through fighter, gloves big on screen, the opponent across the ring; split screen with two local fighters) and **Broadcast**. Callouts: JAB / HOOK / UPPERCUT, COUNTER!, BLOCKED, DODGED!, DOWN!, the count, KO! / TKO!; faces squash on hits, sparks, stars, the bell, a crowd and an LED scoreboard with the round, clock and clean hits. Quick matches for testing: `/boxing?round=30&hp=40`.
+
+If a phone drops mid-fight, the fight pauses ("Waiting for Sam's phone…") and resumes when it's back; reloading the phone rejoins the same glove. After 30 s the host can let a bot box for it.
+
+Simplifications (honest list): fighters stand in place (no footwork); a punch is one of three types read from one burst of movement, not a tracked fist; power is the game's own scale, never a measured force or speed; the phone never knows where your hand is. The wind-up of each punch is shortened by the measured phone→server delay so the network doesn't add to it. Online boxing between households is not built (the room design keeps one display per room for now). **None of this has been tried on a real phone yet** (see docs/DEVICE_TESTS.md).
+
 ## Controls and simulation
 
 - Acceleration, rotation rate, and relative orientation estimate **intent**, not real-world velocity or position. There is no sustained acceleration integration.
@@ -176,10 +198,12 @@ Court dimensions, diagonal service, two-bounce restrictions, kitchen volleys/mom
 src/client/    Typed DOM menus, phone sensors, WebGL renderer, QR encoder, transport
                (bowling: bowling.ts TV + phone pages, bowlscene.ts lane/pins on the same renderer)
                (kart: kart.ts TV + phone wheel, kartscene.ts track/karts/split screen)
+               (boxing: boxing.ts TV + phone glove, boxscene.ts ring/fighters/split screen)
 src/shared/    Shared types, motion filter, pure scoring and rule decisions
 src/server/    Node HTTP/SSE transport, rooms/auth, authoritative simulation
                (bowling: bowling.ts turns/scoring/bots, bowlphysics.ts ball and pins)
                (kart: kart.ts 120 Hz driving, items, bots, laps; shared/kart.ts tracks, steering)
+               (boxing: boxing.ts punches, guard, rounds, bots; shared/boxing.ts punch reading, rules)
 scripts/       Type-stripping build, browser smoke test, HTTPS tunnel launcher, load probe
 tests/         Rules, physics, input/room lifecycle and real HTTP integration
 ```

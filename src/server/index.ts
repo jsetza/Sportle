@@ -49,6 +49,24 @@ import {
   toLobby,
 } from "./kart.ts";
 import { BODIES, CUP } from "../shared/kart.ts";
+import { createBoxRoom, joinBoxer } from "./rooms.ts";
+import {
+  botForNow as boxBotForNow,
+  boxBackground,
+  boxLive,
+  boxView,
+  gloveOf,
+  humans as boxHumans,
+  nextOpponent,
+  setHand,
+  setOptions as boxOptions,
+  setReady as boxReady,
+  startBox,
+  stepBox,
+  toLobby as boxLobby,
+} from "./boxing.ts";
+import { BOTS as BOX_BOTS, RINGS } from "../shared/boxing.ts";
+import type { BotId as BoxBot, BotLevel as BoxLevel, BoxMode, RingId } from "../shared/boxing.ts";
 import type { BodyId, BotLevel as KartBot, KartMode, TrackId } from "../shared/kart.ts";
 import type { BotLevel, LaneId } from "../shared/bowling.ts";
 import {
@@ -100,6 +118,8 @@ function json(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data));
 }
 function view(r: Room) {
+  if (r.box)
+    return { code: r.code, game: "boxing", state: boxView(r.box), serverTime: Date.now() };
   if (r.kart)
     return { code: r.code, game: "kart", state: kartView(r.kart), serverTime: Date.now() };
   if (r.bowl)
@@ -190,6 +210,25 @@ const server = createServer(async (req, res) => {
           const laps = Number.isInteger(a.laps) && a.laps >= 1 && a.laps <= 5 ? a.laps : 3;
           const r = createKartRoom(mode, trackId, bot, a.items !== false, laps);
           if (a.shared === true) r.kart!.shared = true;
+          return json(res, {
+            ...view(r),
+            credential: r.host,
+            displayId: "host",
+            pair: r.pair,
+            pairExpires: r.pairExpires,
+            publicOrigin: publicURL,
+          });
+        }
+        if (a.game === "boxing") {
+          if (rooms.size >= 100) throw Error("Server room limit reached");
+          const mode = (["solo", "versus", "training"].includes(a.mode) ? a.mode : "solo") as BoxMode;
+          const ring = (RINGS.some((x) => x.id === a.ring) ? a.ring : "neon") as RingId;
+          const level = (["rookie", "club", "pro"].includes(a.level) ? a.level : "club") as BoxLevel;
+          const opponent = (BOX_BOTS.some((x) => x.id === a.opponent) ? a.opponent : "zola") as BoxBot;
+          // Quick matches (and tests): shorter rounds or less health; normal fights are 3 × 60 s.
+          const roundTime = Number.isFinite(a.roundTime) ? a.roundTime : undefined;
+          const hp = Number.isFinite(a.hp) ? a.hp : undefined;
+          const r = createBoxRoom(mode, ring, level, opponent, a.drill === "mitts" ? "mitts" : "bag", { roundTime, hp });
           return json(res, {
             ...view(r),
             credential: r.host,
@@ -318,6 +357,21 @@ const server = createServer(async (req, res) => {
         }
         const name =
           typeof a.name === "string" ? a.name.trim().slice(0, 20) : "Player";
+        if (r.box) {
+          const result = joinBoxer(
+            r,
+            name || "Boxer",
+            a.hand === "left" ? "left" : "right",
+            a.credential,
+            display,
+            (OUTFITS.some((o) => o.id === a.outfit) ? a.outfit : "classic") as Outfit,
+            cleanGear(a.gear),
+            typeof a.glove === "string" ? a.glove.slice(0, 20) : "",
+          );
+          r.updated = Date.now();
+          r.box.event++;
+          return json(res, { ...view(r), ...result });
+        }
         if (r.kart) {
           const result = joinRacer(
             r,
@@ -400,6 +454,52 @@ const server = createServer(async (req, res) => {
         return json(res, { accepted: acceptInput(r, session, a) });
       if (path === "/api/move")
         return json(res, { accepted: acceptMove(r, session, a) });
+      if (r.box) {
+        const b = r.box;
+        const mine = session.playerId ? gloveOf(b, session.playerId) : null;
+        if (path === "/api/ready" && mine) {
+          if (a.ready && !boxLive(mine.glove)) throw Error("Turn on motion and finish setup first");
+          boxReady(b, mine.fighter, mine.glove, !!a.ready);
+          return json(res, { ok: true });
+        }
+        if (path === "/api/box/hand" && mine) {
+          if (b.phase !== "lobby" && b.phase !== "over") throw Error("Change hands between fights");
+          setHand(mine.fighter, mine.glove, a.hand === "left" ? "left" : "right");
+          b.event++;
+          return json(res, { ok: true });
+        }
+        if (path === "/api/background" && mine) {
+          boxBackground(b, mine.glove);
+          return json(res, { ok: true });
+        }
+        if (path === "/api/pair" && session.role !== "controller")
+          return json(res, issuePair(r, session, null));
+        // Pause: the host screen, or the phone in a one-fighter game.
+        if (path === "/api/pause" || path === "/api/resume") {
+          if (session.role === "controller" && !(mine && boxHumans(b).length === 1))
+            return json(res, { error: "Only the host can pause a two-fighter bout" }, 403);
+          if (b.phase !== "lobby" && b.phase !== "over") {
+            if (path === "/api/pause") {
+              b.paused = true;
+              b.pauseReason = "host";
+            } else if (b.pauseReason !== "away") {
+              b.paused = false;
+              b.pauseReason = "";
+            }
+          }
+          b.message = b.paused ? (b.pauseReason === "away" ? "Waiting for a phone…" : "Paused") : "Box!";
+          b.event++;
+          return json(res, { ok: true });
+        }
+        if (session.role !== "host") return json(res, { error: "Host action only" }, 403);
+        if (path === "/api/start") startBox(b);
+        else if (path === "/api/box/lobby") boxLobby(b);
+        else if (path === "/api/box/next") nextOpponent(b);
+        else if (path === "/api/box/options") boxOptions(b, a);
+        else if (path === "/api/box/bot") boxBotForNow(b, String(a.id || ""));
+        else return json(res, { error: "Unknown action" }, 404);
+        return json(res, { ok: true });
+      }
       if (r.kart) {
         const k = r.kart;
         const kp = k.racers.find((p) => p.id === session.playerId && !p.bot);
@@ -548,6 +648,8 @@ const server = createServer(async (req, res) => {
           ? resolve(root, "bowling.html")
         : path === "/kart" || path === "/kart/phone"
           ? resolve(root, "kart.html")
+        : path === "/boxing" || path === "/boxing/phone"
+          ? resolve(root, "boxing.html")
         : resolve(root, "." + decodeURIComponent(path));
     if (path.startsWith("/shared/")) file = resolve(source, "..", "." + path);
     const allowed =
@@ -625,6 +727,12 @@ function safely(r: Room, fn: () => void) {
     fn();
   } catch (e) {
     console.error(`[room ${r.code}] simulation error:`, e);
+    if (r.box && !r.box.paused) {
+      r.box.paused = true;
+      r.box.pauseReason = "host";
+      r.box.message = "Something went wrong in this bout. Host: press Resume.";
+      r.box.event++;
+    }
     if (r.kart && !r.kart.paused) {
       r.kart.paused = true;
       r.kart.message = "Something went wrong in this race. Host: press Resume.";
@@ -635,7 +743,7 @@ function safely(r: Room, fn: () => void) {
       r.bowl.message = "Something went wrong in this game. Host: press Resume.";
       r.bowl.event++;
     }
-    if (!r.bowl && !r.kart && !r.state.paused) {
+    if (!r.bowl && !r.kart && !r.box && !r.state.paused) {
       r.state.paused = true;
       r.state.pauseReason = "host";
       r.state.message =
@@ -654,7 +762,7 @@ const interval = setInterval(() => {
   while (acc >= 1 / 120) {
     for (const r of rooms.values())
       safely(r, () =>
-        r.kart ? stepKart(r.kart) : r.bowl ? stepBowl(r.bowl) : step(r.state),
+        r.box ? stepBox(r.box) : r.kart ? stepKart(r.kart) : r.bowl ? stepBowl(r.bowl) : step(r.state),
       );
     acc -= 1 / 120;
   }

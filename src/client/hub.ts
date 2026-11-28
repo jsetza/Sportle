@@ -5,6 +5,8 @@
 import type { Scene } from "./scene.ts";
 import { BowlScene } from "./bowlscene.ts";
 import { KartScene } from "./kartscene.ts";
+import { BoxScene } from "./boxscene.ts";
+import { RINGS } from "../shared/boxing.ts";
 import { LANES } from "../shared/bowling.ts";
 import { TRACKS } from "../shared/kart.ts";
 
@@ -62,6 +64,22 @@ const KART_ART = `<svg viewBox="0 0 320 200" aria-hidden="true">
   <rect x="150" y="24" width="10" height="10" rx="2" fill="#ff8a1f" transform="rotate(20 155 29)"><animateTransform attributeName="transform" type="rotate" values="0 155 29;360 155 29" dur="2s" repeatCount="indefinite"/></rect>
 </svg>`;
 
+/** Original card art for the hub and the TV page: two capsule boxers squaring up. */
+const BOX_ART = `<svg viewBox="0 0 320 200" aria-hidden="true">
+  <defs><linearGradient id="hxBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a0d2e"/><stop offset="1" stop-color="#3a1458"/></linearGradient></defs>
+  <rect width="320" height="200" fill="url(#hxBg)"/>
+  <path d="M20 150 L300 150 L320 200 L0 200 Z" fill="#2c1a48"/>
+  <path d="M30 96 H290 M26 116 H294 M22 136 H298" stroke="#ff3fbf" stroke-width="3" opacity=".85"/>
+  <rect x="22" y="80" width="8" height="74" rx="2" fill="#54a8fa"/><rect x="290" y="80" width="8" height="74" rx="2" fill="#dc2b45"/>
+  <g transform="translate(112 150)"><rect x="-20" y="-64" width="40" height="62" rx="20" fill="#54a8fa"/><rect x="-14" y="-82" width="28" height="26" rx="12" fill="#f4f1ea"/><rect x="-12" y="-74" width="24" height="6" rx="3" fill="#151524"/>
+    <g><animateTransform attributeName="transform" type="translate" values="0 0;40 -4;0 0;0 0" keyTimes="0;.12;.3;1" dur="1.6s" repeatCount="indefinite"/><circle cx="26" cy="-52" r="13" fill="#ebf538"/><rect x="16" y="-46" width="12" height="7" rx="3" fill="#fff"/></g>
+    <circle cx="20" cy="-36" r="12" fill="#ebf538"/></g>
+  <g transform="translate(212 150)"><g><animateTransform attributeName="transform" type="rotate" values="0;0;-14;0;0" keyTimes="0;.1;.2;.4;1" dur="1.6s" repeatCount="indefinite"/>
+    <rect x="-20" y="-64" width="40" height="62" rx="20" fill="#dc2b45"/><rect x="-14" y="-82" width="28" height="26" rx="12" fill="#f4f1ea"/><rect x="-12" y="-74" width="24" height="6" rx="3" fill="#151524"/>
+    <circle cx="-24" cy="-48" r="13" fill="#9b6cff"/><circle cx="-20" cy="-30" r="12" fill="#9b6cff"/></g></g>
+  <g fill="#ffd23c"><path d="M162 70 l5 10 11 2 -8 7 2 11 -10-5 -10 5 2-11 -8-7 11-2z"><animate attributeName="opacity" values="0;0;1;0;0" keyTimes="0;.1;.16;.35;1" dur="1.6s" repeatCount="indefinite"/></path></g>
+</svg>`;
+
 const SOON_ART = `<svg viewBox="0 0 320 200" aria-hidden="true">
   <rect width="320" height="200" fill="#14141f"/>
   <g fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="3" stroke-dasharray="8 8">
@@ -93,6 +111,7 @@ const CARDS: Card[] = [
   { id: "play", tag: "button", name: "Pickleball", line: "Your phone is the paddle", who: "1–4 players · offline or online", art: PICKLE_ART, cls: "pickle" },
   { id: "playBowling", tag: "a", href: "/bowling", name: "Bowling", line: "Your phone is the ball", who: "1–6 players · take turns", art: BOWL_ART, cls: "bowl" },
   { id: "playKart", tag: "a", href: "/kart", name: "Kart", line: "Your phone is the wheel", who: "1–8 players · split screen", art: KART_ART, cls: "kart" },
+  { id: "playBoxing", tag: "a", href: "/boxing", name: "Boxing", line: "Your phone is the glove", who: "1–2 players · or train", art: BOX_ART, cls: "box" },
   { id: "playSoon", tag: "div", name: "More soon", line: "New games are on the way", who: "Coming later", art: SOON_ART, cls: "soon" },
 ];
 
@@ -159,15 +178,16 @@ export function mountHub(root: HTMLElement, opts: {
 
   // ——— Backdrop: the chosen game's own 3D scene fills the screen behind the picker ———
   // Pickleball (and "More soon") show the arena that already runs behind the start screen.
-  // Bowling and Kart scenes are built the first time they are picked, on their own canvas;
+  // Bowling, Kart and Boxing scenes are built the first time they are picked, on their own canvas;
   // only the one on screen keeps rendering. Each pick of Kart shows the next track.
   type Preview = { wrap: HTMLElement; scene: Scene; next?: () => void };
-  const previews: Partial<Record<"bowl" | "kart", Preview | null>> = {};
-  let shown: "bowl" | "kart" | null = null;
+  const previews: Partial<Record<"bowl" | "kart" | "box", Preview | null>> = {};
+  let shown: "bowl" | "kart" | "box" | null = null;
+  let ringNo = -1;
   let kartTrack = -1;
   let laneNo = -1;
   const pause = (p: Preview) => cancelAnimationFrame(p.scene.raf);
-  const preview = (game: "bowl" | "kart"): Preview | null => {
+  const preview = (game: "bowl" | "kart" | "box"): Preview | null => {
     if (previews[game] !== undefined) return previews[game]!;
     const wrap = document.createElement("div");
     wrap.className = "hubscene";
@@ -178,6 +198,9 @@ export function mountHub(root: HTMLElement, opts: {
       if (game === "bowl") {
         const scene = new BowlScene(canvas);
         previews.bowl = { wrap, scene, next: () => scene.setLane(LANES[(laneNo = (laneNo + 1) % LANES.length)].id) };
+      } else if (game === "box") {
+        const scene = new BoxScene(canvas);
+        previews.box = { wrap, scene, next: () => scene.setRing(RINGS[(ringNo = (ringNo + 1) % RINGS.length)].id) };
       } else {
         const scene = new KartScene(canvas);
         previews.kart = { wrap, scene, next: () => scene.setTrack(TRACKS[(kartTrack = (kartTrack + 1) % TRACKS.length)].id) };
@@ -191,9 +214,9 @@ export function mountHub(root: HTMLElement, opts: {
   };
   const backdrop = (k: number) => {
     const cls = CARDS[k].cls;
-    const want = isOpen && (cls === "bowl" || cls === "kart") ? cls : null;
+    const want = isOpen && (cls === "bowl" || cls === "kart" || cls === "box") ? cls : null;
     if (want === shown && want) return;
-    for (const g of ["bowl", "kart"] as const) {
+    for (const g of ["bowl", "kart", "box"] as const) {
       const p = previews[g];
       if (p && g !== want) {
         pause(p);
@@ -284,6 +307,7 @@ export function mountHub(root: HTMLElement, opts: {
     if (c.id === "play") opts.onPickleball();
     else if (c.id === "playBowling") location.href = "/bowling";
     else if (c.id === "playKart") location.href = "/kart";
+    else if (c.id === "playBoxing") location.href = "/boxing";
   };
   cards.forEach((c, i) =>
     c.addEventListener("click", (e) => {

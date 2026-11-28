@@ -146,6 +146,8 @@ export const GLYPHS: Record<string, string[]> = {
   "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
   "/": ["00001", "00010", "00010", "00100", "01000", "01000", "10000"],
   "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
+  // Added for Sportle Boxing LED boards (round clock).
+  ":": ["0", "1", "0", "0", "0", "1", "0"],
   // Added for Sportle Kart LED boards (driver names).
   J: ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
   Q: ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
@@ -1003,6 +1005,8 @@ export class Scene {
     p: Pick<Player, "team" | "hand" | "bot" | "id"> & {
       outfit?: Outfit;
       gear?: Player["gear"];
+      /** Sportle Boxing: body colour instead of the team colour (ladder bots). */
+      body?: V;
     },
     pos: Vec,
     opts: {
@@ -1016,9 +1020,13 @@ export class Scene {
       cheer?: number;
       /** Sportle Bowling: bowling arm angle (0 = hanging, + = swung forward) and the ball. */
       bowl?: { arm: number; ball: V | null };
+      /** Sportle Boxing: draws the arms and gloves instead of the paddle arm (y0 = body bob). */
+      arms?: (y0: number, col: V) => void;
+      /** No floor ring or fake shadow (Sportle Boxing draws its own). */
+      noRing?: boolean;
     },
   ) {
-    const col = teamColor(p.team),
+    const col = p.body ?? teamColor(p.team),
       facing = p.team ? -1 : 1,
       hand = (p.hand === "left" ? -1 : 1) * facing,
       bob =
@@ -1027,7 +1035,7 @@ export class Scene {
     // Celebration hop.
     const y0 = bob + cheer * Math.abs(Math.sin(performance.now() / 160)) * 0.16;
     // player indicator ring (and a fake shadow when real shadows are off)
-    if (!this.gl.shadows)
+    if (!this.gl.shadows && !opts.noRing)
       this.blob(
         pos.x,
         0.02,
@@ -1040,7 +1048,7 @@ export class Scene {
         2,
         14,
       );
-    this.with([0.3, opts.owner ? 0.5 : 0.35], () =>
+    if (!opts.noRing) this.with([0.3, opts.owner ? 0.5 : 0.35], () =>
       this.ring(
         pos.x,
         pos.z,
@@ -1185,6 +1193,10 @@ export class Scene {
       );
     const paddleColor = (PADDLES[p.gear?.paddle ?? 0] ?? PADDLES[0])
       .color as unknown as V;
+    if (opts.arms) {
+      opts.arms(y0, col);
+      return;
+    }
     if (opts.bowl && !(cheer > 0)) {
       this.bowlArm(pos, y0, hand, facing, col, opts.bowl.arm, opts.bowl.ball);
       return;

@@ -7,6 +7,8 @@ import { LANES } from "../../src/shared/bowling.ts";
 import { BowlScene } from "../../src/client/bowlscene.ts";
 import { KartScene } from "../../src/client/kartscene.ts";
 import { TRACKS, track } from "../../src/shared/kart.ts";
+import { BoxScene } from "../../src/client/boxscene.ts";
+import { RINGS } from "../../src/shared/boxing.ts";
 import type { MapId } from "../../src/shared/types.ts";
 type Box = {
   x: number;
@@ -71,9 +73,11 @@ for (const map of [
   ...MAPS.map((m) => m.id as string),
   ...LANES.map((l) => "bowling:" + l.id),
   ...TRACKS.map((t) => "kart:" + t.id),
+  ...RINGS.map((r) => "boxing:" + r.id),
 ]) {
   const kart = map.startsWith("kart:");
-  const bowling = map.startsWith("bowling:") || kart;
+  const boxing = map.startsWith("boxing:");
+  const bowling = map.startsWith("bowling:") || kart || boxing;
   const boxes: Box[] = [];
   const blobs: {
     x: number;
@@ -88,7 +92,7 @@ for (const map of [
   const caller = () =>
     new Error()
       .stack!.split("\n")
-      .map((l) => /maps\.ts:(\d+)/.exec(l)?.[1] ?? (/(bowl|kart)scene\.ts:(\d+)/.exec(l) ? /(bowl|kart)scene\.ts:(\d+)/.exec(l)![0] : undefined))
+      .map((l) => /maps\.ts:(\d+)/.exec(l)?.[1] ?? (/(bowl|kart|box)scene\.ts:(\d+)/.exec(l) ? /(bowl|kart|box)scene\.ts:(\d+)/.exec(l)![0] : undefined))
       .filter((n) => n && (/scene/.test(n) || Number(n) < WRAP || Number(n) > WRAP + 20))[0] ??
     "?";
   const b = {
@@ -128,7 +132,21 @@ for (const map of [
       glow = k;
     },
   };
-  if (kart) {
+  if (boxing) {
+    // The boxing scene's static build (ring, venue, crowd) with this recorder.
+    const fake = Object.assign(Object.create(BoxScene.prototype), b, {
+      ringId: map.slice(7),
+      map: "arena",
+      mat: [0, 0, 0, 0],
+      material() {},
+      with(_m: unknown, fn: () => void) {
+        fn();
+      },
+      tri() {},
+      vertex() {},
+    });
+    fake.ringStatic();
+  } else if (kart) {
     // The kart scene's static build (track, barriers, pads, scenery) with this recorder.
     const fake = Object.assign(Object.create(KartScene.prototype), b, {
       trackId: map.slice(5),

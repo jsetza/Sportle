@@ -21,6 +21,7 @@ Node 24+, TypeScript, native DOM/WebGL, HTTP POST input + persistent SSE snapsho
 - src/server/index.ts: HTTP/SSE server, static delivery and lifecycle loop.
 - Sportle Bowling (second game, `/bowling` and `/bowling/phone`): src/shared/bowling.ts (scoring, splits, BowlReader release reading), src/server/bowling.ts (turns, bots, lobby), src/server/bowlphysics.ts (ball and pins), src/client/bowling.ts (TV + phone pages), src/client/bowlscene.ts (lane on the shared renderer). Browser check: scripts/bowling-smoke.mjs.
 - Sportle Kart (third game, `/kart` and `/kart/phone`): src/shared/kart.ts (tracks, SteerReader, GestureReader, item odds, laps/placings), src/server/kart.ts (120 Hz driving, items, bots, cups), src/client/kart.ts (TV + phone wheel), src/client/kartscene.ts (track, karts, split screen on the shared renderer). Browser check: scripts/kart-smoke.mjs; synthetic phone helper scripts/kart-phone.mjs.
+- Sportle Boxing (fourth game, `/boxing` and `/boxing/phone`): src/shared/boxing.ts (punch table, outcomes, bots, PunchReader/PoseReader for the phone), src/server/boxing.ts (120 Hz fights, gloves, stamina, knockdowns, rounds, bots, training), src/client/boxing.ts (TV + phone glove), src/client/boxscene.ts (rings and fighters on the shared renderer). Browser check: scripts/boxing-smoke.mjs; synthetic phone helper scripts/boxing-phone.mjs.
 
 ## Priorities
 
